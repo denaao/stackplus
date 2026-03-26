@@ -9,8 +9,13 @@ import { errorMiddleware } from './middlewares/error.middleware'
 const app = express()
 
 app.use(helmet())
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+].filter(Boolean) as string[]
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: allowedOrigins,
   credentials: true,
 }))
 app.use(express.json())
