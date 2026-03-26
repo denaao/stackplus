@@ -2,6 +2,9 @@
 builder = "NIXPACKS"
 buildCommand = "cd stackplus-api && npm install && npm run build && npx prisma generate"
 
+[build.nixpacksPlan.phases.setup]
+nixPkgs = ["nodejs_20", "nodePackages.npm"]
+
 [deploy]
 startCommand = "cd stackplus-api && npx prisma migrate deploy && node dist/server.js"
 restartPolicyType = "ON_FAILURE"
