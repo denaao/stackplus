@@ -9,10 +9,9 @@ RUN npm install
 
 COPY stackplus-api/ .
 
-RUN rm -rf prisma/migrations
 RUN npx prisma generate
 RUN npm run build
 
 EXPOSE 3001
 
-CMD npx prisma migrate deploy && node dist/server.js
+CMD npx prisma db push && node dist/server.js
