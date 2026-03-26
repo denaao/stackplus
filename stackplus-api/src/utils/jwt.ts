@@ -9,7 +9,7 @@ export interface JwtPayload {
 export function signToken(payload: JwtPayload): string {
   const secret = process.env.JWT_SECRET as string
   const expiresIn = process.env.JWT_EXPIRES_IN || '7d'
-  return jwt.sign(payload, secret, { expiresIn })
+  return jwt.sign(payload, secret, { expiresIn: expiresIn as any })
 }
 
 export function verifyToken(token: string): JwtPayload {
