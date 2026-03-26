@@ -1,8 +1,5 @@
 import jwt from 'jsonwebtoken'
 
-const SECRET = process.env.JWT_SECRET as string
-const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'
-
 export interface JwtPayload {
   userId: string
   email: string
@@ -10,9 +7,12 @@ export interface JwtPayload {
 }
 
 export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, SECRET, { expiresIn: EXPIRES_IN } as jwt.SignOptions)
+  const secret = process.env.JWT_SECRET as string
+  const expiresIn = process.env.JWT_EXPIRES_IN || '7d'
+  return jwt.sign(payload, secret, { expiresIn })
 }
 
 export function verifyToken(token: string): JwtPayload {
-  return jwt.verify(token, SECRET) as JwtPayload
+  const secret = process.env.JWT_SECRET as string
+  return jwt.verify(token, secret) as JwtPayload
 }
