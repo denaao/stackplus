@@ -9,7 +9,7 @@ RUN npm install
 
 COPY stackplus-api/ .
 
-RUN npx prisma generate
+RUN echo "cache bust $(date)" && npx prisma generate
 RUN npm run build
 
 EXPOSE 8080
