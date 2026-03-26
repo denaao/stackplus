@@ -9,6 +9,7 @@ RUN npm install
 
 COPY stackplus-api/ .
 
+RUN rm -rf prisma/migrations
 RUN npx prisma generate
 RUN npm run build
 
