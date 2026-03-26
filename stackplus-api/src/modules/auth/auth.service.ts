@@ -1,0 +1,48 @@
+import { prisma } from '../../lib/prisma'
+import { hashPassword, comparePassword } from '../../utils/hash'
+import { signToken } from '../../utils/jwt'
+import { Role } from '@prisma/client'
+
+export async function register(data: {
+  name: string
+  email: string
+  password: string
+  role?: Role
+}) {
+  const existing = await prisma.user.findUnique({ where: { email: data.email } })
+  if (existing) throw new Error('Email já cadastrado')
+
+  const passwordHash = await hashPassword(data.password)
+  const user = await prisma.user.create({
+    data: {
+      name: data.name,
+      email: data.email,
+      passwordHash,
+      role: data.role || Role.PLAYER,
+    },
+    select: { id: true, name: true, email: true, role: true, createdAt: true },
+  })
+
+  const token = signToken({ userId: user.id, email: user.email, role: user.role })
+  return { user, token }
+}
+
+export async function login(email: string, password: string) {
+  const user = await prisma.user.findUnique({ where: { email } })
+  if (!user) throw new Error('Credenciais inválidas')
+
+  const valid = await comparePassword(password, user.passwordHash)
+  if (!valid) throw new Error('Credenciais inválidas')
+
+  const token = signToken({ userId: user.id, email: user.email, role: user.role })
+  const { passwordHash, ...safeUser } = user
+  return { user: safeUser, token }
+}
+
+export async function getMe(userId: string) {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { id: true, name: true, email: true, role: true, avatarUrl: true, createdAt: true },
+  })
+  return user
+}
