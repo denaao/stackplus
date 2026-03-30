@@ -252,18 +252,37 @@ export async function setupEvolutionInstance(hostId: string, input?: { phoneNumb
 export async function connectEvolutionInstance(hostId: string) {
   const instanceName = resolveInstanceName({ hostId })
 
-  // Some instances can get stuck in "connecting" and keep returning unusable QR codes.
-  // Restarting the socket before connect forces a fresh QR generation cycle.
+  // Evolution v2 can keep stale auth in "connecting".
+  // Official instance logout route is DELETE /instance/logout/:instanceName.
+  // Clearing session before reconnect often fixes QR that never reaches "open".
   try {
     const currentState = await evolutionRequest(`/instance/connectionState/${encodeURIComponent(instanceName)}`, {
       method: 'GET',
     })
 
     const normalized = String(extractConnectionState(currentState) || '').toLowerCase()
+    if (normalized === 'connecting') {
+      try {
+        await evolutionRequest(`/instance/logout/${encodeURIComponent(instanceName)}`, {
+          method: 'DELETE',
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : ''
+        // Ignore benign logout error when instance is already considered not connected.
+        if (!message.includes('not connected')) {
+          throw error
+        }
+      }
+    }
+
     if (!normalized || normalized === 'connecting' || normalized === 'close' || normalized === 'closed' || normalized === 'disconnect' || normalized === 'disconnected') {
-      await evolutionRequest(`/instance/restart/${encodeURIComponent(instanceName)}`, {
-        method: 'POST',
-      })
+      try {
+        await evolutionRequest(`/instance/restart/${encodeURIComponent(instanceName)}`, {
+          method: 'POST',
+        })
+      } catch {
+        // Some Evolution setups return restart error when disconnected; connect call below can still recover.
+      }
     }
   } catch {
     // If restart pre-check fails, continue with connect and let Evolution response drive the error.
