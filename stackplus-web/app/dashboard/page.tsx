@@ -30,6 +30,8 @@ export default function DashboardPage() {
   const [qrError, setQrError] = useState<string | null>(null)
   const [qrForGameName, setQrForGameName] = useState<string>('')
   const [qrRefreshing, setQrRefreshing] = useState(false)
+  const [qrStatusMessage, setQrStatusMessage] = useState<string>('Aguardando leitura do QR code...')
+  const [qrConnected, setQrConnected] = useState(false)
   const canManageWhatsApp = user?.role === 'ADMIN' || user?.role === 'HOST'
 
   useEffect(() => {
@@ -100,6 +102,56 @@ export default function DashboardPage() {
     return `data:image/png;base64,${value}`
   }
 
+  function extractConnectionState(payload: any): string {
+    return String(
+      payload?.remote?.instance?.state ||
+      payload?.remote?.instance?.status ||
+      payload?.remote?.state ||
+      payload?.remote?.status ||
+      payload?.local?.status ||
+      ''
+    ).toLowerCase()
+  }
+
+  function normalizeStateLabel(state: string): string {
+    if (state === 'open' || state === 'connected') return 'conectado'
+    if (state === 'connecting') return 'conectando'
+    if (state === 'close' || state === 'closed' || state === 'disconnect' || state === 'disconnected') return 'desconectado'
+    if (!state) return 'desconhecido'
+    return state
+  }
+
+  async function checkConnectionStatus(showError = false) {
+    try {
+      const { data } = await api.get('/whatsapp/evolution/status')
+      const state = extractConnectionState(data)
+
+      if (state === 'open' || state === 'connected') {
+        setQrConnected(true)
+        setQrStatusMessage('WhatsApp conectado com sucesso. Voce ja pode fechar este modal.')
+        setQrError(null)
+        return
+      }
+
+      setQrConnected(false)
+      setQrStatusMessage(`Status atual: ${normalizeStateLabel(state)}. Se o QR expirou, clique em Atualizar QR code.`)
+    } catch (error) {
+      if (showError) {
+        setQrError(mapQrErrorMessage(error))
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!qrModalOpen || !canManageWhatsApp || qrError || qrConnected) return
+
+    const timer = setInterval(() => {
+      checkConnectionStatus(false)
+    }, 5000)
+
+    return () => clearInterval(timer)
+  }, [qrModalOpen, canManageWhatsApp, qrError, qrConnected])
+
   async function handleConnectWhatsApp(game: HomeGame) {
     if (!canManageWhatsApp) {
       setQrError('Seu usuario nao tem permissao para conectar WhatsApp. Entre com perfil HOST ou ADMIN.')
@@ -111,6 +163,8 @@ export default function DashboardPage() {
     setConnectingGameId(game.id)
     setQrError(null)
     setQrImage(null)
+    setQrConnected(false)
+    setQrStatusMessage('Gerando QR code...')
     setQrForGameName(game.name)
     setQrModalOpen(true)
 
@@ -125,6 +179,8 @@ export default function DashboardPage() {
       }
 
       setQrImage(qr)
+      setQrStatusMessage('QR code gerado. Escaneie com o WhatsApp do celular.')
+      await checkConnectionStatus(false)
     } catch (error) {
       setQrError(mapQrErrorMessage(error))
     } finally {
@@ -140,6 +196,7 @@ export default function DashboardPage() {
 
     setQrRefreshing(true)
     setQrError(null)
+    setQrConnected(false)
 
     try {
       const { data } = await api.get('/whatsapp/evolution/connect')
@@ -151,6 +208,8 @@ export default function DashboardPage() {
       }
 
       setQrImage(qr)
+      setQrStatusMessage('QR code atualizado. Escaneie novamente no WhatsApp.')
+      await checkConnectionStatus(false)
     } catch (error) {
       const message = mapQrErrorMessage(error)
       setQrError(message === 'Falha ao conectar WhatsApp' ? 'Falha ao atualizar QR code' : message)
@@ -307,9 +366,25 @@ export default function DashboardPage() {
               </div>
             ) : qrImage ? (
               <div className="space-y-3">
+                {qrConnected ? (
+                  <div className="rounded-md border border-emerald-900/50 bg-emerald-950/40 p-3 text-sm text-emerald-300">
+                    {qrStatusMessage}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-zinc-700 bg-zinc-800/40 p-3 text-sm text-zinc-300">
+                    {qrStatusMessage}
+                  </div>
+                )}
                 <div className="rounded-lg bg-white p-3">
                   <img src={qrImage} alt="QR Code WhatsApp" className="h-auto w-full" />
                 </div>
+                <button
+                  type="button"
+                  onClick={() => checkConnectionStatus(true)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700"
+                >
+                  Verificar status da conexao
+                </button>
                 <button
                   type="button"
                   onClick={handleRefreshQr}
