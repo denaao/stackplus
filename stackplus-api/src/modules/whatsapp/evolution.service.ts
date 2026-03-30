@@ -251,6 +251,24 @@ export async function setupEvolutionInstance(hostId: string, input?: { phoneNumb
 
 export async function connectEvolutionInstance(hostId: string) {
   const instanceName = resolveInstanceName({ hostId })
+
+  // Some instances can get stuck in "connecting" and keep returning unusable QR codes.
+  // Restarting the socket before connect forces a fresh QR generation cycle.
+  try {
+    const currentState = await evolutionRequest(`/instance/connectionState/${encodeURIComponent(instanceName)}`, {
+      method: 'GET',
+    })
+
+    const normalized = String(extractConnectionState(currentState) || '').toLowerCase()
+    if (!normalized || normalized === 'connecting' || normalized === 'close' || normalized === 'closed' || normalized === 'disconnect' || normalized === 'disconnected') {
+      await evolutionRequest(`/instance/restart/${encodeURIComponent(instanceName)}`, {
+        method: 'POST',
+      })
+    }
+  } catch {
+    // If restart pre-check fails, continue with connect and let Evolution response drive the error.
+  }
+
   const response = await evolutionRequest(`/instance/connect/${encodeURIComponent(instanceName)}`, {
     method: 'GET',
   })
