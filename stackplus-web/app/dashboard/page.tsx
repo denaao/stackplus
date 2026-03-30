@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const [qrImage, setQrImage] = useState<string | null>(null)
   const [qrError, setQrError] = useState<string | null>(null)
   const [qrForGameName, setQrForGameName] = useState<string>('')
+  const [qrRefreshing, setQrRefreshing] = useState(false)
 
   useEffect(() => {
     if (!user) { router.push('/'); return }
@@ -96,6 +97,27 @@ export default function DashboardPage() {
       setQrError(typeof error === 'string' ? error : 'Falha ao conectar WhatsApp')
     } finally {
       setConnectingGameId(null)
+    }
+  }
+
+  async function handleRefreshQr() {
+    setQrRefreshing(true)
+    setQrError(null)
+
+    try {
+      const { data } = await api.get('/whatsapp/evolution/connect')
+      const qr = extractQrCodeBase64(data)
+
+      if (!qr) {
+        setQrError('Nao foi possivel atualizar o QR code agora. Tente novamente.')
+        return
+      }
+
+      setQrImage(qr)
+    } catch (error) {
+      setQrError(typeof error === 'string' ? error : 'Falha ao atualizar QR code')
+    } finally {
+      setQrRefreshing(false)
     }
   }
 
@@ -248,6 +270,14 @@ export default function DashboardPage() {
                 <div className="rounded-lg bg-white p-3">
                   <img src={qrImage} alt="QR Code WhatsApp" className="h-auto w-full" />
                 </div>
+                <button
+                  type="button"
+                  onClick={handleRefreshQr}
+                  disabled={qrRefreshing}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 disabled:opacity-60"
+                >
+                  {qrRefreshing ? 'Atualizando QR...' : 'Atualizar QR code'}
+                </button>
                 <p className="text-xs text-zinc-400">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.</p>
               </div>
             ) : (
