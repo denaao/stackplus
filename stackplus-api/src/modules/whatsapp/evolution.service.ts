@@ -209,25 +209,29 @@ async function markLogFailed(logId: string, errorMessage: string) {
 export async function setupEvolutionInstance(hostId: string, input?: { phoneNumber?: string | null }) {
   const config = getEnvConfig()
   const instanceName = resolveInstanceName({ hostId })
+  const normalizedPhone = input?.phoneNumber ? normalizePhone(input.phoneNumber) : undefined
+
+  const createPayload = {
+    instanceName,
+    qrcode: true,
+    integration: 'WHATSAPP-BAILEYS',
+    number: normalizedPhone,
+    webhook: {
+      enabled: true,
+      url: webhookUrl(config),
+      byEvents: false,
+      base64: true,
+      events: DEFAULT_WEBHOOK_EVENTS,
+      headers: config.webhookSecret ? { 'x-stackplus-webhook-secret': config.webhookSecret } : {},
+    },
+  }
+
   await upsertLocalInstance(instanceName, { phoneNumber: input?.phoneNumber ? normalizePhone(input.phoneNumber) : null })
 
   try {
     const response = await evolutionRequest('/instance/create', {
       method: 'POST',
-      body: JSON.stringify({
-        instanceName,
-        qrcode: true,
-        integration: 'WHATSAPP-BAILEYS',
-        number: input?.phoneNumber ? normalizePhone(input.phoneNumber) : undefined,
-        webhook: {
-          enabled: true,
-          url: webhookUrl(config),
-          byEvents: false,
-          base64: true,
-          events: DEFAULT_WEBHOOK_EVENTS,
-          headers: config.webhookSecret ? { 'x-stackplus-webhook-secret': config.webhookSecret } : {},
-        },
-      }),
+      body: JSON.stringify(createPayload),
     })
 
     await upsertLocalInstance(instanceName, {
@@ -240,8 +244,23 @@ export async function setupEvolutionInstance(hostId: string, input?: { phoneNumb
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao criar instância na Evolution API'
     if (/already exists|already in use|já existe|em uso|exists/i.test(message)) {
-      await upsertLocalInstance(instanceName, { lastError: null })
-      return getEvolutionInstanceStatus(hostId)
+      // Hard reset for stale/corrupted sessions that keep returning QR but never connect.
+      await evolutionRequest(`/instance/delete/${encodeURIComponent(instanceName)}`, {
+        method: 'DELETE',
+      })
+
+      const recreated = await evolutionRequest('/instance/create', {
+        method: 'POST',
+        body: JSON.stringify(createPayload),
+      })
+
+      await upsertLocalInstance(instanceName, {
+        status: mapStatus(extractConnectionState(recreated)),
+        qrCodeBase64: extractQrCodeBase64(recreated),
+        lastError: null,
+      })
+
+      return recreated
     }
 
     await upsertLocalInstance(instanceName, { status: 'ERROR', lastError: message })
