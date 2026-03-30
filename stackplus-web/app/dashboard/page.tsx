@@ -63,6 +63,14 @@ export default function DashboardPage() {
     return message || 'Falha ao conectar WhatsApp'
   }
 
+  function isMissingInstanceError(error: unknown): boolean {
+    const message = (typeof error === 'string' ? error : '').toLowerCase()
+    return message.includes('does not exist')
+      || message.includes('nao existe')
+      || message.includes('não existe')
+      || message.includes('not found')
+  }
+
   function handleLogout() {
     logout()
     router.push('/')
@@ -169,8 +177,19 @@ export default function DashboardPage() {
     setQrModalOpen(true)
 
     try {
-      await api.post('/whatsapp/evolution/setup', {})
-      const { data } = await api.get('/whatsapp/evolution/connect')
+      let data: any
+
+      try {
+        const connectResponse = await api.get('/whatsapp/evolution/connect')
+        data = connectResponse.data
+      } catch (error) {
+        if (!isMissingInstanceError(error)) throw error
+
+        await api.post('/whatsapp/evolution/setup', {})
+        const connectResponse = await api.get('/whatsapp/evolution/connect')
+        data = connectResponse.data
+      }
+
       const qr = extractQrCodeBase64(data)
 
       if (!qr) {
