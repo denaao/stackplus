@@ -82,6 +82,18 @@ function extractJson(text: string) {
   }
 }
 
+function extractErrorMessage(data: unknown, status: number) {
+  if (typeof data === 'string') return data
+
+  const payload = data as any
+  return (
+    payload?.response?.message ||
+    payload?.message ||
+    payload?.error ||
+    `Evolution API retornou ${status}`
+  )
+}
+
 async function evolutionRequest(path: string, init?: RequestInit) {
   const config = getEnvConfig()
   const response = await fetch(`${config.apiUrl}${path}`, {
@@ -97,13 +109,12 @@ async function evolutionRequest(path: string, init?: RequestInit) {
   const data = extractJson(raw)
 
   if (!response.ok) {
+    const message = extractErrorMessage(data, response.status)
+
     if (response.status === 403) {
-      throw new Error('Evolution API recusou a requisicao (403). Verifique EVOLUTION_API_KEY e permissoes da instancia.')
+      throw new Error(`Evolution API recusou a requisicao (403) em ${path}. Detalhe: ${message}. Verifique EVOLUTION_API_KEY e permissoes da instancia.`)
     }
 
-    const message = typeof data === 'string'
-      ? data
-      : (data as any)?.message || (data as any)?.error || `Evolution API retornou ${response.status}`
     throw new Error(message)
   }
 
