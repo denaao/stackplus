@@ -19,7 +19,7 @@ interface HomeGame {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, logout } = useAuthStore()
+  const { token, user, setAuth, logout } = useAuthStore()
   const [games, setGames] = useState<HomeGame[]>([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -30,11 +30,36 @@ export default function DashboardPage() {
   const [qrError, setQrError] = useState<string | null>(null)
   const [qrForGameName, setQrForGameName] = useState<string>('')
   const [qrRefreshing, setQrRefreshing] = useState(false)
+  const canManageWhatsApp = user?.role === 'ADMIN' || user?.role === 'HOST'
 
   useEffect(() => {
     if (!user) { router.push('/'); return }
+
+    api.get('/auth/me')
+      .then(({ data }) => {
+        if (token && data?.id && data?.email) {
+          setAuth(token, data)
+        }
+      })
+      .catch(() => {})
+
     api.get('/home-games/mine').then(({ data }) => setGames(data)).finally(() => setLoading(false))
-  }, [user])
+  }, [user, token, setAuth])
+
+  function mapQrErrorMessage(error: unknown): string {
+    const message = typeof error === 'string' ? error : ''
+    const normalized = message.toLowerCase()
+
+    if (normalized.includes('acesso negado') || normalized === 'forbidden') {
+      return 'Seu usuario nao tem permissao para conectar WhatsApp. Entre com perfil HOST ou ADMIN.'
+    }
+
+    if (normalized.includes('token')) {
+      return 'Sua sessao expirou. Faca login novamente.'
+    }
+
+    return message || 'Falha ao conectar WhatsApp'
+  }
 
   function handleLogout() {
     logout()
@@ -76,6 +101,13 @@ export default function DashboardPage() {
   }
 
   async function handleConnectWhatsApp(game: HomeGame) {
+    if (!canManageWhatsApp) {
+      setQrError('Seu usuario nao tem permissao para conectar WhatsApp. Entre com perfil HOST ou ADMIN.')
+      setQrForGameName(game.name)
+      setQrModalOpen(true)
+      return
+    }
+
     setConnectingGameId(game.id)
     setQrError(null)
     setQrImage(null)
@@ -94,13 +126,18 @@ export default function DashboardPage() {
 
       setQrImage(qr)
     } catch (error) {
-      setQrError(typeof error === 'string' ? error : 'Falha ao conectar WhatsApp')
+      setQrError(mapQrErrorMessage(error))
     } finally {
       setConnectingGameId(null)
     }
   }
 
   async function handleRefreshQr() {
+    if (!canManageWhatsApp) {
+      setQrError('Seu usuario nao tem permissao para atualizar QR code de WhatsApp.')
+      return
+    }
+
     setQrRefreshing(true)
     setQrError(null)
 
@@ -115,7 +152,8 @@ export default function DashboardPage() {
 
       setQrImage(qr)
     } catch (error) {
-      setQrError(typeof error === 'string' ? error : 'Falha ao atualizar QR code')
+      const message = mapQrErrorMessage(error)
+      setQrError(message === 'Falha ao conectar WhatsApp' ? 'Falha ao atualizar QR code' : message)
     } finally {
       setQrRefreshing(false)
     }
@@ -179,8 +217,9 @@ export default function DashboardPage() {
                         e.stopPropagation()
                         handleConnectWhatsApp(game)
                       }}
-                      disabled={connectingGameId === game.id}
+                      disabled={connectingGameId === game.id || !canManageWhatsApp}
                       className="h-7 rounded-md border border-green-700 bg-green-900/40 px-2 text-xs font-semibold text-green-300 hover:bg-green-800/50 disabled:opacity-50"
+                      title={canManageWhatsApp ? undefined : 'Disponivel apenas para HOST/ADMIN'}
                     >
                       {connectingGameId === game.id ? 'Gerando QR...' : 'WhatsApp'}
                     </button>
@@ -231,8 +270,9 @@ export default function DashboardPage() {
                       e.stopPropagation()
                       handleConnectWhatsApp(game)
                     }}
-                    disabled={connectingGameId === game.id}
+                    disabled={connectingGameId === game.id || !canManageWhatsApp}
                     className="w-full rounded-lg border border-green-700 bg-green-900/40 px-3 py-2 text-sm font-semibold text-green-300 hover:bg-green-800/50 disabled:opacity-50"
+                    title={canManageWhatsApp ? undefined : 'Disponivel apenas para HOST/ADMIN'}
                   >
                     {connectingGameId === game.id ? 'Gerando QR code...' : 'Conectar WhatsApp deste Home Game'}
                   </button>

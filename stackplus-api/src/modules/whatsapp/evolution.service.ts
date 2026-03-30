@@ -97,6 +97,10 @@ async function evolutionRequest(path: string, init?: RequestInit) {
   const data = extractJson(raw)
 
   if (!response.ok) {
+    if (response.status === 403) {
+      throw new Error('Evolution API recusou a requisicao (403). Verifique EVOLUTION_API_KEY e permissoes da instancia.')
+    }
+
     const message = typeof data === 'string'
       ? data
       : (data as any)?.message || (data as any)?.error || `Evolution API retornou ${response.status}`
