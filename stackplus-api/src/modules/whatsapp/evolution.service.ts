@@ -239,7 +239,7 @@ export async function setupEvolutionInstance(hostId: string, input?: { phoneNumb
     return response
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao criar instância na Evolution API'
-    if (/already exists|já existe|exists/i.test(message)) {
+    if (/already exists|already in use|já existe|em uso|exists/i.test(message)) {
       await upsertLocalInstance(instanceName, { lastError: null })
       return getEvolutionInstanceStatus(hostId)
     }
