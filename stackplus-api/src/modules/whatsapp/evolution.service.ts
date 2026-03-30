@@ -3,7 +3,7 @@ import { prisma } from '../../lib/prisma'
 type EvolutionEnvConfig = {
   apiUrl: string
   apiKey: string
-  instanceName: string
+  defaultInstanceName: string
   publicApiUrl: string
   webhookSecret: string | null
   autoNotifySessionFinish: boolean
@@ -25,24 +25,37 @@ const DEFAULT_WEBHOOK_EVENTS = [
 function getEnvConfig(): EvolutionEnvConfig {
   const apiUrl = process.env.EVOLUTION_API_URL?.trim()
   const apiKey = process.env.EVOLUTION_API_KEY?.trim()
-  const instanceName = process.env.EVOLUTION_INSTANCE_NAME?.trim()
+  const defaultInstanceName = process.env.EVOLUTION_INSTANCE_NAME?.trim() || 'stackplus-main'
   const publicApiUrl = process.env.API_PUBLIC_URL?.trim()
   const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET?.trim() || null
   const autoNotifySessionFinish = process.env.EVOLUTION_AUTO_NOTIFY_SESSION_FINISH === 'true'
 
   if (!apiUrl) throw new Error('Evolution API não configurada: EVOLUTION_API_URL ausente')
   if (!apiKey) throw new Error('Evolution API não configurada: EVOLUTION_API_KEY ausente')
-  if (!instanceName) throw new Error('Evolution API não configurada: EVOLUTION_INSTANCE_NAME ausente')
   if (!publicApiUrl) throw new Error('Evolution API não configurada: API_PUBLIC_URL ausente')
 
   return {
     apiUrl: apiUrl.replace(/\/+$/, ''),
     apiKey,
-    instanceName,
+    defaultInstanceName,
     publicApiUrl: publicApiUrl.replace(/\/+$/, ''),
     webhookSecret,
     autoNotifySessionFinish,
   }
+}
+
+function buildHostInstanceName(hostId: string) {
+  const normalizedHostId = String(hostId || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
+  if (!normalizedHostId) throw new Error('Host inválido para resolver instância WhatsApp')
+  return `stackplus-host-${normalizedHostId}`
+}
+
+function resolveInstanceName(options?: { hostId?: string; instanceName?: string | null }) {
+  if (options?.instanceName?.trim()) return options.instanceName.trim()
+  if (options?.hostId?.trim()) return buildHostInstanceName(options.hostId)
+
+  const config = getEnvConfig()
+  return config.defaultInstanceName
 }
 
 function normalizePhone(value: string) {
@@ -93,13 +106,13 @@ async function evolutionRequest(path: string, init?: RequestInit) {
   return data
 }
 
-async function upsertLocalInstance(overrides?: Partial<{ status: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'ERROR'; phoneNumber: string | null; qrCodeBase64: string | null; lastError: string | null; lastConnectionAt: Date | null }>) {
+async function upsertLocalInstance(instanceName: string, overrides?: Partial<{ status: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'ERROR'; phoneNumber: string | null; qrCodeBase64: string | null; lastError: string | null; lastConnectionAt: Date | null }>) {
   const config = getEnvConfig()
 
   return prisma.whatsAppInstanceConfig.upsert({
-    where: { instanceName: config.instanceName },
+    where: { instanceName },
     create: {
-      instanceName: config.instanceName,
+      instanceName,
       apiBaseUrl: config.apiUrl,
       webhookSecret: config.webhookSecret,
       status: overrides?.status || 'DISCONNECTED',
@@ -141,8 +154,8 @@ function extractMessageExternalId(payload: any) {
   return payload?.data?.key?.id || payload?.data?.id || payload?.key?.id || payload?.id || null
 }
 
-async function createOutboundLog(recipientPhone: string, messageText: string) {
-  const instance = await upsertLocalInstance()
+async function createOutboundLog(instanceName: string, recipientPhone: string, messageText: string) {
+  const instance = await upsertLocalInstance(instanceName)
   return prisma.whatsAppMessageLog.create({
     data: {
       instanceConfigId: instance.id,
@@ -178,15 +191,16 @@ async function markLogFailed(logId: string, errorMessage: string) {
   })
 }
 
-export async function setupEvolutionInstance(input?: { phoneNumber?: string | null }) {
+export async function setupEvolutionInstance(hostId: string, input?: { phoneNumber?: string | null }) {
   const config = getEnvConfig()
-  await upsertLocalInstance({ phoneNumber: input?.phoneNumber ? normalizePhone(input.phoneNumber) : null })
+  const instanceName = resolveInstanceName({ hostId })
+  await upsertLocalInstance(instanceName, { phoneNumber: input?.phoneNumber ? normalizePhone(input.phoneNumber) : null })
 
   try {
     const response = await evolutionRequest('/instance/create', {
       method: 'POST',
       body: JSON.stringify({
-        instanceName: config.instanceName,
+        instanceName,
         qrcode: true,
         integration: 'WHATSAPP-BAILEYS',
         number: input?.phoneNumber ? normalizePhone(input.phoneNumber) : undefined,
@@ -201,7 +215,7 @@ export async function setupEvolutionInstance(input?: { phoneNumber?: string | nu
       }),
     })
 
-    await upsertLocalInstance({
+    await upsertLocalInstance(instanceName, {
       status: mapStatus(extractConnectionState(response)),
       qrCodeBase64: extractQrCodeBase64(response),
       lastError: null,
@@ -211,22 +225,22 @@ export async function setupEvolutionInstance(input?: { phoneNumber?: string | nu
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao criar instância na Evolution API'
     if (/already exists|já existe|exists/i.test(message)) {
-      await upsertLocalInstance({ lastError: null })
-      return getEvolutionInstanceStatus()
+      await upsertLocalInstance(instanceName, { lastError: null })
+      return getEvolutionInstanceStatus(hostId)
     }
 
-    await upsertLocalInstance({ status: 'ERROR', lastError: message })
+    await upsertLocalInstance(instanceName, { status: 'ERROR', lastError: message })
     throw error
   }
 }
 
-export async function connectEvolutionInstance() {
-  const config = getEnvConfig()
-  const response = await evolutionRequest(`/instance/connect/${encodeURIComponent(config.instanceName)}`, {
+export async function connectEvolutionInstance(hostId: string) {
+  const instanceName = resolveInstanceName({ hostId })
+  const response = await evolutionRequest(`/instance/connect/${encodeURIComponent(instanceName)}`, {
     method: 'GET',
   })
 
-  await upsertLocalInstance({
+  await upsertLocalInstance(instanceName, {
     status: mapStatus(extractConnectionState(response) || 'connecting'),
     qrCodeBase64: extractQrCodeBase64(response),
     lastError: null,
@@ -235,14 +249,14 @@ export async function connectEvolutionInstance() {
   return response
 }
 
-export async function getEvolutionInstanceStatus() {
-  const config = getEnvConfig()
-  const response = await evolutionRequest(`/instance/connectionState/${encodeURIComponent(config.instanceName)}`, {
+export async function getEvolutionInstanceStatus(hostId: string) {
+  const instanceName = resolveInstanceName({ hostId })
+  const response = await evolutionRequest(`/instance/connectionState/${encodeURIComponent(instanceName)}`, {
     method: 'GET',
   })
 
   const nextStatus = mapStatus(extractConnectionState(response))
-  await upsertLocalInstance({
+  await upsertLocalInstance(instanceName, {
     status: nextStatus,
     qrCodeBase64: extractQrCodeBase64(response),
     lastError: null,
@@ -250,7 +264,7 @@ export async function getEvolutionInstanceStatus() {
   })
 
   const local = await prisma.whatsAppInstanceConfig.findUnique({
-    where: { instanceName: config.instanceName },
+    where: { instanceName },
     select: {
       id: true,
       provider: true,
@@ -270,7 +284,7 @@ export async function getEvolutionInstanceStatus() {
   return { remote: response, local }
 }
 
-export async function sendEvolutionTextMessage(phone: string, text: string): Promise<SendTextResult> {
+export async function sendEvolutionTextMessage(hostId: string, phone: string, text: string): Promise<SendTextResult> {
   const normalizedPhone = normalizePhone(phone)
   if (normalizedPhone.length < 10 || normalizedPhone.length > 13) {
     throw new Error('Telefone de destino inválido para WhatsApp')
@@ -278,11 +292,11 @@ export async function sendEvolutionTextMessage(phone: string, text: string): Pro
 
   if (!text.trim()) throw new Error('Mensagem não pode ser vazia')
 
-  const config = getEnvConfig()
-  const log = await createOutboundLog(normalizedPhone, text.trim())
+  const instanceName = resolveInstanceName({ hostId })
+  const log = await createOutboundLog(instanceName, normalizedPhone, text.trim())
 
   try {
-    const response = await evolutionRequest(`/message/sendText/${encodeURIComponent(config.instanceName)}`, {
+    const response = await evolutionRequest(`/message/sendText/${encodeURIComponent(instanceName)}`, {
       method: 'POST',
       body: JSON.stringify({
         number: normalizedPhone,
@@ -299,12 +313,12 @@ export async function sendEvolutionTextMessage(phone: string, text: string): Pro
   }
 }
 
-export async function listEvolutionMessageLogs(limit = 50) {
-  const config = getEnvConfig()
+export async function listEvolutionMessageLogs(hostId: string, limit = 50) {
+  const instanceName = resolveInstanceName({ hostId })
   return prisma.whatsAppMessageLog.findMany({
     where: {
       instanceConfig: {
-        instanceName: config.instanceName,
+        instanceName,
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -312,9 +326,18 @@ export async function listEvolutionMessageLogs(limit = 50) {
   })
 }
 
+function extractInstanceName(payload: any) {
+  return payload?.instance?.instanceName
+    || payload?.instanceName
+    || payload?.data?.instanceName
+    || payload?.data?.instance
+    || null
+}
+
 export async function handleEvolutionWebhook(payload: any, secretHeader?: string | string[]) {
   const config = getEnvConfig()
   const secret = Array.isArray(secretHeader) ? secretHeader[0] : secretHeader
+  const instanceName = resolveInstanceName({ instanceName: extractInstanceName(payload) })
 
   if (config.webhookSecret && secret !== config.webhookSecret) {
     throw new Error('Webhook Evolution inválido: segredo não confere')
@@ -324,7 +347,7 @@ export async function handleEvolutionWebhook(payload: any, secretHeader?: string
   const externalMessageId = extractMessageExternalId(payload)
 
   if (event.includes('qrcode')) {
-    await upsertLocalInstance({
+    await upsertLocalInstance(instanceName, {
       status: 'CONNECTING',
       qrCodeBase64: extractQrCodeBase64(payload),
       lastError: null,
@@ -333,7 +356,7 @@ export async function handleEvolutionWebhook(payload: any, secretHeader?: string
 
   if (event.includes('connection')) {
     const nextStatus = mapStatus(extractConnectionState(payload))
-    await upsertLocalInstance({
+    await upsertLocalInstance(instanceName, {
       status: nextStatus,
       qrCodeBase64: nextStatus === 'CONNECTED' ? null : extractQrCodeBase64(payload),
       lastConnectionAt: nextStatus === 'CONNECTED' ? new Date() : undefined,
@@ -354,7 +377,7 @@ export async function handleEvolutionWebhook(payload: any, secretHeader?: string
   }
 
   if (event.includes('messages.upsert')) {
-    const instance = await upsertLocalInstance()
+    const instance = await upsertLocalInstance(instanceName)
     await prisma.whatsAppMessageLog.create({
       data: {
         instanceConfigId: instance.id,
@@ -418,7 +441,7 @@ export async function notifySessionFinished(sessionId: string, hostId?: string) 
       resultLabel,
     ].join('\n')
 
-    const sent = await sendEvolutionTextMessage(phone, message)
+    const sent = await sendEvolutionTextMessage(session.homeGame.hostId, phone, message)
     attempts.push({ userId: player.userId, name: player.user.name, phone, status: 'sent', logId: sent.logId })
   }
 

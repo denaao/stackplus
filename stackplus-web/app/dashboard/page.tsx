@@ -24,6 +24,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [connectingGameId, setConnectingGameId] = useState<string | null>(null)
+  const [qrModalOpen, setQrModalOpen] = useState(false)
+  const [qrImage, setQrImage] = useState<string | null>(null)
+  const [qrError, setQrError] = useState<string | null>(null)
+  const [qrForGameName, setQrForGameName] = useState<string>('')
 
   useEffect(() => {
     if (!user) { router.push('/'); return }
@@ -53,6 +58,44 @@ export default function DashboardPage() {
       alert('Nao foi possivel excluir o Home Game')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  function extractQrCodeBase64(payload: any): string | null {
+    const value =
+      payload?.response?.qrCodeBase64 ||
+      payload?.qrcode?.base64 ||
+      payload?.base64 ||
+      payload?.response?.qrcode?.base64 ||
+      null
+
+    if (!value || typeof value !== 'string') return null
+    if (value.startsWith('data:image')) return value
+    return `data:image/png;base64,${value}`
+  }
+
+  async function handleConnectWhatsApp(game: HomeGame) {
+    setConnectingGameId(game.id)
+    setQrError(null)
+    setQrImage(null)
+    setQrForGameName(game.name)
+    setQrModalOpen(true)
+
+    try {
+      await api.post('/whatsapp/evolution/setup', {})
+      const { data } = await api.get('/whatsapp/evolution/connect')
+      const qr = extractQrCodeBase64(data)
+
+      if (!qr) {
+        setQrError('Nao foi possivel gerar o QR code agora. Tente novamente em alguns segundos.')
+        return
+      }
+
+      setQrImage(qr)
+    } catch (error) {
+      setQrError(typeof error === 'string' ? error : 'Falha ao conectar WhatsApp')
+    } finally {
+      setConnectingGameId(null)
     }
   }
 
@@ -108,6 +151,17 @@ export default function DashboardPage() {
                     <p className="mt-1 text-xs uppercase tracking-wide text-zinc-500">{gameTypeLabel[gameType]}</p>
                   </div>
                   <div className="relative flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleConnectWhatsApp(game)
+                      }}
+                      disabled={connectingGameId === game.id}
+                      className="h-7 rounded-md border border-green-700 bg-green-900/40 px-2 text-xs font-semibold text-green-300 hover:bg-green-800/50 disabled:opacity-50"
+                    >
+                      {connectingGameId === game.id ? 'Gerando QR...' : 'WhatsApp'}
+                    </button>
                     <span className="bg-zinc-800 text-yellow-400 text-xs font-mono font-bold px-2 py-1 rounded">{game.joinCode}</span>
                     <button
                       type="button"
@@ -148,12 +202,62 @@ export default function DashboardPage() {
                   <span>🎮 {game._count.sessions} sessões</span>
                   <span>{gameType === 'CASH_GAME' ? `💵 R$ ${game.chipValue}/ficha` : '🏆 Estrutura de torneio'}</span>
                 </div>
+                <div className="mt-4 pt-3 border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleConnectWhatsApp(game)
+                    }}
+                    disabled={connectingGameId === game.id}
+                    className="w-full rounded-lg border border-green-700 bg-green-900/40 px-3 py-2 text-sm font-semibold text-green-300 hover:bg-green-800/50 disabled:opacity-50"
+                  >
+                    {connectingGameId === game.id ? 'Gerando QR code...' : 'Conectar WhatsApp deste Home Game'}
+                  </button>
+                </div>
               </div>
               )
             })}
           </div>
         )}
       </main>
+
+      {qrModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setQrModalOpen(false)}>
+          <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-zinc-100">Conectar WhatsApp</h3>
+                <p className="text-xs text-zinc-400">Home Game: {qrForGameName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQrModalOpen(false)}
+                className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                Fechar
+              </button>
+            </div>
+
+            {qrError ? (
+              <div className="rounded-md border border-red-900/50 bg-red-950/40 p-3 text-sm text-red-300">
+                {qrError}
+              </div>
+            ) : qrImage ? (
+              <div className="space-y-3">
+                <div className="rounded-lg bg-white p-3">
+                  <img src={qrImage} alt="QR Code WhatsApp" className="h-auto w-full" />
+                </div>
+                <p className="text-xs text-zinc-400">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.</p>
+              </div>
+            ) : (
+              <div className="rounded-md border border-zinc-700 bg-zinc-800/50 p-3 text-sm text-zinc-300">
+                Gerando QR code...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
