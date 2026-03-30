@@ -17,7 +17,18 @@ const allowedOrigins = [
 ].filter(Boolean) as string[]
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: (origin, callback) => {
+    // Allow server-to-server and non-browser requests without an Origin header.
+    if (!origin) return callback(null, true)
+
+    const isAllowed =
+      allowedOrigins.includes(origin) ||
+      /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)
+
+    if (isAllowed) return callback(null, true)
+
+    return callback(new Error('Origin not allowed by CORS'))
+  },
   credentials: true,
 }))
 app.use(express.json())

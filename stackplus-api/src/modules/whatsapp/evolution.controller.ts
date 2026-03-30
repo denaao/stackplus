@@ -1,4 +1,4 @@
-import { Response } from 'express'
+import { Request, Response } from 'express'
 import { AuthRequest } from '../../middlewares/auth.middleware'
 import * as EvolutionService from './evolution.service'
 
