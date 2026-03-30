@@ -17,7 +17,7 @@ export default function TvPage() {
   const [gameName, setGameName] = useState('')
   const [players, setPlayers] = useState<PlayerState[]>([])
   const [status, setStatus] = useState('')
-  const [now, setNow] = useState(new Date())
+  const [now, setNow] = useState<Date | null>(null)
 
   useEffect(() => {
     api.get(`/sessions/${sessionId}`).then(({ data }) => {
@@ -31,6 +31,7 @@ export default function TvPage() {
     socket.on('ranking:updated', (ranking: PlayerState[]) => setPlayers([...ranking]))
     socket.on('session:finished', () => setStatus('FINISHED'))
 
+    setNow(new Date())
     const clock = setInterval(() => setNow(new Date()), 1000)
     return () => { socket.disconnect(); clearInterval(clock) }
   }, [sessionId])
@@ -46,8 +47,10 @@ export default function TvPage() {
         </div>
         <div className="text-right">
           <p className="text-zinc-400 text-sm">Ao vivo</p>
-          <p className="text-2xl font-mono font-bold text-yellow-400">
-            {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          <p className="text-2xl font-mono font-bold text-yellow-400" suppressHydrationWarning>
+            {now
+              ? now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+              : '--:--:--'}
           </p>
         </div>
       </div>

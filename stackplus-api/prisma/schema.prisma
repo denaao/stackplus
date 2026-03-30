@@ -27,10 +27,51 @@ enum TransactionType {
   CASHOUT
 }
 
+enum GameType {
+  CASH_GAME
+  TOURNAMENT
+}
+
+enum PixKeyType {
+  CPF
+  CNPJ
+  EMAIL
+  PHONE
+  RANDOM
+}
+
+enum WhatsAppProvider {
+  EVOLUTION
+}
+
+enum WhatsAppInstanceStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  ERROR
+}
+
+enum WhatsAppMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum WhatsAppMessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  RECEIVED
+  FAILED
+}
+
 model User {
   id           String   @id @default(uuid())
   name         String
   email        String   @unique
+  phone        String?
+  pixType      PixKeyType?
+  pixKey       String?
   passwordHash String
   role         Role     @default(PLAYER)
   avatarUrl    String?
@@ -42,20 +83,69 @@ model User {
   transactions    Transaction[]
   cashierSessions Session[]       @relation("CashierSessions")
   playerStates    PlayerSessionState[]
+  sessionStaffAssignments SessionStaff[]
+  sessionParticipantAssignments SessionParticipant[]
+}
+
+model WhatsAppInstanceConfig {
+  id               String                 @id @default(uuid())
+  provider         WhatsAppProvider       @default(EVOLUTION)
+  instanceName     String                 @unique
+  apiBaseUrl       String
+  enabled          Boolean                @default(true)
+  status           WhatsAppInstanceStatus @default(DISCONNECTED)
+  phoneNumber      String?
+  qrCodeBase64     String?
+  webhookSecret    String?
+  lastConnectionAt DateTime?
+  lastError        String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  messageLogs WhatsAppMessageLog[]
+}
+
+model WhatsAppMessageLog {
+  id                String                   @id @default(uuid())
+  instanceConfigId  String
+  externalMessageId String?
+  event             String?
+  direction         WhatsAppMessageDirection @default(OUTBOUND)
+  status            WhatsAppMessageStatus    @default(PENDING)
+  recipientPhone    String?
+  senderPhone       String?
+  messageText       String?
+  payload           Json?
+  errorMessage      String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  instanceConfig WhatsAppInstanceConfig @relation(fields: [instanceConfigId], references: [id])
+
+  @@index([instanceConfigId, createdAt])
+  @@index([externalMessageId])
+  @@index([status])
 }
 
 model HomeGame {
-  id          String   @id @default(uuid())
-  name        String
-  address     String
-  dayOfWeek   String
-  startTime   String
-  chipValue   Decimal  @db.Decimal(10, 2)
-  rules       String?
-  joinCode    String   @unique
-  hostId      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                       String   @id @default(uuid())
+  name                     String
+  gameType                 GameType @default(CASH_GAME)
+  address                  String
+  dayOfWeek                String
+  startTime                String
+  chipValue                Decimal  @db.Decimal(10, 2)
+  rules                    String?
+  buyInAmount              Decimal? @db.Decimal(10, 2)
+  rebuyAmount              Decimal? @db.Decimal(10, 2)
+  addOnAmount              Decimal? @db.Decimal(10, 2)
+  blindsMinutesBeforeBreak Int?
+  blindsMinutesAfterBreak  Int?
+  levelsUntilBreak         Int?
+  joinCode                 String   @unique
+  hostId                   String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   host     User             @relation(fields: [hostId], references: [id])
   members  HomeGameMember[]
@@ -79,7 +169,23 @@ model HomeGameMember {
 model Session {
   id          String        @id @default(uuid())
   homeGameId  String
+  pokerVariant String?
+  gameType    GameType      @default(CASH_GAME)
+  chipValue   Decimal?      @db.Decimal(10, 2)
+  smallBlind  Decimal?      @db.Decimal(10, 2)
+  bigBlind    Decimal?      @db.Decimal(10, 2)
+  minimumBuyIn Decimal?     @db.Decimal(10, 2)
+  minimumStayMinutes Int?
+  foodFee     Decimal?      @db.Decimal(10, 2)
+  buyInAmount Decimal?      @db.Decimal(10, 2)
+  rebuyAmount Decimal?      @db.Decimal(10, 2)
+  addOnAmount Decimal?      @db.Decimal(10, 2)
+  blindsMinutesBeforeBreak Int?
+  blindsMinutesAfterBreak  Int?
+  levelsUntilBreak         Int?
   cashierId   String?
+  rake        Decimal?      @db.Decimal(10, 2)
+  caixinha    Decimal?      @db.Decimal(10, 2)
   status      SessionStatus @default(WAITING)
   startedAt   DateTime?
   finishedAt  DateTime?
@@ -90,9 +196,39 @@ model Session {
   cashier      User?                @relation("CashierSessions", fields: [cashierId], references: [id])
   transactions Transaction[]
   playerStates PlayerSessionState[]
+  staffAssignments SessionStaff[]
+  participantAssignments SessionParticipant[]
 
   @@index([homeGameId])
   @@index([status])
+}
+
+model SessionParticipant {
+  id        String   @id @default(uuid())
+  sessionId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model SessionStaff {
+  id        String   @id @default(uuid())
+  sessionId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
 }
 
 model PlayerSessionState {

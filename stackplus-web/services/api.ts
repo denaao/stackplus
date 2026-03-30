@@ -26,7 +26,16 @@ api.interceptors.response.use(
       localStorage.removeItem('stackplus-auth')
       window.location.href = '/'
     }
-    return Promise.reject(error.response?.data?.error || 'Erro desconhecido')
+
+    const data = error.response?.data
+    const message =
+      data?.error ||
+      data?.message ||
+      (typeof data === 'string' ? data : null) ||
+      error.message ||
+      'Erro desconhecido'
+
+    return Promise.reject(message)
   }
 )
 

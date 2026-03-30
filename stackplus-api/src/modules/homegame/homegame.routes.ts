@@ -8,14 +8,24 @@ const router = Router()
 const createSchema = z.object({
   name: z.string().min(2),
   address: z.string().min(5),
-  dayOfWeek: z.string(),
-  startTime: z.string(),
-  chipValue: z.number().positive(),
-  rules: z.string().optional(),
 })
 
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
-  const data = createSchema.parse(req.body)
+  const parsed = createSchema.parse(req.body)
+  const data = {
+    ...parsed,
+    gameType: 'CASH_GAME' as const,
+    dayOfWeek: 'A combinar',
+    startTime: '20:00',
+    chipValue: 1,
+    rules: undefined,
+    buyInAmount: undefined,
+    rebuyAmount: undefined,
+    addOnAmount: undefined,
+    blindsMinutesBeforeBreak: undefined,
+    blindsMinutesAfterBreak: undefined,
+    levelsUntilBreak: undefined,
+  }
   const game = await HomeGameService.createHomeGame(req.user!.userId, data)
   res.status(201).json(game)
 })
@@ -33,6 +43,11 @@ router.get('/member', authenticate, async (req: AuthRequest, res: Response) => {
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   const game = await HomeGameService.getHomeGameById(req.params.id)
   res.json(game)
+})
+
+router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  await HomeGameService.deleteHomeGame(req.params.id, req.user!.userId)
+  res.status(204).send()
 })
 
 router.post('/join', authenticate, async (req: AuthRequest, res: Response) => {

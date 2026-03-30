@@ -5,6 +5,9 @@ interface User {
   id: string
   name: string
   email: string
+  phone?: string | null
+  pixType?: 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM' | null
+  pixKey?: string | null
   role: 'ADMIN' | 'HOST' | 'PLAYER' | 'CASHIER'
   avatarUrl?: string
 }

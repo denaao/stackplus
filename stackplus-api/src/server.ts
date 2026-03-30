@@ -1,7 +1,10 @@
-import 'dotenv/config'
+import path from 'path'
+import dotenv from 'dotenv'
 import http from 'http'
 import app from './app'
 import { initSocket } from './socket/socket'
+
+dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 const PORT = process.env.PORT || 3001
 

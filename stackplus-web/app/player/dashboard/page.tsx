@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/useStore'
 
 interface HomeGameMembership {
   id: string
-  homeGame: { id: string; name: string; address: string; dayOfWeek: string; host: { name: string } }
+  homeGame: { id: string; name: string; gameType?: 'CASH_GAME' | 'TOURNAMENT'; address: string; dayOfWeek: string; host: { name: string } }
 }
 
 export default function PlayerDashboardPage() {
@@ -79,13 +79,21 @@ export default function PlayerDashboardPage() {
             <div className="text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-xl">Entre em um Home Game com o código</div>
           ) : (
             <div className="space-y-3">
-              {memberships.map((m) => (
+              {memberships.map((m) => {
+                const gameType = m.homeGame.gameType || 'CASH_GAME'
+                return (
                 <div key={m.id} className="bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 transition-colors">
-                  <p className="font-bold">{m.homeGame.name}</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-bold">{m.homeGame.name}</p>
+                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-zinc-300">
+                      {gameType === 'CASH_GAME' ? 'Cash Game' : 'Torneio'}
+                    </span>
+                  </div>
                   <p className="text-zinc-400 text-sm">{m.homeGame.address}</p>
                   <p className="text-zinc-500 text-xs mt-1">{m.homeGame.dayOfWeek} • Host: {m.homeGame.host.name}</p>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

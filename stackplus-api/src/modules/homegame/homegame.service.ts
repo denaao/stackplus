@@ -3,11 +3,18 @@ import { generateJoinCode } from '../../utils/codeGenerator'
 
 export async function createHomeGame(hostId: string, data: {
   name: string
+  gameType: 'CASH_GAME' | 'TOURNAMENT'
   address: string
   dayOfWeek: string
   startTime: string
   chipValue: number
   rules?: string
+  buyInAmount?: number
+  rebuyAmount?: number
+  addOnAmount?: number
+  blindsMinutesBeforeBreak?: number
+  blindsMinutesAfterBreak?: number
+  levelsUntilBreak?: number
 }) {
   let joinCode = generateJoinCode()
   let tries = 0
@@ -67,5 +74,20 @@ export async function getPlayerGames(userId: string) {
       },
     },
     orderBy: { joinedAt: 'desc' },
+  })
+}
+
+export async function deleteHomeGame(homeGameId: string, hostId: string) {
+  const game = await prisma.homeGame.findUniqueOrThrow({ where: { id: homeGameId } })
+  if (game.hostId !== hostId) throw new Error('Acesso negado')
+
+  await prisma.$transaction(async (tx) => {
+    await tx.transaction.deleteMany({ where: { session: { homeGameId } } })
+    await tx.playerSessionState.deleteMany({ where: { session: { homeGameId } } })
+    await tx.sessionStaff.deleteMany({ where: { session: { homeGameId } } })
+    await tx.sessionParticipant.deleteMany({ where: { session: { homeGameId } } })
+    await tx.session.deleteMany({ where: { homeGameId } })
+    await tx.homeGameMember.deleteMany({ where: { homeGameId } })
+    await tx.homeGame.delete({ where: { id: homeGameId } })
   })
 }

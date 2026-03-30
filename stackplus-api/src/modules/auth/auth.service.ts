@@ -1,12 +1,15 @@
 import { prisma } from '../../lib/prisma'
 import { hashPassword, comparePassword } from '../../utils/hash'
 import { signToken } from '../../utils/jwt'
-import { Role } from '@prisma/client'
+import { PixKeyType, Role } from '@prisma/client'
 
 export async function register(data: {
   name: string
   email: string
+  phone?: string
   password: string
+  pixType: PixKeyType
+  pixKey: string
   role?: Role
 }) {
   const existing = await prisma.user.findUnique({ where: { email: data.email } })
@@ -17,10 +20,13 @@ export async function register(data: {
     data: {
       name: data.name,
       email: data.email,
+      phone: data.phone?.trim() || null,
+      pixType: data.pixType,
+      pixKey: data.pixKey.trim(),
       passwordHash,
       role: data.role || Role.PLAYER,
     },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+    select: { id: true, name: true, email: true, phone: true, pixType: true, pixKey: true, role: true, createdAt: true },
   })
 
   const token = signToken({ userId: user.id, email: user.email, role: user.role })
@@ -42,7 +48,7 @@ export async function login(email: string, password: string) {
 export async function getMe(userId: string) {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { id: true, name: true, email: true, role: true, avatarUrl: true, createdAt: true },
+    select: { id: true, name: true, email: true, phone: true, pixType: true, pixKey: true, role: true, avatarUrl: true, createdAt: true },
   })
   return user
 }
