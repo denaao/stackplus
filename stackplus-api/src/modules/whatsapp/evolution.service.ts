@@ -271,30 +271,15 @@ export async function setupEvolutionInstance(hostId: string, input?: { phoneNumb
 export async function connectEvolutionInstance(hostId: string) {
   const instanceName = resolveInstanceName({ hostId })
 
-  // Evolution v2 can keep stale auth in "connecting".
-  // Official instance logout route is DELETE /instance/logout/:instanceName.
-  // Clearing session before reconnect often fixes QR that never reaches "open".
+  // If the instance is already connecting, avoid resetting it here.
+  // setupEvolutionInstance can recreate stale instances when needed.
   try {
     const currentState = await evolutionRequest(`/instance/connectionState/${encodeURIComponent(instanceName)}`, {
       method: 'GET',
     })
 
     const normalized = String(extractConnectionState(currentState) || '').toLowerCase()
-    if (normalized === 'connecting') {
-      try {
-        await evolutionRequest(`/instance/logout/${encodeURIComponent(instanceName)}`, {
-          method: 'DELETE',
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message.toLowerCase() : ''
-        // Ignore benign logout error when instance is already considered not connected.
-        if (!message.includes('not connected')) {
-          throw error
-        }
-      }
-    }
-
-    if (!normalized || normalized === 'connecting' || normalized === 'close' || normalized === 'closed' || normalized === 'disconnect' || normalized === 'disconnected') {
+    if (!normalized || normalized === 'close' || normalized === 'closed' || normalized === 'disconnect' || normalized === 'disconnected') {
       try {
         await evolutionRequest(`/instance/restart/${encodeURIComponent(instanceName)}`, {
           method: 'POST',
