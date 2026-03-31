@@ -32,6 +32,17 @@ enum GameType {
   TOURNAMENT
 }
 
+enum FinancialModule {
+  POSTPAID
+  PREPAID
+  HYBRID
+}
+
+enum MemberPaymentMode {
+  POSTPAID
+  PREPAID
+}
+
 enum PixKeyType {
   CPF
   CNPJ
@@ -131,6 +142,7 @@ model HomeGame {
   id                       String   @id @default(uuid())
   name                     String
   gameType                 GameType @default(CASH_GAME)
+  financialModule          FinancialModule @default(POSTPAID)
   address                  String
   dayOfWeek                String
   startTime                String
@@ -156,6 +168,7 @@ model HomeGameMember {
   id         String   @id @default(uuid())
   homeGameId String
   userId     String
+  paymentMode MemberPaymentMode?
   joinedAt   DateTime @default(now())
 
   homeGame HomeGame @relation(fields: [homeGameId], references: [id])

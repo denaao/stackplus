@@ -61,6 +61,64 @@ interface PlayerState {
   user: { id: string; name: string }
 }
 
+interface FinancialReportItem {
+  userId: string
+  name: string
+  amount: number
+  mode: 'POSTPAID' | 'PREPAID'
+  skippedReason?: string
+  charge?: any
+  payoutOrder?: any
+}
+
+interface FinancialReport {
+  sessionId: string
+  financialModule: 'POSTPAID' | 'PREPAID' | 'HYBRID'
+  generatedAt: string
+  summary: {
+    chargesCreated: number
+    chargesSkipped: number
+    payoutsCreatedPendingApproval: number
+    payoutsSkipped: number
+  }
+  charges: FinancialReportItem[]
+  payouts: FinancialReportItem[]
+}
+
+function extractPixOrderId(payload: any): string | null {
+  const candidates = [
+    payload?.id,
+    payload?.pixId,
+    payload?.data?.id,
+    payload?.response?.id,
+    payload?.response?.pixId,
+  ]
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+
+  return null
+}
+
+function extractPixCopyPaste(payload: any): string | null {
+  const candidates = [
+    payload?.pixCopiaECola,
+    payload?.pixCopyPaste,
+    payload?.copyPaste,
+    payload?.copiaECola,
+    payload?.pix?.copiaECola,
+    payload?.charge?.pixCopiaECola,
+    payload?.data?.pixCopiaECola,
+  ]
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+
+  return null
+}
+
 export default function SessionManagePage() {
   const router = useRouter()
   const params = useParams()
@@ -77,6 +135,10 @@ export default function SessionManagePage() {
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
   const [participantsLoading, setParticipantsLoading] = useState(false)
   const [participantsLoaded, setParticipantsLoaded] = useState(false)
+  const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null)
+  const [financialLoading, setFinancialLoading] = useState(false)
+  const [approvingPixId, setApprovingPixId] = useState<string | null>(null)
+  const [approvedPixIds, setApprovedPixIds] = useState<string[]>([])
 
   function normalizeSession(data: Session): Session {
     const distribution = Array.isArray(data.caixinhaDistribution) ? data.caixinhaDistribution : []
@@ -205,6 +267,31 @@ export default function SessionManagePage() {
       alert(typeof err === 'string' ? err : 'Não foi possível salvar participantes')
     } finally {
       setParticipantsLoading(false)
+    }
+  }
+
+  async function generateFinancialReport() {
+    setFinancialLoading(true)
+    try {
+      const { data } = await api.post(`/banking/annapay/sessions/${sessionId}/financial-report`, {})
+      setFinancialReport(data)
+      setApprovedPixIds([])
+    } catch (err) {
+      alert(typeof err === 'string' ? err : 'Não foi possível gerar o relatório financeiro')
+    } finally {
+      setFinancialLoading(false)
+    }
+  }
+
+  async function approvePixOrder(orderId: string) {
+    setApprovingPixId(orderId)
+    try {
+      await api.put(`/banking/annapay/pix/${orderId}`, {})
+      setApprovedPixIds((prev) => prev.includes(orderId) ? prev : [...prev, orderId])
+    } catch (err) {
+      alert(typeof err === 'string' ? err : 'Não foi possível aprovar a ordem PIX')
+    } finally {
+      setApprovingPixId(null)
     }
   }
 
@@ -371,6 +458,106 @@ export default function SessionManagePage() {
               </div>
             ) : (
               <p className="mt-2 text-sm text-zinc-400">Não há staff selecionado para esta sessão.</p>
+            )}
+          </div>
+        )}
+        {session.status === 'FINISHED' && isHost && (
+          <div className="mb-6 rounded-xl border border-purple-500/25 bg-purple-500/10 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-purple-200">Liquidação Financeira (Annapay)</p>
+                <p className="mt-1 text-sm text-zinc-300">Gera cobranças PIX para negativos pós-pago e ordens PIX pendentes para positivos.</p>
+              </div>
+              <button
+                type="button"
+                onClick={generateFinancialReport}
+                disabled={financialLoading}
+                className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-50"
+              >
+                {financialLoading ? 'Gerando...' : 'Gerar relatório financeiro'}
+              </button>
+            </div>
+
+            {financialReport && (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                    <p className="text-zinc-500">Módulo</p>
+                    <p className="mt-1 font-semibold text-zinc-100">{financialReport.financialModule}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                    <p className="text-zinc-500">Cobranças</p>
+                    <p className="mt-1 font-semibold text-zinc-100">{financialReport.summary.chargesCreated}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                    <p className="text-zinc-500">Ordens PIX</p>
+                    <p className="mt-1 font-semibold text-zinc-100">{financialReport.summary.payoutsCreatedPendingApproval}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                    <p className="text-zinc-500">Gerado em</p>
+                    <p className="mt-1 font-semibold text-zinc-100">{new Date(financialReport.generatedAt).toLocaleString('pt-BR')}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-zinc-400">Jogadores que devem pagar</p>
+                  {financialReport.charges.length === 0 ? (
+                    <p className="text-sm text-zinc-500">Nenhuma cobrança gerada.</p>
+                  ) : (
+                    financialReport.charges.map((item) => (
+                      <div key={`charge-${item.userId}`} className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3 text-sm">
+                        <p className="font-semibold text-zinc-100">{item.name} • {Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                        {item.skippedReason ? (
+                          <p className="mt-1 text-xs text-red-300">{item.skippedReason}</p>
+                        ) : (
+                          <p className="mt-1 text-xs text-green-300">Cobrança PIX criada.</p>
+                        )}
+                        {extractPixCopyPaste(item.charge) && (
+                          <textarea readOnly value={extractPixCopyPaste(item.charge) || ''} className="mt-2 w-full min-h-[70px] rounded border border-zinc-700 bg-zinc-950 p-2 text-xs text-zinc-300" />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-zinc-400">Ordens PIX pendentes (quem deve receber)</p>
+                  {financialReport.payouts.length === 0 ? (
+                    <p className="text-sm text-zinc-500">Nenhuma ordem PIX pendente.</p>
+                  ) : (
+                    financialReport.payouts.map((item) => {
+                      const orderId = extractPixOrderId(item.payoutOrder)
+                      const isApproved = orderId ? approvedPixIds.includes(orderId) : false
+
+                      return (
+                        <div key={`payout-${item.userId}`} className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3 text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-zinc-100">{item.name} • {Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                              {item.skippedReason ? (
+                                <p className="mt-1 text-xs text-red-300">{item.skippedReason}</p>
+                              ) : (
+                                <p className="mt-1 text-xs text-zinc-400">Ordem criada em estado pendente.</p>
+                              )}
+                            </div>
+                            {orderId && !item.skippedReason && (
+                              <button
+                                type="button"
+                                onClick={() => approvePixOrder(orderId)}
+                                disabled={approvingPixId === orderId || isApproved}
+                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-500 disabled:opacity-50"
+                              >
+                                {isApproved ? 'Aprovado' : approvingPixId === orderId ? 'Aprovando...' : 'Aprovar PIX'}
+                              </button>
+                            )}
+                          </div>
+                          {orderId && <p className="mt-2 text-[11px] text-zinc-500">Ordem: {orderId}</p>}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}

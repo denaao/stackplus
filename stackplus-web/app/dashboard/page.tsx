@@ -52,6 +52,10 @@ export default function DashboardPage() {
     const message = typeof error === 'string' ? error : ''
     const normalized = message.toLowerCase()
 
+    if (normalized.includes('fetch failed') || normalized.includes('network error')) {
+      return 'Nao foi possivel conectar na Evolution API. Verifique EVOLUTION_API_URL e se o servico esta online.'
+    }
+
     if (normalized.includes('acesso negado') || normalized === 'forbidden') {
       return 'Seu usuario nao tem permissao para conectar WhatsApp. Entre com perfil HOST ou ADMIN.'
     }

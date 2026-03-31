@@ -6,7 +6,7 @@ import api from '@/services/api'
 
 export default function CreateHomeGamePage() {
   const router = useRouter()
-  const [form, setForm] = useState({ name: '', address: '' })
+  const [form, setForm] = useState({ name: '', address: '', financialModule: 'POSTPAID' as 'POSTPAID' | 'PREPAID' | 'HYBRID' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -57,6 +57,30 @@ export default function CreateHomeGamePage() {
               onChange={(e) => setForm({ ...form, address: e.target.value })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 transition-colors"
             />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">Módulo Financeiro Inicial</label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {[
+                { key: 'POSTPAID', label: 'Pós-pago' },
+                { key: 'PREPAID', label: 'Pré-pago' },
+                { key: 'HYBRID', label: 'Híbrido' },
+              ].map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, financialModule: option.key as 'POSTPAID' | 'PREPAID' | 'HYBRID' }))}
+                  className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                    form.financialModule === option.key
+                      ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
+                      : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
 
 

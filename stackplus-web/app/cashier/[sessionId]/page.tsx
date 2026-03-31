@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import api from '@/services/api'
 import { joinSession, leaveSession, getSocket } from '@/services/socket'
 
-interface Member { id: string; name: string }
+interface Member { id: string; name: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null }
 interface PlayerState {
   userId: string; chipsIn: string; chipsOut: string
   currentStack: string; result: string; hasCashedOut: boolean
@@ -25,6 +25,22 @@ interface CashierTransaction {
 interface StaffAssignment {
   userId: string
   user: { id: string; name: string; email?: string }
+}
+
+interface PrepaidChargeResult {
+  playerMode: 'POSTPAID' | 'PREPAID'
+  requiresCharge: boolean
+  amount: number
+  charge?: any
+}
+
+interface PendingPrepaidTransaction {
+  sessionId: string
+  userId: string
+  type: 'BUYIN' | 'REBUY' | 'ADDON'
+  amount: number
+  chips: number
+  note?: string
 }
 
 const transactionTypeLabel: Record<CashierTransaction['type'], string> = {
@@ -52,6 +68,53 @@ function formatDateTime(value: string) {
   })
 }
 
+function extractPixCopyPaste(payload: any): string | null {
+  const candidates = [
+    payload?.pixCopiaECola,
+    payload?.pixCopyPaste,
+    payload?.copyPaste,
+    payload?.copiaECola,
+    payload?.pix?.copiaECola,
+    payload?.pix?.copyPaste,
+    payload?.charge?.pixCopiaECola,
+    payload?.charge?.pix?.copiaECola,
+    payload?.data?.pixCopiaECola,
+  ]
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+
+  return null
+}
+
+function extractPixQrImage(payload: any): string | null {
+  const candidates = [
+    payload?.qrCodeBase64,
+    payload?.pixQrCodeBase64,
+    payload?.qrcode,
+    payload?.pix?.qrcode,
+    payload?.charge?.qrcode,
+    payload?.charge?.qrCodeBase64,
+    payload?.data?.qrcode,
+  ]
+
+  for (const value of candidates) {
+    if (typeof value !== 'string' || !value.trim()) continue
+    if (value.startsWith('data:image')) return value
+    return `data:image/png;base64,${value}`
+  }
+
+  return null
+}
+
+function resolvePlayerPaymentMode(financialModule: string | undefined, memberMode: 'POSTPAID' | 'PREPAID' | null | undefined) {
+  const moduleNormalized = String(financialModule || 'POSTPAID').toUpperCase()
+  if (moduleNormalized === 'PREPAID') return 'PREPAID'
+  if (moduleNormalized === 'POSTPAID') return 'POSTPAID'
+  return memberMode === 'PREPAID' ? 'PREPAID' : 'POSTPAID'
+}
+
 export default function CashierPage() {
   const router = useRouter()
   const params = useParams()
@@ -67,6 +130,10 @@ export default function CashierPage() {
   const [success, setSuccess] = useState('')
   const [showEndModal, setShowEndModal] = useState(false)
   const [endForm, setEndForm] = useState({ rake: '', caixinha: '' })
+  const [showPrepaidModal, setShowPrepaidModal] = useState(false)
+  const [prepaidChargeResult, setPrepaidChargeResult] = useState<PrepaidChargeResult | null>(null)
+  const [pendingPrepaidTransaction, setPendingPrepaidTransaction] = useState<PendingPrepaidTransaction | null>(null)
+  const [registeringPendingPrepaid, setRegisteringPendingPrepaid] = useState(false)
 
   useEffect(() => {
     api.get(`/sessions/${sessionId}`).then(async ({ data }) => {
@@ -76,7 +143,11 @@ export default function CashierPage() {
         api.get(`/groups/${data.homeGameId}/members`),
         api.get('/cashier/transactions', { params: { sessionId } }),
       ])
-      const allMembers: Member[] = membersResponse.data.map((m: any) => m.user)
+      const allMembers: Member[] = membersResponse.data.map((m: any) => ({
+        id: m.user.id,
+        name: m.user.name,
+        paymentMode: m.paymentMode || null,
+      }))
       const participantIds: string[] = Array.isArray(data.participantAssignments)
         ? data.participantAssignments.map((assignment: any) => assignment.userId)
         : []
@@ -131,8 +202,36 @@ export default function CashierPage() {
     setLoading(true)
     try {
       const amount = Number((parsedChips * chipValue).toFixed(2))
+      const selectedMember = members.find((member) => member.id === form.userId)
+      const playerMode = resolvePlayerPaymentMode(session?.homeGame?.financialModule, selectedMember?.paymentMode)
+
+      if (transactionType !== 'CASHOUT' && playerMode === 'PREPAID') {
+        const purchaseType = transactionType as 'BUYIN' | 'REBUY' | 'ADDON'
+        const { data } = await api.post('/banking/annapay/prepaid/purchase-charge', {
+          sessionId,
+          userId: form.userId,
+          type: purchaseType,
+          chips: parsedChips,
+        })
+
+        setPrepaidChargeResult(data)
+        setPendingPrepaidTransaction({
+          sessionId,
+          userId: form.userId,
+          type: purchaseType,
+          amount,
+          chips: parsedChips,
+          note: form.note || undefined,
+        })
+        setShowPrepaidModal(true)
+        setSuccess('Cobrança pré-paga gerada. Após receber o pagamento, confirme o registro da compra.')
+        return
+      }
+
       await api.post('/cashier/transaction', {
-        sessionId, userId: form.userId, type: transactionType,
+        sessionId,
+        userId: form.userId,
+        type: transactionType,
         amount,
         chips: parsedChips,
         note: form.note || undefined,
@@ -145,6 +244,34 @@ export default function CashierPage() {
       setError(typeof err === 'string' ? err : 'Erro ao registrar')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function registerPendingPrepaidTransaction() {
+    if (!pendingPrepaidTransaction) return
+
+    setRegisteringPendingPrepaid(true)
+    try {
+      await api.post('/cashier/transaction', {
+        sessionId: pendingPrepaidTransaction.sessionId,
+        userId: pendingPrepaidTransaction.userId,
+        type: pendingPrepaidTransaction.type,
+        amount: pendingPrepaidTransaction.amount,
+        chips: pendingPrepaidTransaction.chips,
+        note: pendingPrepaidTransaction.note,
+      })
+
+      setSuccess('Compra registrada com sucesso após confirmação do pagamento.')
+      setForm({ userId: '', amount: '', chips: '', note: '' })
+      setTransactionType('BUYIN')
+      setShowPrepaidModal(false)
+      setPendingPrepaidTransaction(null)
+      setPrepaidChargeResult(null)
+      setTimeout(() => setSuccess(''), 2500)
+    } catch (err: any) {
+      setError(typeof err === 'string' ? err : 'Erro ao registrar compra pré-paga')
+    } finally {
+      setRegisteringPendingPrepaid(false)
     }
   }
 
@@ -523,6 +650,60 @@ export default function CashierPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showPrepaidModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-6 space-y-4">
+            <h2 className="text-xl font-bold">Cobrança Pré-paga</h2>
+
+            {prepaidChargeResult?.amount ? (
+              <p className="text-sm text-zinc-300">Valor da compra: <span className="font-semibold text-zinc-100">{formatCurrency(prepaidChargeResult.amount)}</span></p>
+            ) : null}
+
+            {extractPixQrImage(prepaidChargeResult?.charge) ? (
+              <div className="rounded-lg bg-white p-3">
+                <img src={extractPixQrImage(prepaidChargeResult?.charge) || ''} alt="QR Code PIX" className="h-auto w-full" />
+              </div>
+            ) : (
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3 text-xs text-zinc-400">
+                QR code não disponível no retorno da Annapay.
+              </div>
+            )}
+
+            {extractPixCopyPaste(prepaidChargeResult?.charge) ? (
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">PIX Copia e Cola</p>
+                <textarea
+                  readOnly
+                  value={extractPixCopyPaste(prepaidChargeResult?.charge) || ''}
+                  className="w-full min-h-[90px] rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-xs text-zinc-200"
+                />
+              </div>
+            ) : null}
+
+            <p className="text-xs text-zinc-400">Confirme o pagamento antes de registrar a compra no caixa.</p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowPrepaidModal(false)}
+                disabled={registeringPendingPrepaid}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={registerPendingPrepaidTransaction}
+                disabled={registeringPendingPrepaid || !pendingPrepaidTransaction}
+                className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {registeringPendingPrepaid ? 'Registrando...' : 'Pagamento confirmado'}
+              </button>
+            </div>
           </div>
         </div>
       )}

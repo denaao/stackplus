@@ -7,6 +7,7 @@ import cashierRoutes from '../modules/cashier/cashier.routes'
 import rankingRoutes from '../modules/ranking/ranking.routes'
 import groupsRoutes from '../modules/groups/groups.routes'
 import evolutionRoutes from '../modules/whatsapp/evolution.routes'
+import annapayRoutes from '../modules/banking/annapay.routes'
 
 const router = Router()
 
@@ -18,5 +19,6 @@ router.use('/cashier', cashierRoutes)
 router.use('/ranking', rankingRoutes)
 router.use('/groups', groupsRoutes)
 router.use('/whatsapp/evolution', evolutionRoutes)
+router.use('/banking/annapay', annapayRoutes)
 
 export default router

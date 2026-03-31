@@ -8,6 +8,15 @@ const router = Router()
 const createSchema = z.object({
   name: z.string().min(2),
   address: z.string().min(5),
+  financialModule: z.enum(['POSTPAID', 'PREPAID', 'HYBRID']).optional(),
+})
+
+const financialConfigSchema = z.object({
+  financialModule: z.enum(['POSTPAID', 'PREPAID', 'HYBRID']),
+  hybridMembers: z.array(z.object({
+    userId: z.string().uuid(),
+    paymentMode: z.enum(['POSTPAID', 'PREPAID']),
+  })).optional(),
 })
 
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
@@ -42,6 +51,12 @@ router.get('/member', authenticate, async (req: AuthRequest, res: Response) => {
 
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   const game = await HomeGameService.getHomeGameById(req.params.id)
+  res.json(game)
+})
+
+router.patch('/:id/financial-config', authenticate, async (req: AuthRequest, res: Response) => {
+  const data = financialConfigSchema.parse(req.body)
+  const game = await HomeGameService.updateFinancialConfig(req.params.id, req.user!.userId, data)
   res.json(game)
 })
 

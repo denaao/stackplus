@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma'
 import { notifySessionFinishedIfEnabled } from '../whatsapp/evolution.service'
+import { generateSessionFinancialReport } from '../banking/annapay.service'
 
 function withCaixinhaDistribution<T extends {
   caixinha: unknown
@@ -183,7 +184,24 @@ export async function finishSession(sessionId: string, hostId: string, options?:
     console.error('[WHATSAPP] Falha ao notificar encerramento da sessão:', error)
   })
 
-  return withCaixinhaDistribution(updatedSession)
+  const payload = withCaixinhaDistribution(updatedSession)
+  if (process.env.ANNAPAY_AUTO_FINANCIAL_REPORT !== 'true') {
+    return payload
+  }
+
+  try {
+    const financialReport = await generateSessionFinancialReport(updatedSession.id, hostId)
+    return {
+      ...payload,
+      financialReport,
+    }
+  } catch (error) {
+    console.error('[ANNAPAY] Falha ao gerar relatório financeiro automático:', error)
+    return {
+      ...payload,
+      financialReportError: 'Falha ao gerar relatório financeiro automático',
+    }
+  }
 }
 
 export async function getSessionById(sessionId: string) {
