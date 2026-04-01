@@ -193,21 +193,32 @@ export default function RegisterPage() {
             <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo de PIX</label>
             <select value={form.pixType} onChange={(e) => handlePixTypeChange(e.target.value as PixType)}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400">
-              <option value="CPF">CPF</option>
+              <option value="CPF">CPF ⭐ recomendado</option>
               <option value="CNPJ">CNPJ</option>
               <option value="EMAIL">E-mail</option>
               <option value="PHONE">Telefone</option>
               <option value="RANDOM">Chave aleatória</option>
             </select>
+            {(form.pixType === 'EMAIL' || form.pixType === 'PHONE' || form.pixType === 'RANDOM') && (
+              <p className="text-xs text-amber-400 mt-1">
+                ⚠ Para cobranças e pagamentos automáticos é necessário CPF ou CNPJ. Com outras chaves alguns recursos financeiros ficarão indisponíveis.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">PIX para recebimento</label>
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">Chave PIX para recebimento</label>
             <input
               type={form.pixType === 'EMAIL' ? 'email' : 'text'}
               required
               value={form.pixKey}
               onChange={(e) => handlePixKeyChange(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className={`w-full bg-zinc-800 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 ${
+                form.pixKey && !validatePixKey(form.pixType, form.pixKey)
+                  ? 'border-red-500'
+                  : form.pixKey && validatePixKey(form.pixType, form.pixKey)
+                    ? 'border-green-500'
+                    : 'border-zinc-700'
+              }`}
               placeholder={
                 form.pixType === 'CPF'
                   ? '000.000.000-00'
@@ -220,6 +231,12 @@ export default function RegisterPage() {
                         : '00000000-0000-0000-0000-000000000000'
               }
             />
+            {form.pixKey && !validatePixKey(form.pixType, form.pixKey) && (
+              <p className="text-xs text-red-400">{pixErrorMessage(form.pixType)}</p>
+            )}
+            {form.pixKey && validatePixKey(form.pixType, form.pixKey) && (
+              <p className="text-xs text-green-400">✓ Chave PIX válida</p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo de conta</label>

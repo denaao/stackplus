@@ -252,6 +252,7 @@ export default function DashboardPage() {
         <h1 className="text-xl font-black text-yellow-400">STACKPLUS</h1>
         <div className="flex items-center gap-4">
           <span className="text-sm text-zinc-400">{user?.name}</span>
+          <button onClick={() => router.push('/profile')} className="text-sm text-zinc-400 hover:text-yellow-400 transition-colors">Perfil</button>
           <button onClick={handleLogout} className="text-sm text-zinc-500 hover:text-red-400 transition-colors">Sair</button>
         </div>
       </header>

@@ -109,3 +109,42 @@ export async function me(req: AuthRequest, res: Response): Promise<void> {
   const user = await AuthService.getMe(req.user!.userId)
   res.json(user)
 }
+
+const updateMeSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  phone: z.string().trim().max(20).nullable().optional(),
+  pixType: pixTypeEnum.optional(),
+  pixKey: z.string().trim().min(3).max(120).optional(),
+}).superRefine((data, ctx) => {
+  if (!data.pixType || !data.pixKey) return
+  const raw = data.pixKey.trim()
+  const digits = raw.replace(/\D/g, '')
+
+  if (data.pixType === 'CPF' && !isValidCpf(raw)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX CPF inválido' })
+  }
+  if (data.pixType === 'CNPJ' && !isValidCnpj(raw)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX CNPJ inválido' })
+  }
+  if (data.pixType === 'PHONE' && (digits.length < 10 || digits.length > 13)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX telefone deve ter entre 10 e 13 dígitos' })
+  }
+  if (data.pixType === 'EMAIL' && !z.string().email().safeParse(raw).success) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX email inválido' })
+  }
+  if (data.pixType === 'RANDOM' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'Chave aleatória deve ser um UUID válido' })
+  }
+  if (data.phone !== undefined && data.phone !== null && data.phone.trim() !== '') {
+    const phoneDigits = data.phone.replace(/\D/g, '')
+    if (phoneDigits.length < 10 || phoneDigits.length > 11) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['phone'], message: 'Telefone deve ter 10 ou 11 dígitos' })
+    }
+  }
+})
+
+export async function updateMe(req: AuthRequest, res: Response): Promise<void> {
+  const data = updateMeSchema.parse(req.body)
+  const user = await AuthService.updateMe(req.user!.userId, data)
+  res.json(user)
+}

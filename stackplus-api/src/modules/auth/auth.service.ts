@@ -52,3 +52,22 @@ export async function getMe(userId: string) {
   })
   return user
 }
+
+export async function updateMe(userId: string, data: {
+  name?: string
+  phone?: string | null
+  pixType?: PixKeyType
+  pixKey?: string
+}) {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+      ...(data.phone !== undefined ? { phone: data.phone?.trim() || null } : {}),
+      ...(data.pixType !== undefined ? { pixType: data.pixType } : {}),
+      ...(data.pixKey !== undefined ? { pixKey: data.pixKey.trim() } : {}),
+    },
+    select: { id: true, name: true, email: true, phone: true, pixType: true, pixKey: true, role: true, avatarUrl: true, createdAt: true },
+  })
+  return user
+}
