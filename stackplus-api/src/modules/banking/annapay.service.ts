@@ -643,7 +643,7 @@ function findChargeInStatements(payload: unknown, chargeId: string, amount: numb
     const amountMatch = numericCandidates.some((value) => Math.abs(Number(value.toFixed(2)) - targetAmount) < 0.01)
     const looksCredit = textBlob.includes('credito') || textBlob.includes('crédito') || textBlob.includes('qrcode pago') || textBlob.includes('pix')
     const hasPaymentSignal = textBlob.includes('endtoendid') || textBlob.includes('e2eid') || textBlob.includes('receb') || textBlob.includes('liquid')
-    const debtorMatch = debtorCpfDigits.length === 11 ? digitsBlob.includes(debtorCpfDigits) : true
+    const debtorMatch = debtorCpfDigits.length === 11 ? digitsBlob.includes(debtorCpfDigits) : false
 
     if (amountMatch && (looksCredit || hasPaymentSignal) && debtorMatch) {
       return { found: true, paidAt }
@@ -1472,9 +1472,16 @@ async function resolveSessionFinancialChargeStatus(input: {
   }
 
   try {
-    const payload = await getCobById(input.chargeId, input.virtualAccount)
+    // Strict lookup on the exact virtual account avoids cross-account false positives.
+    const payload = await requestWithAuth<unknown>({
+      method: 'GET',
+      path: `/cob/${encodeURIComponent(input.chargeId)}`,
+      virtualAccount: input.virtualAccount,
+    })
     const status = extractStatusDeep(payload)
-    const paidByCob = isPaidStatus(status) || payloadHasPixConfirmation(payload)
+    const normalized = normalizeCobPayload(payload)
+    const sameCharge = normalized.id ? normalized.id.trim().toLowerCase() === input.chargeId.trim().toLowerCase() : false
+    const paidByCob = sameCharge && (isPaidStatus(status) || payloadHasPixConfirmation(payload))
     if (paidByCob) {
       return { paid: true, normalizedCharge: normalizeCobPayload(payload), paidAt: extractPaidAtDeep(payload) }
     }
