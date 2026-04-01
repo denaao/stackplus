@@ -510,6 +510,10 @@ function resolveCpfCnpjFromPix(input: { pixType: string | null; pixKey: string |
   return { cpf: null as string | null, cnpj: null as string | null, cpfCnpj: null as string | null }
 }
 
+function isPrepaidSettledTransaction(note: string | null | undefined) {
+  return typeof note === 'string' && note.includes('[charge:')
+}
+
 function amountToFixed(value: number) {
   return Number(value.toFixed(2))
 }
@@ -1221,6 +1225,14 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     where: { id: sessionId },
     include: {
       homeGame: true,
+      transactions: {
+        select: {
+          userId: true,
+          type: true,
+          amount: true,
+          note: true,
+        },
+      },
       playerStates: {
         include: {
           user: {
@@ -1240,34 +1252,39 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   if (session.status !== 'FINISHED') throw new Error('A sessão precisa estar finalizada para gerar o relatório financeiro')
 
   const virtualAccount = resolveVirtualAccount()
-  const [financialModule, memberMap] = await Promise.all([
-    getHomeGameFinancialModule(session.homeGameId),
-    getHomeGameMemberModes(session.homeGameId),
-  ])
+  const financialModule = await getHomeGameFinancialModule(session.homeGameId)
 
   const charges: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; charge?: unknown; skippedReason?: string }> = []
   const payouts: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; payoutOrder?: unknown; skippedReason?: string }> = []
 
   for (const player of session.playerStates) {
-    const result = Number(player.result)
+    const playerTransactions = session.transactions.filter((transaction) => transaction.userId === player.userId)
+    const purchaseTransactions = playerTransactions.filter((transaction) => (
+      transaction.type === 'BUYIN' || transaction.type === 'REBUY' || transaction.type === 'ADDON'
+    ))
+    const postpaidOpenAmount = amountToFixed(purchaseTransactions.reduce((sum, transaction) => {
+      if (isPrepaidSettledTransaction(transaction.note)) return sum
+      return sum + Number(transaction.amount)
+    }, 0))
     const chipsOut = amountToFixed(Number(player.chipsOut))
-    const mode = resolvePlayerMode(financialModule, memberMap.get(player.userId) || null)
+    const settlementBalance = amountToFixed(chipsOut - postpaidOpenAmount)
+    const mode: ResolvedPlayerMode = postpaidOpenAmount > 0 ? 'POSTPAID' : 'PREPAID'
 
-    // PREPAID: players already paid upfront, so no charges. Payout = full cashout value.
-    if (mode === 'PREPAID') {
-      if (chipsOut > 0) {
+    // Purchases already settled via prepaid charges stay frozen and are not billed again.
+    // Only postpaid purchases remain open for final settlement, and cashout offsets them first.
+    if (settlementBalance > 0) {
         const recipientCpfCnpj = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey }).cpfCnpj
         if (!player.user.pixKey || !recipientCpfCnpj) {
           payouts.push({
             userId: player.userId,
             name: player.user.name,
-            amount: chipsOut,
+            amount: settlementBalance,
             mode,
             skippedReason: 'Jogador sem dados PIX completos para criar ordem de pagamento',
           })
         } else {
           const payoutOrder = await createPix({
-            valor: chipsOut,
+            valor: settlementBalance,
             descricao: `Liquidação StackPlus - Sessão ${session.id}`,
             destinatario: {
               tipo: 'CHAVE',
@@ -1278,18 +1295,16 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
           payouts.push({
             userId: player.userId,
             name: player.user.name,
-            amount: chipsOut,
+            amount: settlementBalance,
             mode,
             payoutOrder,
           })
         }
-      }
       continue
     }
 
-    // POSTPAID: charges for losers, payouts for winners based on net result
-    if (result < 0) {
-      const amount = amountToFixed(Math.abs(result))
+    if (settlementBalance < 0) {
+      const amount = amountToFixed(Math.abs(settlementBalance))
       const debtor = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey })
       if (!debtor.cpf && !debtor.cnpj) {
         charges.push({
@@ -1322,38 +1337,6 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         })
       }
       continue
-    }
-
-    if (result > 0) {
-      const amount = amountToFixed(result)
-      const recipientCpfCnpj = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey }).cpfCnpj
-      if (!player.user.pixKey || !recipientCpfCnpj) {
-        payouts.push({
-          userId: player.userId,
-          name: player.user.name,
-          amount,
-          mode,
-          skippedReason: 'Jogador sem dados PIX completos para criar ordem de pagamento',
-        })
-      } else {
-        const payoutOrder = await createPix({
-          valor: amount,
-          descricao: `Liquidação StackPlus - Sessão ${session.id}`,
-          destinatario: {
-            tipo: 'CHAVE',
-            chave: player.user.pixKey,
-            cpfCnpjRecebedor: recipientCpfCnpj,
-          },
-        }, virtualAccount)
-
-        payouts.push({
-          userId: player.userId,
-          name: player.user.name,
-          amount,
-          mode,
-          payoutOrder,
-        })
-      }
     }
   }
 
