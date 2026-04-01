@@ -144,7 +144,7 @@ function formatCurrency(value: number) {
 
 function formatDateTime(value?: string) {
   if (!value) return '-'
-  return new Date(value).toLocaleString('pt-BR')
+  return new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 }
 
 function formatFinancialModule(value: FinancialReport['financialModule']) {
@@ -724,7 +724,7 @@ export default function SessionManagePage() {
                   </div>
                   <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
                     <p className="text-zinc-500">Gerado em</p>
-                    <p className="mt-0.5 font-semibold text-zinc-100">{new Date(financialReport.generatedAt).toLocaleString('pt-BR')}</p>
+                    <p className="mt-0.5 font-semibold text-zinc-100">{formatDateTime(financialReport.generatedAt)}</p>
                   </div>
                 </div>
 
@@ -739,7 +739,7 @@ export default function SessionManagePage() {
                           <span className="min-w-0 flex-1 truncate font-bold text-zinc-100">{item.name}</span>
                           <span className="shrink-0 text-base font-black text-emerald-300">+{formatCurrency(Number(item.amount))}</span>
                           <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-100 whitespace-nowrap">
-                            Pago em: {new Date(item.paidAt).toLocaleString('pt-BR')}
+                            Pago em: {formatDateTime(item.paidAt)}
                           </span>
                         </div>
                       </div>
