@@ -3,13 +3,13 @@ import { io, Socket } from 'socket.io-client'
 let socket: Socket | null = null
 
 function resolveSocketUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_SOCKET_URL?.trim()
-  if (explicit) return explicit
-
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim()
   if (apiBase) {
     return apiBase.replace(/\/api\/?$/, '')
   }
+
+  const explicit = process.env.NEXT_PUBLIC_SOCKET_URL?.trim()
+  if (explicit) return explicit
 
   return 'http://localhost:3001'
 }

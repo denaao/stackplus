@@ -533,8 +533,9 @@ export default function CashierPage() {
     setCheckingChargeStatus(true)
     try {
       const virtualAccount = prepaidChargeResult?.charge?.virtualAccount
-      const { data } = await api.post(`/banking/annapay/prepaid/settle/${chargeId}`, null, {
-        params: virtualAccount ? { virtualAccount } : undefined,
+      const { data } = await api.post('/banking/annapay/prepaid/settle', {
+        chargeId,
+        virtualAccount: virtualAccount || undefined,
       })
       if (data?.settled) {
         setChargeStatusMessage('Pagamento identificado e registrado no servidor.')
@@ -579,8 +580,9 @@ export default function CashierPage() {
       const chargeId = prepaidChargeResult.charge.id
       const virtualAccount = prepaidChargeResult.charge.virtualAccount
       try {
-        const { data } = await api.post(`/banking/annapay/prepaid/settle/${chargeId}`, null, {
-          params: virtualAccount ? { virtualAccount } : undefined,
+        const { data } = await api.post('/banking/annapay/prepaid/settle', {
+          chargeId,
+          virtualAccount: virtualAccount || undefined,
         })
         if (data?.settled) {
           setChargeStatusMessage('Pagamento identificado e registrado no servidor.')
