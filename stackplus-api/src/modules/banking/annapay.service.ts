@@ -1245,6 +1245,9 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
           },
         },
       },
+      staffAssignments: {
+        select: { userId: true },
+      },
     },
   })
 
@@ -1253,6 +1256,12 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
   const virtualAccount = resolveVirtualAccount()
   const financialModule = await getHomeGameFinancialModule(session.homeGameId)
+
+  const totalCaixinha = Number(session.caixinha || 0)
+  const staffUserIds = session.staffAssignments.map((s) => s.userId)
+  const caixinhaPerStaff = totalCaixinha > 0 && staffUserIds.length > 0
+    ? amountToFixed(Math.floor(Math.round(totalCaixinha * 100) / staffUserIds.length) / 100)
+    : 0
 
   const charges: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; charge?: unknown; skippedReason?: string }> = []
   const payouts: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; payoutOrder?: unknown; skippedReason?: string }> = []
@@ -1267,7 +1276,8 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       return sum + Number(transaction.amount)
     }, 0))
     const chipsOut = amountToFixed(Number(player.chipsOut))
-    const settlementBalance = amountToFixed(chipsOut - postpaidOpenAmount)
+    const playerCaixinha = staffUserIds.includes(player.userId) ? caixinhaPerStaff : 0
+    const settlementBalance = amountToFixed(chipsOut - postpaidOpenAmount + playerCaixinha)
     const mode: ResolvedPlayerMode = postpaidOpenAmount > 0 ? 'POSTPAID' : 'PREPAID'
 
     // Purchases already settled via prepaid charges stay frozen and are not billed again.
