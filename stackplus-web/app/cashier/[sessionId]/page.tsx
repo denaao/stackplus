@@ -35,6 +35,7 @@ interface PrepaidChargeResult {
 }
 
 interface PendingPrepaidTransaction {
+  chargeId: string
   sessionId: string
   userId: string
   type: 'BUYIN' | 'REBUY' | 'ADDON'
@@ -360,8 +361,15 @@ export default function CashierPage() {
           chips: parsedChips,
         })
 
+        const chargeId = String(data?.charge?.id || '').trim()
+        if (!chargeId) {
+          setError('Cobrança gerada sem identificador. Tente novamente.')
+          return
+        }
+
         setPrepaidChargeResult(data)
         setPendingPrepaidTransaction({
+          chargeId,
           sessionId,
           userId: form.userId,
           type: purchaseType,
@@ -421,13 +429,17 @@ export default function CashierPage() {
 
     setRegisteringPendingPrepaid(true)
     try {
+      const baseNote = pendingPrepaidTransaction.note?.trim() || ''
+      const chargeMarker = `[charge:${pendingPrepaidTransaction.chargeId}]`
+      const finalNote = [baseNote, chargeMarker].filter(Boolean).join(' ').trim()
+
       const { data } = await api.post('/cashier/transaction', {
         sessionId: pendingPrepaidTransaction.sessionId,
         userId: pendingPrepaidTransaction.userId,
         type: pendingPrepaidTransaction.type,
         amount: pendingPrepaidTransaction.amount,
         chips: pendingPrepaidTransaction.chips,
-        note: pendingPrepaidTransaction.note,
+        note: finalNote || undefined,
       })
       applyRegisterResult(data as CashierRegisterResponse)
       await refreshCashierSnapshot()
@@ -479,16 +491,18 @@ export default function CashierPage() {
     const { data } = await api.get('/cashier/transactions', { params: { sessionId } })
     const list = Array.isArray(data) ? data as CashierTransaction[] : []
 
+    const marker = `[charge:${pendingPrepaidTransaction.chargeId}]`
     const found = list.some((tx) => {
       if (tx.userId !== pendingPrepaidTransaction.userId) return false
       if (tx.type !== pendingPrepaidTransaction.type) return false
 
+      if (typeof tx.note === 'string' && tx.note.includes(marker)) {
+        return true
+      }
+
       const amountEqual = Math.abs(Number(tx.amount) - pendingPrepaidTransaction.amount) < 0.01
       const chipsEqual = Math.abs(Number(tx.chips) - pendingPrepaidTransaction.chips) < 0.01
-      if (!amountEqual || !chipsEqual) return false
-
-      const txTime = new Date(tx.createdAt).getTime()
-      return Number.isFinite(txTime) && txTime >= (pendingPrepaidTransaction.createdAt - 10_000)
+      return amountEqual && chipsEqual
     })
 
     if (!found) return false

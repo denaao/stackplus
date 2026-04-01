@@ -901,6 +901,7 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
       type: pending.type as TransactionType,
       amount: Number(pending.amount),
       chips: Number(pending.chips),
+      note: `[charge:${chargeId}]`,
       registeredBy: pending.registeredBy,
     })
 

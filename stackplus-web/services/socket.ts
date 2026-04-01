@@ -2,6 +2,18 @@ import { io, Socket } from 'socket.io-client'
 
 let socket: Socket | null = null
 
+function resolveSocketUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_SOCKET_URL?.trim()
+  if (explicit) return explicit
+
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim()
+  if (apiBase) {
+    return apiBase.replace(/\/api\/?$/, '')
+  }
+
+  return 'http://localhost:3001'
+}
+
 export function getSocket(): Socket {
   if (!socket) {
     const stored = localStorage.getItem('stackplus-auth')
@@ -10,7 +22,7 @@ export function getSocket(): Socket {
       try { token = JSON.parse(stored)?.state?.token || '' } catch {}
     }
 
-    socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
+    socket = io(resolveSocketUrl(), {
       auth: { token },
       // Keep polling fallback enabled for environments where WebSocket upgrade is blocked.
       transports: ['polling', 'websocket'],
