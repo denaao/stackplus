@@ -293,6 +293,27 @@ export default function CashierPage() {
         if (prev.some((item) => item.id === transaction.id)) return prev
         return [transaction, ...prev]
       })
+
+      setPendingPrepaidTransaction((pending) => {
+        if (!pending) return pending
+
+        const sameUser = transaction.userId === pending.userId
+        const sameType = transaction.type === pending.type
+        const sameSession = pending.sessionId === sessionId
+
+        if (!sameUser || !sameType || !sameSession) {
+          return pending
+        }
+
+        setShowPrepaidModal(false)
+        setPrepaidChargeResult(null)
+        setChargeStatusMessage('')
+        setAutoProcessingPaidCharge(false)
+        setSuccess('Pagamento confirmado e transação registrada automaticamente.')
+        setTimeout(() => setSuccess(''), 2500)
+
+        return null
+      })
     })
     socket.on('ranking:updated', (ranking: PlayerState[]) => setPlayerStates(ranking))
 

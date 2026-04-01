@@ -1,6 +1,7 @@
-import { Response } from 'express'
+import { Request, Response } from 'express'
 import { AuthRequest } from '../../middlewares/auth.middleware'
 import * as AnnapayService from './annapay.service'
+import { getIO } from '../../socket/socket'
 
 export async function login(_req: AuthRequest, res: Response) {
   const data = await AnnapayService.testLogin()
@@ -58,6 +59,36 @@ export async function generateSessionFinancialReport(req: AuthRequest, res: Resp
 }
 
 export async function generatePrepaidPurchaseCharge(req: AuthRequest, res: Response) {
-  const data = await AnnapayService.generatePrepaidPurchaseCharge(req.body)
+  const data = await AnnapayService.generatePrepaidPurchaseCharge({
+    ...req.body,
+    requestedBy: req.user!.userId,
+  })
   return res.status(201).json(data)
+}
+
+export async function handleCobWebhook(req: Request, res: Response) {
+  const configuredSecret = process.env.ANNAPAY_WEBHOOK_SECRET?.trim()
+  if (configuredSecret) {
+    const providedSecret = String(req.headers['x-annapay-webhook-secret'] || req.headers['x-webhook-secret'] || '').trim()
+    if (!providedSecret || providedSecret !== configuredSecret) {
+      return res.status(401).json({ error: 'Webhook não autorizado' })
+    }
+  }
+
+  const result = await AnnapayService.settlePrepaidChargeFromWebhook(req.body)
+
+  if (result.processed && result.reason === 'registered' && result.transactionResult) {
+    try {
+      const io = getIO()
+      io.to(`session:${result.sessionId}`).emit('transaction:new', result.transactionResult)
+
+      const { getRanking } = await import('../ranking/ranking.service')
+      const ranking = await getRanking(result.sessionId)
+      io.to(`session:${result.sessionId}`).emit('ranking:updated', ranking)
+    } catch (error) {
+      console.warn('[annapay webhook] realtime broadcast failed:', error)
+    }
+  }
+
+  return res.status(200).json(result)
 }

@@ -44,6 +44,11 @@ const pixSchema = z.object({
   }),
 })
 
+router.post('/webhooks/cob', async (req, _res, next) => {
+  req.body = z.record(z.string(), z.unknown()).or(z.array(z.unknown())).parse(req.body)
+  return next()
+}, AnnapayController.handleCobWebhook)
+
 router.use(authenticate, authorize('ADMIN', 'HOST'))
 
 router.post('/login', AnnapayController.login)

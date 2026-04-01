@@ -58,6 +58,17 @@ type NormalizedCobResult = {
   raw: unknown
 }
 
+type PendingPrepaidCharge = {
+  chargeId: string
+  sessionId: string
+  userId: string
+  type: 'BUYIN' | 'REBUY' | 'ADDON'
+  chips: number
+  amount: number
+  registeredBy: string
+  createdAt: number
+}
+
 type AnnapayConfig = {
   baseUrl: string
   clientID: string
@@ -66,6 +77,7 @@ type AnnapayConfig = {
 }
 
 let tokenCache: AnnapayTokenCache | null = null
+const pendingPrepaidCharges = new Map<string, PendingPrepaidCharge>()
 
 function getConfig(): AnnapayConfig {
   const baseUrl = (process.env.ANNAPAY_BASE_URL || 'https://api.annapay.com.br').trim().replace(/\/+$/, '')
@@ -354,6 +366,81 @@ function amountToFixed(value: number) {
   return Number(value.toFixed(2))
 }
 
+function extractStatusDeep(payload: unknown): string | null {
+  const stack: any[] = [payload]
+
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || typeof current !== 'object') continue
+
+    if (Array.isArray(current)) {
+      current.forEach((item) => stack.push(item))
+      continue
+    }
+
+    const status = typeof current.status === 'string' ? current.status.trim() : ''
+    if (status) return status
+
+    const situacao = typeof current.situacao === 'string' ? current.situacao.trim() : ''
+    if (situacao) return situacao
+
+    Object.values(current as Record<string, unknown>).forEach((value) => {
+      if (value && typeof value === 'object') stack.push(value)
+    })
+  }
+
+  return null
+}
+
+function payloadHasPixConfirmation(payload: unknown): boolean {
+  const stack: any[] = [payload]
+
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || typeof current !== 'object') continue
+
+    if (Array.isArray(current)) {
+      current.forEach((item) => stack.push(item))
+      continue
+    }
+
+    const obj = current as Record<string, unknown>
+    if (
+      typeof obj.endToEndId === 'string' ||
+      typeof obj.e2eId === 'string' ||
+      typeof obj.horario === 'string'
+    ) {
+      return true
+    }
+
+    Object.values(obj).forEach((value) => {
+      if (value && typeof value === 'object') stack.push(value)
+    })
+  }
+
+  return false
+}
+
+function isPaidStatus(status: string | null): boolean {
+  if (!status) return false
+  const normalized = status.toLowerCase()
+  return [
+    'concluida',
+    'concluída',
+    'concluido',
+    'concluído',
+    'liquidada',
+    'liquidado',
+    'paga',
+    'pago',
+    'recebida',
+    'recebido',
+    'approved',
+    'aprovada',
+    'paid',
+  ].some((token) => normalized.includes(token))
+}
+
 function getStringByPaths(payload: any, paths: string[][]): string | null {
   for (const path of paths) {
     let current: any = payload
@@ -562,6 +649,7 @@ export async function generatePrepaidPurchaseCharge(input: {
   userId: string
   type: 'BUYIN' | 'REBUY' | 'ADDON'
   chips: number
+  requestedBy: string
 }) {
   if (input.chips <= 0) throw new Error('Quantidade de fichas deve ser maior que zero')
 
@@ -627,6 +715,19 @@ export async function generatePrepaidPurchaseCharge(input: {
     solicitacaoPagador: `StackPlus ${input.type} - Sessão ${session.id}`,
   }, virtualAccount)
 
+  if (charge.id) {
+    pendingPrepaidCharges.set(charge.id, {
+      chargeId: charge.id,
+      sessionId: input.sessionId,
+      userId: input.userId,
+      type: input.type,
+      chips: input.chips,
+      amount,
+      registeredBy: input.requestedBy,
+      createdAt: Date.now(),
+    })
+  }
+
   return {
     sessionId: input.sessionId,
     userId: input.userId,
@@ -634,6 +735,66 @@ export async function generatePrepaidPurchaseCharge(input: {
     requiresCharge: true,
     amount,
     charge,
+  }
+}
+
+export async function settlePrepaidChargeFromWebhook(payload: unknown) {
+  const normalizedCob = normalizeCobPayload(payload)
+  const chargeId = normalizedCob.id
+
+  if (!chargeId) {
+    return { processed: false, reason: 'missing-charge-id' as const }
+  }
+
+  const pending = pendingPrepaidCharges.get(chargeId)
+  if (!pending) {
+    return { processed: false, reason: 'pending-not-found' as const, chargeId }
+  }
+
+  const status = extractStatusDeep(payload)
+  const isPaid = isPaidStatus(status) || payloadHasPixConfirmation(payload)
+  if (!isPaid) {
+    return { processed: false, reason: 'not-paid' as const, chargeId, status }
+  }
+
+  try {
+    const { registerTransaction } = await import('../cashier/cashier.service')
+    const result = await registerTransaction({
+      sessionId: pending.sessionId,
+      userId: pending.userId,
+      type: pending.type,
+      amount: pending.amount,
+      chips: pending.chips,
+      registeredBy: pending.registeredBy,
+    })
+
+    pendingPrepaidCharges.delete(chargeId)
+
+    return {
+      processed: true,
+      reason: 'registered' as const,
+      chargeId,
+      status,
+      sessionId: pending.sessionId,
+      transactionResult: result,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro ao registrar transação do webhook'
+    const normalized = message.toLowerCase()
+    const alreadyRegistered = normalized.includes('buy-in já realizado') || normalized.includes('buy-in ja realizado')
+
+    if (alreadyRegistered) {
+      pendingPrepaidCharges.delete(chargeId)
+      return {
+        processed: true,
+        reason: 'already-registered' as const,
+        chargeId,
+        status,
+        sessionId: pending.sessionId,
+      }
+    }
+
+    throw error
   }
 }
 
