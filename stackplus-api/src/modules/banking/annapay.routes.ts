@@ -75,6 +75,9 @@ router.get('/cob/:id', async (req, _res, next) => {
   req.params = z.object({
     id: z.string().trim().min(1),
   }).parse(req.params)
+  z.object({
+    virtualAccount: z.string().trim().optional(),
+  }).parse(req.query)
 
   return next()
 }, AnnapayController.getCobById)

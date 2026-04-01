@@ -250,10 +250,11 @@ export async function createCob(input: CreateCobInput, virtualAccount?: string |
   })
 }
 
-export async function getCobById(id: string) {
+export async function getCobById(id: string, virtualAccount?: string | null) {
   return requestWithAuth<unknown>({
     method: 'GET',
     path: `/cob/${encodeURIComponent(id)}`,
+    virtualAccount: resolveVirtualAccount(virtualAccount),
   })
 }
 

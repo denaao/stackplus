@@ -37,7 +37,8 @@ export async function createCob(req: AuthRequest, res: Response) {
 }
 
 export async function getCobById(req: AuthRequest, res: Response) {
-  const data = await AnnapayService.getCobById(req.params.id)
+  const virtualAccount = typeof req.query.virtualAccount === 'string' ? req.query.virtualAccount : null
+  const data = await AnnapayService.getCobById(req.params.id, virtualAccount)
   return res.json(data)
 }
 
