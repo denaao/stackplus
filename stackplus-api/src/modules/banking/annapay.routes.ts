@@ -53,6 +53,20 @@ router.use(authenticate, authorize('ADMIN', 'HOST'))
 
 router.post('/login', AnnapayController.login)
 router.get('/accounts', AnnapayController.listAccounts)
+router.get('/webhook', async (req, _res, next) => {
+  z.object({
+    virtualAccount: z.string().trim().optional(),
+  }).parse(req.query)
+
+  return next()
+}, AnnapayController.listWebhooks)
+router.post('/webhook/sync', async (req, _res, next) => {
+  z.object({
+    virtualAccount: z.string().trim().optional(),
+  }).parse(req.query)
+
+  return next()
+}, AnnapayController.syncCobWebhook)
 
 router.get('/balance', async (req, _res, next) => {
   z.object({

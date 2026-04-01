@@ -76,6 +76,12 @@ type AnnapayConfig = {
   defaultVirtualAccount: string | null
 }
 
+type AnnapayWebhookUpsertInput = {
+  url: string
+  pix: boolean
+  secret?: string
+}
+
 let tokenCache: AnnapayTokenCache | null = null
 const pendingPrepaidCharges = new Map<string, PendingPrepaidCharge>()
 
@@ -192,6 +198,31 @@ function resolveVirtualAccount(virtualAccount?: string | null): string {
   return value
 }
 
+function resolveApiBaseUrl(): string | null {
+  const explicit = process.env.API_PUBLIC_URL?.trim()
+  if (explicit) return explicit.replace(/\/+$/, '')
+
+  const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
+  if (railwayDomain) return `https://${railwayDomain.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`
+
+  const frontend = process.env.BACKEND_URL?.trim()
+  if (frontend) return frontend.replace(/\/+$/, '')
+
+  return null
+}
+
+function buildWebhookTargetUrl(): string {
+  const explicit = process.env.ANNAPAY_WEBHOOK_URL?.trim()
+  if (explicit) return explicit
+
+  const baseUrl = resolveApiBaseUrl()
+  if (!baseUrl) {
+    throw new Error('Configure ANNAPAY_WEBHOOK_URL ou API_PUBLIC_URL para sincronizar webhook da Annapay')
+  }
+
+  return `${baseUrl}/api/banking/annapay/webhooks/cob`
+}
+
 async function requestWithAuth<T>(options: AnnapayRequestOptions): Promise<T> {
   const call = async (forceRefresh: boolean): Promise<Response> => {
     const token = await login(forceRefresh)
@@ -230,6 +261,50 @@ export async function listAccounts() {
     method: 'GET',
     path: '/accounts',
   })
+}
+
+export async function listWebhooks(virtualAccount?: string | null) {
+  return requestWithAuth<unknown>({
+    method: 'GET',
+    path: '/webhook',
+    virtualAccount: resolveVirtualAccount(virtualAccount),
+  })
+}
+
+async function upsertWebhook(input: AnnapayWebhookUpsertInput, virtualAccount?: string | null) {
+  const resolvedVirtualAccount = resolveVirtualAccount(virtualAccount)
+
+  try {
+    return await requestWithAuth<unknown>({
+      method: 'PUT',
+      path: '/webhook',
+      virtualAccount: resolvedVirtualAccount,
+      body: input,
+    })
+  } catch {
+    return requestWithAuth<unknown>({
+      method: 'POST',
+      path: '/webhook',
+      virtualAccount: resolvedVirtualAccount,
+      body: input,
+    })
+  }
+}
+
+export async function syncCobWebhookConfig(virtualAccount?: string | null) {
+  const secret = process.env.ANNAPAY_WEBHOOK_SECRET?.trim()
+  const payload: AnnapayWebhookUpsertInput = {
+    url: buildWebhookTargetUrl(),
+    pix: true,
+    ...(secret ? { secret } : {}),
+  }
+
+  const data = await upsertWebhook(payload, virtualAccount)
+  return {
+    synced: true,
+    payload,
+    data,
+  }
 }
 
 export async function getBalance(virtualAccount?: string | null) {

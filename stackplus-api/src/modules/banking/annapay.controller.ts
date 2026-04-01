@@ -13,6 +13,18 @@ export async function listAccounts(_req: AuthRequest, res: Response) {
   return res.json(data)
 }
 
+export async function listWebhooks(req: AuthRequest, res: Response) {
+  const virtualAccount = typeof req.query.virtualAccount === 'string' ? req.query.virtualAccount : null
+  const data = await AnnapayService.listWebhooks(virtualAccount)
+  return res.json(data)
+}
+
+export async function syncCobWebhook(req: AuthRequest, res: Response) {
+  const virtualAccount = typeof req.query.virtualAccount === 'string' ? req.query.virtualAccount : null
+  const data = await AnnapayService.syncCobWebhookConfig(virtualAccount)
+  return res.json(data)
+}
+
 export async function getBalance(req: AuthRequest, res: Response) {
   const virtualAccount = typeof req.query.virtualAccount === 'string' ? req.query.virtualAccount : null
   const data = await AnnapayService.getBalance(virtualAccount)
