@@ -131,6 +131,37 @@ async function parseResponse(response: Response): Promise<unknown> {
   }
 }
 
+function extractValidationDetails(payload: unknown): string[] {
+  const out: string[] = []
+  const data = payload as Record<string, unknown> | null
+  if (!data) return out
+
+  const details = data.details
+  if (Array.isArray(details)) {
+    details.forEach((item) => {
+      if (typeof item === 'string' && item.trim()) {
+        out.push(item.trim())
+        return
+      }
+
+      if (!item || typeof item !== 'object') return
+      const row = item as Record<string, unknown>
+      const field = typeof row.campo === 'string' ? row.campo : (typeof row.path === 'string' ? row.path : null)
+      const message = typeof row.mensagem === 'string'
+        ? row.mensagem
+        : (typeof row.message === 'string' ? row.message : null)
+
+      if (field && message) {
+        out.push(`${field}: ${message}`)
+      } else if (message) {
+        out.push(message)
+      }
+    })
+  }
+
+  return out
+}
+
 function extractErrorMessage(payload: unknown, fallback: string): string {
   if (typeof payload === 'string') {
     const normalized = payload.toLowerCase()
@@ -151,8 +182,17 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
   const data = payload as Record<string, unknown> | null
   if (!data) return fallback
 
+  const detailList = extractValidationDetails(payload)
+
   const message = data.message || data.error || data.details
-  if (typeof message === 'string' && message.trim()) return message
+  if (typeof message === 'string' && message.trim()) {
+    if (detailList.length > 0) {
+      return `${message} | ${detailList.join(' | ')}`
+    }
+    return message
+  }
+
+  if (detailList.length > 0) return detailList.join(' | ')
 
   return fallback
 }
