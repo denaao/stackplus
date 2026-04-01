@@ -595,6 +595,9 @@ function isPaidStatus(status: string | null): boolean {
     'concluída',
     'concluido',
     'concluído',
+    'completa',
+    'completo',
+    'completed',
     'liquidada',
     'liquidado',
     'paga',
@@ -604,6 +607,8 @@ function isPaidStatus(status: string | null): boolean {
     'approved',
     'aprovada',
     'paid',
+    'finalizada',
+    'finalizado',
   ].some((token) => normalized.includes(token))
 }
 
