@@ -79,8 +79,8 @@ type AnnapayConfig = {
 }
 
 type AnnapayWebhookUpsertInput = {
-  url: string
-  pix: boolean
+  uri_pix: string
+  uri_cashout: string
   secret?: string
 }
 
@@ -309,8 +309,8 @@ async function upsertWebhook(input: AnnapayWebhookUpsertInput, virtualAccount?: 
 export async function syncCobWebhookConfig(virtualAccount?: string | null) {
   const secret = process.env.ANNAPAY_WEBHOOK_SECRET?.trim()
   const payload: AnnapayWebhookUpsertInput = {
-    url: buildWebhookTargetUrl(),
-    pix: true,
+    uri_pix: buildWebhookTargetUrl(),
+    uri_cashout: '',
     ...(secret ? { secret } : {}),
   }
 
