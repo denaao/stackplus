@@ -817,7 +817,9 @@ export async function generatePrepaidPurchaseCharge(input: {
         "chips",
         "amount",
         "registeredBy",
-        "status"
+        "status",
+        "createdAt",
+        "updatedAt"
       ) VALUES (
         ${pendingId},
         ${charge.id},
@@ -827,7 +829,9 @@ export async function generatePrepaidPurchaseCharge(input: {
         ${input.chips},
         ${amount},
         ${input.requestedBy},
-        'PENDING'
+        'PENDING',
+        NOW(),
+        NOW()
       )
       ON CONFLICT ("chargeId")
       DO UPDATE SET
