@@ -50,6 +50,13 @@ type ResolvedPlayerMode = 'POSTPAID' | 'PREPAID'
 type FinancialModuleValue = 'POSTPAID' | 'PREPAID' | 'HYBRID'
 type MemberPaymentModeValue = 'POSTPAID' | 'PREPAID' | null
 
+type NormalizedCobResult = {
+  id: string | null
+  pixCopyPaste: string | null
+  qrCodeBase64: string | null
+  raw: unknown
+}
+
 type AnnapayConfig = {
   baseUrl: string
   clientID: string
@@ -312,6 +319,134 @@ function amountToFixed(value: number) {
   return Number(value.toFixed(2))
 }
 
+function getStringByPaths(payload: any, paths: string[][]): string | null {
+  for (const path of paths) {
+    let current: any = payload
+    for (const key of path) {
+      if (current == null) {
+        current = undefined
+        break
+      }
+      current = current[key]
+    }
+
+    if (typeof current === 'string' && current.trim()) {
+      return current.trim()
+    }
+  }
+
+  return null
+}
+
+function toDataImage(value: string | null): string | null {
+  if (!value) return null
+  if (value.startsWith('data:image')) return value
+
+  const compact = value.replace(/\s+/g, '')
+  if (/^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 60) {
+    return `data:image/png;base64,${compact}`
+  }
+
+  return null
+}
+
+function normalizeCobPayload(payload: unknown): NormalizedCobResult {
+  const source = payload as any
+  const id = getStringByPaths(source, [
+    ['txid'],
+    ['txId'],
+    ['id'],
+    ['cob', 'id'],
+    ['cob', 'txid'],
+    ['cob', 'txId'],
+    ['pix', 'txid'],
+    ['pix', 'txId'],
+    ['pix', 'id'],
+    ['data', 'id'],
+    ['data', 'txid'],
+    ['data', 'txId'],
+    ['response', 'id'],
+    ['response', 'txid'],
+    ['response', 'txId'],
+    ['response', 'pix', 'txid'],
+    ['response', 'pix', 'txId'],
+    ['loc', 'id'],
+    ['created', 'id'],
+    ['created', 'txid'],
+    ['created', 'txId'],
+    ['detailed', 'id'],
+    ['detailed', 'txid'],
+    ['detailed', 'txId'],
+  ])
+
+  const pixCopyPaste = getStringByPaths(source, [
+    ['pixCopiaECola'],
+    ['pixCopiaecola'],
+    ['pixCopyPaste'],
+    ['copyPaste'],
+    ['copiaECola'],
+    ['links', 'emv'],
+    ['pix', 'copiaECola'],
+    ['pix', 'copiaecola'],
+    ['qrcode', 'textoImagemQRcode'],
+    ['qrcode', 'textoImagemQrcode'],
+    ['qrcode', 'texto'],
+    ['qrcode', 'payload'],
+    ['data', 'pixCopiaECola'],
+    ['response', 'pixCopiaECola'],
+    ['created', 'pixCopiaECola'],
+    ['detailed', 'pixCopiaECola'],
+  ])
+
+  const qrRaw = getStringByPaths(source, [
+    ['qrCodeBase64'],
+    ['qrcode'],
+    ['pixQrCodeBase64'],
+    ['links', 'qrCode'],
+    ['qrcode', 'imagemQrcode'],
+    ['qrcode', 'imagemQRCode'],
+    ['data', 'qrcode'],
+    ['response', 'qrcode'],
+    ['created', 'qrcode'],
+    ['detailed', 'qrcode'],
+  ])
+
+  return {
+    id,
+    pixCopyPaste,
+    qrCodeBase64: toDataImage(qrRaw),
+    raw: payload,
+  }
+}
+
+async function createNormalizedCob(input: CreateCobInput): Promise<NormalizedCobResult> {
+  const created = await createCob(input)
+  const createdNormalized = normalizeCobPayload(created)
+
+  if (createdNormalized.pixCopyPaste || createdNormalized.qrCodeBase64 || !createdNormalized.id) {
+    return createdNormalized
+  }
+
+  try {
+    const detailed = await getCobById(createdNormalized.id)
+    const merged = normalizeCobPayload({ created, detailed })
+    return {
+      id: merged.id || createdNormalized.id,
+      pixCopyPaste: merged.pixCopyPaste,
+      qrCodeBase64: merged.qrCodeBase64,
+      raw: { created, detailed },
+    }
+  } catch (error) {
+    return {
+      ...createdNormalized,
+      raw: {
+        created,
+        lookupError: error instanceof Error ? error.message : 'Falha ao consultar detalhe da cobrança',
+      },
+    }
+  }
+}
+
 async function getHomeGameFinancialModule(homeGameId: string): Promise<FinancialModuleValue> {
   const rows = await prisma.$queryRaw<Array<{ financialModule: string | null }>>`
     SELECT "financialModule"::text AS "financialModule"
@@ -389,7 +524,7 @@ export async function generatePrepaidPurchaseCharge(input: {
     throw new Error('No módulo pré-pago o jogador precisa ter chave PIX do tipo CPF ou CNPJ para gerar cobrança')
   }
 
-  const charge = await createCob({
+  const charge = await createNormalizedCob({
     calendario: { expiracao: 3600 },
     devedor: {
       cpf: debtor.cpf,
@@ -459,7 +594,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
           skippedReason: 'Jogador sem PIX do tipo CPF/CNPJ para cobrança automática',
         })
       } else {
-        const charge = await createCob({
+        const charge = await createNormalizedCob({
           calendario: { expiracao: 86400 },
           devedor: {
             cpf: debtor.cpf,

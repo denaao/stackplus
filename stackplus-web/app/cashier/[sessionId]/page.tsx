@@ -74,9 +74,11 @@ function extractPixCopyPaste(payload: any): string | null {
     payload?.pixCopyPaste,
     payload?.copyPaste,
     payload?.copiaECola,
+    payload?.links?.emv,
     payload?.pix?.copiaECola,
     payload?.pix?.copyPaste,
     payload?.charge?.pixCopiaECola,
+    payload?.charge?.links?.emv,
     payload?.charge?.pix?.copiaECola,
     payload?.data?.pixCopiaECola,
   ]
@@ -93,9 +95,11 @@ function extractPixQrImage(payload: any): string | null {
     payload?.qrCodeBase64,
     payload?.pixQrCodeBase64,
     payload?.qrcode,
+    payload?.links?.qrCode,
     payload?.pix?.qrcode,
     payload?.charge?.qrcode,
     payload?.charge?.qrCodeBase64,
+    payload?.charge?.links?.qrCode,
     payload?.data?.qrcode,
   ]
 
