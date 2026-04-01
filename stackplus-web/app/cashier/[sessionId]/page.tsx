@@ -533,18 +533,22 @@ export default function CashierPage() {
     setCheckingChargeStatus(true)
     try {
       const virtualAccount = prepaidChargeResult?.charge?.virtualAccount
-      const { data } = await api.get(`/banking/annapay/cob/${chargeId}`, {
+      const { data } = await api.post(`/banking/annapay/prepaid/settle/${chargeId}`, null, {
         params: virtualAccount ? { virtualAccount } : undefined,
       })
-      const status = extractCobStatus(data) || findStatusDeep(data)
-      if (isPaidCobPayload(data)) {
-        setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
-        setAutoProcessingPaidCharge(true)
-        await registerPendingPrepaidTransaction({ closeModalOnStart: true, automatic: true })
+      if (data?.settled) {
+        setChargeStatusMessage('Pagamento identificado e registrado no servidor.')
+        await refreshCashierSnapshot()
+        setShowPrepaidModal(false)
+        setPendingPrepaidTransaction(null)
+        setPrepaidChargeResult(null)
+        setAutoProcessingPaidCharge(false)
+        setSuccess('Pagamento confirmado e transação registrada automaticamente.')
+        setTimeout(() => setSuccess(''), 2500)
         return
       }
 
-      setChargeStatusMessage(`Pagamento ainda não identificado (status atual: ${status || 'desconhecido'}).`)
+      setChargeStatusMessage(String(data?.message || 'Pagamento ainda não identificado.'))
     } catch (err: any) {
       const errorMessage = typeof err?.response?.data?.error === 'string'
         ? err.response.data.error
@@ -575,19 +579,23 @@ export default function CashierPage() {
       const chargeId = prepaidChargeResult.charge.id
       const virtualAccount = prepaidChargeResult.charge.virtualAccount
       try {
-        const { data } = await api.get(`/banking/annapay/cob/${chargeId}`, {
+        const { data } = await api.post(`/banking/annapay/prepaid/settle/${chargeId}`, null, {
           params: virtualAccount ? { virtualAccount } : undefined,
         })
-        const status = extractCobStatus(data) || findStatusDeep(data)
-        if (isPaidCobPayload(data)) {
-          setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
+        if (data?.settled) {
+          setChargeStatusMessage('Pagamento identificado e registrado no servidor.')
           stopped = true
-          setAutoProcessingPaidCharge(true)
-          await registerPendingPrepaidTransaction({ closeModalOnStart: true, automatic: true })
+          await refreshCashierSnapshot()
+          setShowPrepaidModal(false)
+          setPendingPrepaidTransaction(null)
+          setPrepaidChargeResult(null)
+          setAutoProcessingPaidCharge(false)
+          setSuccess('Pagamento confirmado e transação registrada automaticamente.')
+          setTimeout(() => setSuccess(''), 2500)
           return
         }
 
-        setChargeStatusMessage(`Aguardando pagamento... status atual: ${status || 'desconhecido'}.`)
+        setChargeStatusMessage(String(data?.message || 'Aguardando pagamento...'))
       } catch (err: any) {
         const errorMessage = typeof err?.response?.data?.error === 'string'
           ? err.response.data.error

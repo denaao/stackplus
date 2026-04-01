@@ -78,6 +78,26 @@ export async function generatePrepaidPurchaseCharge(req: AuthRequest, res: Respo
   return res.status(201).json(data)
 }
 
+export async function settlePrepaidCharge(req: AuthRequest, res: Response) {
+  const virtualAccount = typeof req.query.virtualAccount === 'string' ? req.query.virtualAccount : null
+  const data = await AnnapayService.settlePrepaidChargeById(req.params.chargeId, virtualAccount)
+
+  if (data.settled && data.sessionId && data.transactionResult) {
+    try {
+      const io = getIO()
+      io.to(`session:${data.sessionId}`).emit('transaction:new', data.transactionResult)
+
+      const { getRanking } = await import('../ranking/ranking.service')
+      const ranking = await getRanking(data.sessionId)
+      io.to(`session:${data.sessionId}`).emit('ranking:updated', ranking)
+    } catch (error) {
+      console.warn('[annapay settle] realtime broadcast failed:', error)
+    }
+  }
+
+  return res.json(data)
+}
+
 export async function handleCobWebhook(req: Request, res: Response) {
   const configuredSecret = process.env.ANNAPAY_WEBHOOK_SECRET?.trim()
   if (configuredSecret) {

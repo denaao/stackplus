@@ -943,6 +943,100 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
   }
 }
 
+export async function settlePrepaidChargeById(chargeId: string, virtualAccount?: string | null) {
+  const trimmedChargeId = chargeId.trim()
+  if (!trimmedChargeId) {
+    throw new Error('chargeId é obrigatório')
+  }
+
+  const pendingRows = await prisma.$queryRaw<Array<PendingChargeRow>>`
+    SELECT
+      "chargeId",
+      "sessionId",
+      "userId",
+      "type"::text AS "type",
+      "chips"::text AS "chips",
+      "amount"::text AS "amount",
+      "registeredBy",
+      "status"
+    FROM "PrepaidChargePending"
+    WHERE "chargeId" = ${trimmedChargeId}
+    LIMIT 1
+  `
+
+  const pending = pendingRows[0]
+  if (!pending) {
+    return {
+      settled: false,
+      reason: 'pending-not-found' as const,
+      chargeId: trimmedChargeId,
+      message: 'Cobrança pendente não encontrada no servidor.',
+    }
+  }
+
+  const marker = `[charge:${trimmedChargeId}]`
+  const existing = await prisma.transaction.findFirst({
+    where: {
+      sessionId: pending.sessionId,
+      userId: pending.userId,
+      type: pending.type as TransactionType,
+      note: { contains: marker },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (existing) {
+    await prisma.$executeRaw`
+      UPDATE "PrepaidChargePending"
+      SET "status" = 'SETTLED', "updatedAt" = NOW()
+      WHERE "chargeId" = ${trimmedChargeId}
+    `
+
+    return {
+      settled: true,
+      reason: 'already-registered' as const,
+      chargeId: trimmedChargeId,
+      sessionId: pending.sessionId,
+      message: 'Transação já registrada para esta cobrança.',
+    }
+  }
+
+  let cobPayload: unknown
+  try {
+    cobPayload = await getCobById(trimmedChargeId, virtualAccount)
+  } catch {
+    return {
+      settled: false,
+      reason: 'status-unavailable' as const,
+      chargeId: trimmedChargeId,
+      sessionId: pending.sessionId,
+      message: 'Status da Annapay indisponível no momento.',
+    }
+  }
+
+  const settled = await settlePrepaidChargeFromWebhook(cobPayload)
+  if (settled.processed) {
+    return {
+      settled: true,
+      reason: settled.reason,
+      chargeId: trimmedChargeId,
+      sessionId: settled.sessionId,
+      transactionResult: settled.transactionResult,
+      message: 'Cobrança liquidada e registrada com sucesso.',
+    }
+  }
+
+  return {
+    settled: false,
+    reason: settled.reason,
+    chargeId: trimmedChargeId,
+    sessionId: pending.sessionId,
+    message: settled.reason === 'not-paid'
+      ? `Pagamento ainda não identificado (status: ${settled.status || 'desconhecido'}).`
+      : 'Pagamento ainda não identificado.',
+  }
+}
+
 export async function generateSessionFinancialReport(sessionId: string, hostId: string) {
   const session = await prisma.session.findUniqueOrThrow({
     where: { id: sessionId },

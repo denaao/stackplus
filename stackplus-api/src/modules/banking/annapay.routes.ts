@@ -133,4 +133,15 @@ router.post('/prepaid/purchase-charge', async (req, _res, next) => {
   return next()
 }, AnnapayController.generatePrepaidPurchaseCharge)
 
+router.post('/prepaid/settle/:chargeId', async (req, _res, next) => {
+  req.params = z.object({
+    chargeId: z.string().trim().min(1),
+  }).parse(req.params)
+  z.object({
+    virtualAccount: z.string().trim().optional(),
+  }).parse(req.query)
+
+  return next()
+}, AnnapayController.settlePrepaidCharge)
+
 export default router
