@@ -252,10 +252,43 @@ export async function createCob(input: CreateCobInput, virtualAccount?: string |
 }
 
 export async function getCobById(id: string, virtualAccount?: string | null) {
+  const requestedVirtualAccount = resolveVirtualAccount(virtualAccount)
+  const candidates = new Set<string>([requestedVirtualAccount])
+
+  // Annapay may require querying the charge with the same virtual account used on creation.
+  // If the caller sends a different account, retry with discovered accounts instead of failing hard.
+  try {
+    const accountsPayload = await listAccounts()
+    const discovered = extractVirtualAccountCandidates(accountsPayload)
+    discovered.forEach((account) => candidates.add(account))
+  } catch {
+    // Ignore account discovery failures and keep the primary attempt.
+  }
+
+  let lastError: unknown = null
+  for (const account of candidates) {
+    try {
+      return await requestWithAuth<unknown>({
+        method: 'GET',
+        path: `/cob/${encodeURIComponent(id)}`,
+        virtualAccount: account,
+      })
+    } catch (error) {
+      lastError = error
+      const message = error instanceof Error ? error.message.toLowerCase() : ''
+      const isValidationError = message.includes('valida') || message.includes('validation')
+      if (!isValidationError) {
+        throw error
+      }
+    }
+  }
+
+  if (lastError) throw lastError
+
   return requestWithAuth<unknown>({
     method: 'GET',
     path: `/cob/${encodeURIComponent(id)}`,
-    virtualAccount: resolveVirtualAccount(virtualAccount),
+    virtualAccount: requestedVirtualAccount,
   })
 }
 
@@ -434,7 +467,7 @@ function normalizeCobPayload(payload: unknown): NormalizedCobResult {
 
 async function createNormalizedCob(input: CreateCobInput, virtualAccount?: string | null): Promise<NormalizedCobResult> {
   const resolved = resolveVirtualAccount(virtualAccount)
-  const created = await createCob(input)
+  const created = await createCob(input, virtualAccount)
   const createdNormalized = normalizeCobPayload(created)
 
   if (createdNormalized.pixCopyPaste || createdNormalized.qrCodeBase64 || !createdNormalized.id) {
@@ -464,6 +497,43 @@ async function createNormalizedCob(input: CreateCobInput, virtualAccount?: strin
       },
     }
   }
+}
+
+function extractVirtualAccountCandidates(payload: unknown): string[] {
+  const result = new Set<string>()
+
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== 'object') return
+
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+
+    const obj = value as Record<string, unknown>
+    const keys = Object.keys(obj)
+
+    keys.forEach((key) => {
+      const normalizedKey = key.toLowerCase()
+      const current = obj[key]
+
+      if (
+        (normalizedKey.includes('virtual') && normalizedKey.includes('account')) ||
+        normalizedKey === 'numero' ||
+        normalizedKey === 'number' ||
+        normalizedKey === 'accountnumber'
+      ) {
+        if (typeof current === 'string' && current.trim()) {
+          result.add(current.trim())
+        }
+      }
+
+      visit(current)
+    })
+  }
+
+  visit(payload)
+  return Array.from(result)
 }
 
 async function getHomeGameFinancialModule(homeGameId: string): Promise<FinancialModuleValue> {
