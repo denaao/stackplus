@@ -843,7 +843,7 @@ export default function CashierPage() {
               </div>
             ) : null}
 
-            <p className="text-xs text-zinc-400">Escaneie o QR code para efetuar o pagamento. O sistema verificará automaticamente.</p>
+            <p className="text-xs text-zinc-400">Escaneie o QR code para efetuar o pagamento. O sistema verificará automaticamente, mas você também pode confirmar manualmente.</p>
 
             {chargeStatusMessage && (
               <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3 text-xs text-zinc-300">
@@ -852,6 +852,14 @@ export default function CashierPage() {
             )}
 
             <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => registerPendingPrepaidTransaction({ closeModalOnStart: true })}
+                disabled={registeringPendingPrepaid || !pendingPrepaidTransaction || autoProcessingPaidCharge}
+                className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {registeringPendingPrepaid ? 'Registrando...' : 'Pagamento confirmado'}
+              </button>
               <button
                 type="button"
                 onClick={() => setShowPrepaidModal(false)}
