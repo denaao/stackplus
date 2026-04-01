@@ -189,6 +189,17 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
     if (detailList.length > 0) {
       return `${message} | ${detailList.join(' | ')}`
     }
+
+    const normalizedMessage = message.toLowerCase()
+    if (normalizedMessage.includes('valida')) {
+      try {
+        const raw = JSON.stringify(data)
+        if (raw && raw !== '{}') return `${message} | payload: ${raw}`
+      } catch {
+        // ignore serialization issues
+      }
+    }
+
     return message
   }
 
