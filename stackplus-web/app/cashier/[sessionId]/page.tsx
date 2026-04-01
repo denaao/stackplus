@@ -41,6 +41,7 @@ interface PendingPrepaidTransaction {
   amount: number
   chips: number
   note?: string
+  createdAt: number
 }
 
 interface CashierRegisterResponse {
@@ -367,6 +368,7 @@ export default function CashierPage() {
           amount,
           chips: parsedChips,
           note: form.note || undefined,
+          createdAt: Date.now(),
         })
         setChargeStatusMessage('')
         setShowPrepaidModal(true)
@@ -471,6 +473,38 @@ export default function CashierPage() {
     }
   }
 
+  async function reconcilePendingPrepaidFromSnapshot() {
+    if (!pendingPrepaidTransaction) return false
+
+    const { data } = await api.get('/cashier/transactions', { params: { sessionId } })
+    const list = Array.isArray(data) ? data as CashierTransaction[] : []
+
+    const found = list.some((tx) => {
+      if (tx.userId !== pendingPrepaidTransaction.userId) return false
+      if (tx.type !== pendingPrepaidTransaction.type) return false
+
+      const amountEqual = Math.abs(Number(tx.amount) - pendingPrepaidTransaction.amount) < 0.01
+      const chipsEqual = Math.abs(Number(tx.chips) - pendingPrepaidTransaction.chips) < 0.01
+      if (!amountEqual || !chipsEqual) return false
+
+      const txTime = new Date(tx.createdAt).getTime()
+      return Number.isFinite(txTime) && txTime >= (pendingPrepaidTransaction.createdAt - 10_000)
+    })
+
+    if (!found) return false
+
+    await refreshCashierSnapshot()
+    setShowPrepaidModal(false)
+    setPendingPrepaidTransaction(null)
+    setPrepaidChargeResult(null)
+    setAutoProcessingPaidCharge(false)
+    setChargeStatusMessage('')
+    setSuccess('Pagamento confirmado e transação sincronizada automaticamente.')
+    setTimeout(() => setSuccess(''), 2500)
+
+    return true
+  }
+
   async function verifyPrepaidChargeStatus() {
     const chargeId = prepaidChargeResult?.charge?.id
     if (!chargeId) {
@@ -513,6 +547,16 @@ export default function CashierPage() {
     let stopped = false
     const run = async () => {
       if (stopped || autoProcessingPaidCharge || registeringPendingPrepaid) return
+
+      try {
+        const alreadySettled = await reconcilePendingPrepaidFromSnapshot()
+        if (alreadySettled) {
+          stopped = true
+          return
+        }
+      } catch {
+        // Continue with status polling even if snapshot reconciliation fails once.
+      }
 
       const chargeId = prepaidChargeResult.charge.id
       const virtualAccount = prepaidChargeResult.charge.virtualAccount
