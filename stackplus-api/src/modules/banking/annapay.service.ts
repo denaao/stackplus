@@ -128,7 +128,21 @@ async function parseResponse(response: Response): Promise<unknown> {
 }
 
 function extractErrorMessage(payload: unknown, fallback: string): string {
-  if (typeof payload === 'string') return payload
+  if (typeof payload === 'string') {
+    const normalized = payload.toLowerCase()
+    const annapayOutageSignals = [
+      'error code 522',
+      'connection timed out',
+      'cloudflare',
+      'api.annapay.com.br',
+    ]
+
+    if (annapayOutageSignals.some((signal) => normalized.includes(signal))) {
+      return 'ANNAPAY/ANNABANK fora do ar no momento. Tente novamente em alguns minutos.'
+    }
+
+    return payload
+  }
 
   const data = payload as Record<string, unknown> | null
   if (!data) return fallback

@@ -40,6 +40,11 @@ function resolveStatus(err: unknown): number {
 
   if (message.includes('Email já cadastrado')) return 409
 
+    if (
+      message.includes('ANNAPAY/ANNABANK fora do ar') ||
+      message.includes('fora do ar no momento')
+    ) return 503
+
   if (
     message.includes('não está ativa') ||
     message.includes('já iniciada') ||
