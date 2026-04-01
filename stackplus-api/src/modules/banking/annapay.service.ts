@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma'
 import { TransactionType } from '@prisma/client'
+import { randomUUID } from 'crypto'
 
 type PendingChargeRow = {
   chargeId: string
@@ -805,8 +806,10 @@ export async function generatePrepaidPurchaseCharge(input: {
   }, virtualAccount)
 
   if (charge.id) {
+    const pendingId = randomUUID()
     await prisma.$executeRaw`
       INSERT INTO "PrepaidChargePending" (
+        "id",
         "chargeId",
         "sessionId",
         "userId",
@@ -816,6 +819,7 @@ export async function generatePrepaidPurchaseCharge(input: {
         "registeredBy",
         "status"
       ) VALUES (
+        ${pendingId},
         ${charge.id},
         ${input.sessionId},
         ${input.userId},
