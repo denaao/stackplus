@@ -14,4 +14,4 @@ RUN npm run build
 
 EXPOSE 8080
 
-CMD npx prisma db push && node dist/server.js
+CMD npx prisma migrate deploy --schema prisma/schema.prisma && node dist/server.js
