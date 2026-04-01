@@ -21,7 +21,7 @@ server.listen(PORT, () => {
     import('./modules/banking/annapay.service')
       .then(({ syncCobWebhookConfig }) => syncCobWebhookConfig())
       .then((result) => {
-        console.log('[annapay] webhook sync ok:', result.payload?.url)
+        console.log('[annapay] webhook sync ok:', result.payload?.uri_pix)
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error)
