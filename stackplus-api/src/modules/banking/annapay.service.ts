@@ -621,16 +621,18 @@ function extractDateCandidate(obj: Record<string, unknown>): string | null {
   return null
 }
 
-function findChargeInStatements(payload: unknown, chargeId: string, amount: number): { found: boolean; paidAt: string | null } {
+function findChargeInStatements(payload: unknown, chargeId: string, amount: number, debtorCpf?: string | null): { found: boolean; paidAt: string | null } {
   const targetCharge = chargeId.toLowerCase()
   const targetAmount = Number(amount.toFixed(2))
+  const debtorCpfDigits = (debtorCpf || '').replace(/\D/g, '')
 
   const objects = flattenObjects(payload)
   for (const obj of objects) {
-    const textBlob = Object.values(obj)
+    const rawBlob = Object.values(obj)
       .filter((value) => typeof value === 'string')
       .join(' ')
-      .toLowerCase()
+    const textBlob = rawBlob.toLowerCase()
+    const digitsBlob = rawBlob.replace(/\D/g, '')
 
     const paidAt = extractDateCandidate(obj)
 
@@ -641,8 +643,9 @@ function findChargeInStatements(payload: unknown, chargeId: string, amount: numb
     const amountMatch = numericCandidates.some((value) => Math.abs(Number(value.toFixed(2)) - targetAmount) < 0.01)
     const looksCredit = textBlob.includes('credito') || textBlob.includes('crédito') || textBlob.includes('qrcode pago') || textBlob.includes('pix')
     const hasPaymentSignal = textBlob.includes('endtoendid') || textBlob.includes('e2eid') || textBlob.includes('receb') || textBlob.includes('liquid')
+    const debtorMatch = debtorCpfDigits.length === 11 ? digitsBlob.includes(debtorCpfDigits) : true
 
-    if (amountMatch && (looksCredit || hasPaymentSignal)) {
+    if (amountMatch && (looksCredit || hasPaymentSignal) && debtorMatch) {
       return { found: true, paidAt }
     }
   }
@@ -1375,6 +1378,14 @@ async function markSessionFinancialChargeAsSettled(sessionId: string, userId: st
   `
 }
 
+async function markSessionFinancialChargeAsPending(sessionId: string, userId: string) {
+  await prisma.$executeRaw`
+    UPDATE "SessionFinancialChargePending"
+    SET "status" = 'PENDING', "updatedAt" = NOW()
+    WHERE "sessionId" = ${sessionId} AND "userId" = ${userId}
+  `
+}
+
 async function getSessionFinancialPendingPayout(sessionId: string, userId: string, purpose: PayoutPurposeValue): Promise<SessionFinancialPayoutPendingRow | null> {
   const rows = await prisma.$queryRaw<Array<SessionFinancialPayoutPendingRow>>`
     SELECT
@@ -1443,6 +1454,7 @@ async function resolveSessionFinancialChargeStatus(input: {
   chargeId: string
   amount: number
   virtualAccount: string
+  debtorCpf?: string | null
 }): Promise<{ paid: boolean; normalizedCharge: NormalizedCobResult | null; paidAt: string | null }> {
   const checkStatements = async () => {
     const now = new Date()
@@ -1456,7 +1468,7 @@ async function resolveSessionFinancialChargeStatus(input: {
       virtualAccount: input.virtualAccount,
     })
 
-    return findChargeInStatements(statementsPayload, input.chargeId, input.amount)
+    return findChargeInStatements(statementsPayload, input.chargeId, input.amount, input.debtorCpf)
   }
 
   try {
@@ -1683,13 +1695,26 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         const pendingCharge = await getSessionFinancialPendingCharge(session.id, player.userId)
 
         if (pendingCharge?.status === 'SETTLED') {
-          receivedPayments.push({
-            userId: player.userId,
-            name: player.user.name,
-            amount,
-            paidAt: pendingCharge.updatedAt,
-          })
-          continue
+          if (pendingCharge.chargeId) {
+            const statusCheck = await resolveSessionFinancialChargeStatus({
+              chargeId: pendingCharge.chargeId,
+              amount: amountToFixed(Number(pendingCharge.amount)),
+              virtualAccount: pendingCharge.virtualAccount || virtualAccount,
+              debtorCpf: player.user.cpf,
+            })
+
+            if (statusCheck.paid) {
+              receivedPayments.push({
+                userId: player.userId,
+                name: player.user.name,
+                amount: amountToFixed(Number(pendingCharge.amount)),
+                paidAt: statusCheck.paidAt || pendingCharge.updatedAt,
+              })
+              continue
+            }
+
+            await markSessionFinancialChargeAsPending(session.id, player.userId)
+          }
         }
 
         if (pendingCharge?.status !== 'SETTLED' && pendingCharge?.chargeId) {
@@ -1701,6 +1726,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
               chargeId: pendingCharge.chargeId,
               amount,
               virtualAccount: pendingCharge.virtualAccount || virtualAccount,
+              debtorCpf: player.user.cpf,
             })
 
             if (statusCheck.paid) {
