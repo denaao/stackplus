@@ -1,4 +1,16 @@
 import { prisma } from '../../lib/prisma'
+import { TransactionType } from '@prisma/client'
+
+type PendingChargeRow = {
+  chargeId: string
+  sessionId: string
+  userId: string
+  type: string
+  chips: string | number
+  amount: string | number
+  registeredBy: string
+  status: string
+}
 
 type AnnapayTokenCache = {
   token: string
@@ -58,17 +70,6 @@ type NormalizedCobResult = {
   raw: unknown
 }
 
-type PendingPrepaidCharge = {
-  chargeId: string
-  sessionId: string
-  userId: string
-  type: 'BUYIN' | 'REBUY' | 'ADDON'
-  chips: number
-  amount: number
-  registeredBy: string
-  createdAt: number
-}
-
 type AnnapayConfig = {
   baseUrl: string
   clientID: string
@@ -83,7 +84,6 @@ type AnnapayWebhookUpsertInput = {
 }
 
 let tokenCache: AnnapayTokenCache | null = null
-const pendingPrepaidCharges = new Map<string, PendingPrepaidCharge>()
 
 function getConfig(): AnnapayConfig {
   const baseUrl = (process.env.ANNAPAY_BASE_URL || 'https://api.annapay.com.br').trim().replace(/\/+$/, '')
@@ -805,16 +805,37 @@ export async function generatePrepaidPurchaseCharge(input: {
   }, virtualAccount)
 
   if (charge.id) {
-    pendingPrepaidCharges.set(charge.id, {
-      chargeId: charge.id,
-      sessionId: input.sessionId,
-      userId: input.userId,
-      type: input.type,
-      chips: input.chips,
-      amount,
-      registeredBy: input.requestedBy,
-      createdAt: Date.now(),
-    })
+    await prisma.$executeRaw`
+      INSERT INTO "PrepaidChargePending" (
+        "chargeId",
+        "sessionId",
+        "userId",
+        "type",
+        "chips",
+        "amount",
+        "registeredBy",
+        "status"
+      ) VALUES (
+        ${charge.id},
+        ${input.sessionId},
+        ${input.userId},
+        ${input.type}::"TransactionType",
+        ${input.chips},
+        ${amount},
+        ${input.requestedBy},
+        'PENDING'
+      )
+      ON CONFLICT ("chargeId")
+      DO UPDATE SET
+        "sessionId" = EXCLUDED."sessionId",
+        "userId" = EXCLUDED."userId",
+        "type" = EXCLUDED."type",
+        "chips" = EXCLUDED."chips",
+        "amount" = EXCLUDED."amount",
+        "registeredBy" = EXCLUDED."registeredBy",
+        "status" = 'PENDING',
+        "updatedAt" = NOW()
+    `
   }
 
   return {
@@ -835,9 +856,27 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
     return { processed: false, reason: 'missing-charge-id' as const }
   }
 
-  const pending = pendingPrepaidCharges.get(chargeId)
+  const pendingRows = await prisma.$queryRaw<Array<PendingChargeRow>>`
+    SELECT
+      "chargeId",
+      "sessionId",
+      "userId",
+      "type"::text AS "type",
+      "chips"::text AS "chips",
+      "amount"::text AS "amount",
+      "registeredBy",
+      "status"
+    FROM "PrepaidChargePending"
+    WHERE "chargeId" = ${chargeId}
+    LIMIT 1
+  `
+  const pending = pendingRows[0]
   if (!pending) {
     return { processed: false, reason: 'pending-not-found' as const, chargeId }
+  }
+
+  if (pending.status === 'SETTLED') {
+    return { processed: true, reason: 'already-settled' as const, chargeId, sessionId: pending.sessionId }
   }
 
   const status = extractStatusDeep(payload)
@@ -851,13 +890,17 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
     const result = await registerTransaction({
       sessionId: pending.sessionId,
       userId: pending.userId,
-      type: pending.type,
-      amount: pending.amount,
-      chips: pending.chips,
+      type: pending.type as TransactionType,
+      amount: Number(pending.amount),
+      chips: Number(pending.chips),
       registeredBy: pending.registeredBy,
     })
 
-    pendingPrepaidCharges.delete(chargeId)
+    await prisma.$executeRaw`
+      UPDATE "PrepaidChargePending"
+      SET "status" = 'SETTLED', "updatedAt" = NOW()
+      WHERE "chargeId" = ${chargeId}
+    `
 
     return {
       processed: true,
@@ -873,7 +916,11 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
     const alreadyRegistered = normalized.includes('buy-in já realizado') || normalized.includes('buy-in ja realizado')
 
     if (alreadyRegistered) {
-      pendingPrepaidCharges.delete(chargeId)
+      await prisma.$executeRaw`
+        UPDATE "PrepaidChargePending"
+        SET "status" = 'SETTLED', "updatedAt" = NOW()
+        WHERE "chargeId" = ${chargeId}
+      `
       return {
         processed: true,
         reason: 'already-registered' as const,
