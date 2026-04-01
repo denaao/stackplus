@@ -120,9 +120,13 @@ function extractPixQrImage(payload: any): string | null {
 function extractCobStatus(payload: any): string | null {
   const candidates = [
     payload?.status,
+    payload?.situacao,
     payload?.data?.status,
+    payload?.data?.situacao,
     payload?.response?.status,
+    payload?.response?.situacao,
     payload?.cob?.status,
+    payload?.cob?.situacao,
     payload?.pix?.status,
   ]
 
@@ -131,6 +135,60 @@ function extractCobStatus(payload: any): string | null {
   }
 
   return null
+}
+
+function findStatusDeep(payload: any): string | null {
+  if (!payload || typeof payload !== 'object') return null
+
+  const stack: any[] = [payload]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || typeof current !== 'object') continue
+
+    if (Array.isArray(current)) {
+      for (const item of current) stack.push(item)
+      continue
+    }
+
+    const status = typeof current.status === 'string' ? current.status : null
+    if (status && status.trim()) return status.trim()
+
+    const situacao = typeof current.situacao === 'string' ? current.situacao : null
+    if (situacao && situacao.trim()) return situacao.trim()
+
+    for (const value of Object.values(current)) {
+      if (value && typeof value === 'object') stack.push(value)
+    }
+  }
+
+  return null
+}
+
+function hasConfirmedPix(payload: any): boolean {
+  const stack: any[] = [payload]
+
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || typeof current !== 'object') continue
+
+    if (Array.isArray(current)) {
+      for (const item of current) stack.push(item)
+      continue
+    }
+
+    const obj = current as Record<string, any>
+    const keys = Object.keys(obj)
+
+    if (keys.includes('endToEndId') || keys.includes('e2eId') || keys.includes('horario')) {
+      return true
+    }
+
+    for (const value of Object.values(obj)) {
+      if (value && typeof value === 'object') stack.push(value)
+    }
+  }
+
+  return false
 }
 
 function isPaidCobStatus(status: string | null): boolean {
@@ -147,7 +205,17 @@ function isPaidCobStatus(status: string | null): boolean {
     'recebida',
     'recebido',
     'paid',
+    'concluída',
+    'finalizada',
+    'aprovada',
+    'approved',
   ].some((token) => normalized.includes(token))
+}
+
+function isPaidCobPayload(payload: any): boolean {
+  const status = extractCobStatus(payload) || findStatusDeep(payload)
+  if (isPaidCobStatus(status)) return true
+  return hasConfirmedPix(payload)
 }
 
 function resolvePlayerPaymentMode(financialModule: string | undefined, memberMode: 'POSTPAID' | 'PREPAID' | null | undefined) {
@@ -349,13 +417,31 @@ export default function CashierPage() {
       setPrepaidChargeResult(null)
       setTimeout(() => setSuccess(''), 2500)
     } catch (err: any) {
+      const errorMessage = typeof err?.response?.data?.error === 'string'
+        ? err.response.data.error
+        : (typeof err?.message === 'string' ? err.message : '')
+      const normalizedError = errorMessage.toLowerCase()
+      const isAlreadyRegistered = normalizedError.includes('buy-in já realizado') || normalizedError.includes('buy-in ja realizado')
+
+      if (isAlreadyRegistered) {
+        await refreshCashierSnapshot()
+        setSuccess('Compra já registrada anteriormente. Painel sincronizado.')
+        setShowPrepaidModal(false)
+        setPendingPrepaidTransaction(null)
+        setPrepaidChargeResult(null)
+        setChargeStatusMessage('')
+        setTimeout(() => setSuccess(''), 2500)
+        return
+      }
+
       if (closeOnStart) {
         setShowPrepaidModal(true)
       }
       if (options?.automatic) {
         setShowPrepaidModal(true)
       }
-      setError(typeof err === 'string' ? err : 'Erro ao registrar compra pré-paga')
+      setError(errorMessage || 'Erro ao registrar compra pré-paga')
+      setChargeStatusMessage(errorMessage || 'Falha ao registrar compra após confirmação do pagamento.')
     } finally {
       setRegisteringPendingPrepaid(false)
       if (options?.automatic) {
@@ -381,8 +467,8 @@ export default function CashierPage() {
       const { data } = await api.get(`/banking/annapay/cob/${chargeId}`, {
         params: virtualAccount ? { virtualAccount } : undefined,
       })
-      const status = extractCobStatus(data)
-      if (isPaidCobStatus(status)) {
+      const status = extractCobStatus(data) || findStatusDeep(data)
+      if (isPaidCobPayload(data)) {
         setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
         setAutoProcessingPaidCharge(true)
         await registerPendingPrepaidTransaction({ closeModalOnStart: true, automatic: true })
@@ -391,7 +477,10 @@ export default function CashierPage() {
 
       setChargeStatusMessage(`Pagamento ainda não identificado (status atual: ${status || 'desconhecido'}).`)
     } catch (err: any) {
-      setChargeStatusMessage(typeof err === 'string' ? err : 'Falha ao consultar status da cobrança.')
+      const errorMessage = typeof err?.response?.data?.error === 'string'
+        ? err.response.data.error
+        : (typeof err?.message === 'string' ? err.message : 'Falha ao consultar status da cobrança.')
+      setChargeStatusMessage(errorMessage)
     } finally {
       setCheckingChargeStatus(false)
     }
@@ -410,8 +499,8 @@ export default function CashierPage() {
         const { data } = await api.get(`/banking/annapay/cob/${chargeId}`, {
           params: virtualAccount ? { virtualAccount } : undefined,
         })
-        const status = extractCobStatus(data)
-        if (isPaidCobStatus(status)) {
+        const status = extractCobStatus(data) || findStatusDeep(data)
+        if (isPaidCobPayload(data)) {
           setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
           stopped = true
           setAutoProcessingPaidCharge(true)
@@ -420,8 +509,11 @@ export default function CashierPage() {
         }
 
         setChargeStatusMessage(`Aguardando pagamento... status atual: ${status || 'desconhecido'}.`)
-      } catch {
-        // Keep polling; intermittent failures should not break the cashier flow.
+      } catch (err: any) {
+        const errorMessage = typeof err?.response?.data?.error === 'string'
+          ? err.response.data.error
+          : (typeof err?.message === 'string' ? err.message : 'Falha ao consultar status da cobrança.')
+        setChargeStatusMessage(errorMessage)
       }
     }
 
