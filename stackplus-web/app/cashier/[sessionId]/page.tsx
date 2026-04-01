@@ -43,6 +43,11 @@ interface PendingPrepaidTransaction {
   note?: string
 }
 
+interface CashierRegisterResponse {
+  transaction: CashierTransaction
+  playerState: PlayerState
+}
+
 const transactionTypeLabel: Record<CashierTransaction['type'], string> = {
   BUYIN: 'Buy-in',
   REBUY: 'Rebuy',
@@ -112,6 +117,39 @@ function extractPixQrImage(payload: any): string | null {
   return null
 }
 
+function extractCobStatus(payload: any): string | null {
+  const candidates = [
+    payload?.status,
+    payload?.data?.status,
+    payload?.response?.status,
+    payload?.cob?.status,
+    payload?.pix?.status,
+  ]
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+
+  return null
+}
+
+function isPaidCobStatus(status: string | null): boolean {
+  if (!status) return false
+  const normalized = status.toLowerCase()
+  return [
+    'concluida',
+    'concluído',
+    'concluido',
+    'liquidada',
+    'liquidado',
+    'paga',
+    'pago',
+    'recebida',
+    'recebido',
+    'paid',
+  ].some((token) => normalized.includes(token))
+}
+
 function resolvePlayerPaymentMode(financialModule: string | undefined, memberMode: 'POSTPAID' | 'PREPAID' | null | undefined) {
   const moduleNormalized = String(financialModule || 'POSTPAID').toUpperCase()
   if (moduleNormalized === 'PREPAID') return 'PREPAID'
@@ -138,6 +176,20 @@ export default function CashierPage() {
   const [prepaidChargeResult, setPrepaidChargeResult] = useState<PrepaidChargeResult | null>(null)
   const [pendingPrepaidTransaction, setPendingPrepaidTransaction] = useState<PendingPrepaidTransaction | null>(null)
   const [registeringPendingPrepaid, setRegisteringPendingPrepaid] = useState(false)
+  const [checkingChargeStatus, setCheckingChargeStatus] = useState(false)
+  const [chargeStatusMessage, setChargeStatusMessage] = useState('')
+  const [autoProcessingPaidCharge, setAutoProcessingPaidCharge] = useState(false)
+
+  async function refreshCashierSnapshot() {
+    const [sessionResponse, transactionsResponse] = await Promise.all([
+      api.get(`/sessions/${sessionId}`),
+      api.get('/cashier/transactions', { params: { sessionId } }),
+    ])
+
+    setSession(sessionResponse.data)
+    setPlayerStates(sessionResponse.data.playerStates || [])
+    setTransactions(transactionsResponse.data || [])
+  }
 
   useEffect(() => {
     api.get(`/sessions/${sessionId}`).then(async ({ data }) => {
@@ -227,12 +279,13 @@ export default function CashierPage() {
           chips: parsedChips,
           note: form.note || undefined,
         })
+        setChargeStatusMessage('')
         setShowPrepaidModal(true)
         setSuccess('Cobrança pré-paga gerada. Após receber o pagamento, confirme o registro da compra.')
         return
       }
 
-      await api.post('/cashier/transaction', {
+      const { data } = await api.post('/cashier/transaction', {
         sessionId,
         userId: form.userId,
         type: transactionType,
@@ -240,6 +293,8 @@ export default function CashierPage() {
         chips: parsedChips,
         note: form.note || undefined,
       })
+      applyRegisterResult(data as CashierRegisterResponse)
+      await refreshCashierSnapshot()
       setSuccess('Transação registrada!')
       setForm({ userId: '', amount: '', chips: '', note: '' })
       setTransactionType('BUYIN')
@@ -251,12 +306,31 @@ export default function CashierPage() {
     }
   }
 
-  async function registerPendingPrepaidTransaction() {
+  function applyRegisterResult(result: CashierRegisterResponse) {
+    if (!result?.transaction || !result?.playerState) return
+
+    setPlayerStates((prev) => {
+      const exists = prev.find((p) => p.userId === result.playerState.userId)
+      return exists
+        ? prev.map((p) => p.userId === result.playerState.userId ? result.playerState : p)
+        : [...prev, result.playerState]
+    })
+
+    setTransactions((prev) => {
+      if (prev.some((item) => item.id === result.transaction.id)) return prev
+      return [result.transaction, ...prev]
+    })
+  }
+
+  async function registerPendingPrepaidTransaction(options?: { closeModalOnStart?: boolean; automatic?: boolean }) {
     if (!pendingPrepaidTransaction) return
+
+    const closeOnStart = options?.closeModalOnStart ?? true
+    if (closeOnStart) setShowPrepaidModal(false)
 
     setRegisteringPendingPrepaid(true)
     try {
-      await api.post('/cashier/transaction', {
+      const { data } = await api.post('/cashier/transaction', {
         sessionId: pendingPrepaidTransaction.sessionId,
         userId: pendingPrepaidTransaction.userId,
         type: pendingPrepaidTransaction.type,
@@ -264,6 +338,8 @@ export default function CashierPage() {
         chips: pendingPrepaidTransaction.chips,
         note: pendingPrepaidTransaction.note,
       })
+      applyRegisterResult(data as CashierRegisterResponse)
+      await refreshCashierSnapshot()
 
       setSuccess('Compra registrada com sucesso após confirmação do pagamento.')
       setForm({ userId: '', amount: '', chips: '', note: '' })
@@ -273,11 +349,78 @@ export default function CashierPage() {
       setPrepaidChargeResult(null)
       setTimeout(() => setSuccess(''), 2500)
     } catch (err: any) {
+      if (closeOnStart) {
+        setShowPrepaidModal(true)
+      }
+      if (options?.automatic) {
+        setShowPrepaidModal(true)
+      }
       setError(typeof err === 'string' ? err : 'Erro ao registrar compra pré-paga')
     } finally {
       setRegisteringPendingPrepaid(false)
+      if (options?.automatic) {
+        setAutoProcessingPaidCharge(false)
+      }
     }
   }
+
+  async function verifyPrepaidChargeStatus() {
+    const chargeId = prepaidChargeResult?.charge?.id
+    if (!chargeId) {
+      setChargeStatusMessage('Cobrança sem identificador para consulta de status.')
+      return
+    }
+
+    setCheckingChargeStatus(true)
+    try {
+      const { data } = await api.get(`/banking/annapay/cob/${chargeId}`)
+      const status = extractCobStatus(data)
+      if (isPaidCobStatus(status)) {
+        setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
+        return
+      }
+
+      setChargeStatusMessage(`Pagamento ainda não identificado (status atual: ${status || 'desconhecido'}).`)
+    } catch (err: any) {
+      setChargeStatusMessage(typeof err === 'string' ? err : 'Falha ao consultar status da cobrança.')
+    } finally {
+      setCheckingChargeStatus(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showPrepaidModal || !prepaidChargeResult?.charge?.id) return
+
+    let stopped = false
+    const run = async () => {
+      if (stopped || autoProcessingPaidCharge || registeringPendingPrepaid) return
+
+      const chargeId = prepaidChargeResult.charge.id
+      try {
+        const { data } = await api.get(`/banking/annapay/cob/${chargeId}`)
+        const status = extractCobStatus(data)
+        if (isPaidCobStatus(status)) {
+          setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
+          stopped = true
+          setAutoProcessingPaidCharge(true)
+          await registerPendingPrepaidTransaction({ closeModalOnStart: true, automatic: true })
+          return
+        }
+
+        setChargeStatusMessage(`Aguardando pagamento... status atual: ${status || 'desconhecido'}.`)
+      } catch {
+        // Keep polling; intermittent failures should not break the cashier flow.
+      }
+    }
+
+    run()
+    const timer = setInterval(run, 5000)
+
+    return () => {
+      stopped = true
+      clearInterval(timer)
+    }
+  }, [showPrepaidModal, prepaidChargeResult?.charge?.id, autoProcessingPaidCharge, registeringPendingPrepaid])
 
   const chipValue = session ? parseFloat(session.chipValue || session.homeGame.chipValue) : 1
   const selectedPlayerState = playerStates.find((p) => p.userId === form.userId)
@@ -690,7 +833,21 @@ export default function CashierPage() {
 
             <p className="text-xs text-zinc-400">Confirme o pagamento antes de registrar a compra no caixa.</p>
 
+            {chargeStatusMessage && (
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3 text-xs text-zinc-300">
+                {chargeStatusMessage}
+              </div>
+            )}
+
             <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={verifyPrepaidChargeStatus}
+                disabled={checkingChargeStatus || registeringPendingPrepaid}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {checkingChargeStatus ? 'Consultando...' : 'Verificar pagamento'}
+              </button>
               <button
                 type="button"
                 onClick={() => setShowPrepaidModal(false)}
