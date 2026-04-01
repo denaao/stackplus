@@ -858,7 +858,7 @@ export default function CashierPage() {
               </button>
               <button
                 type="button"
-                onClick={registerPendingPrepaidTransaction}
+                onClick={() => registerPendingPrepaidTransaction()}
                 disabled={registeringPendingPrepaid || !pendingPrepaidTransaction}
                 className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
               >
