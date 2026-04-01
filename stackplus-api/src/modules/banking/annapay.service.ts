@@ -54,6 +54,7 @@ type NormalizedCobResult = {
   id: string | null
   pixCopyPaste: string | null
   qrCodeBase64: string | null
+  virtualAccount: string | null
   raw: unknown
 }
 
@@ -412,10 +413,21 @@ function normalizeCobPayload(payload: unknown): NormalizedCobResult {
     ['detailed', 'qrcode'],
   ])
 
+  const virtualAccount = getStringByPaths(source, [
+    ['virtualAccount'],
+    ['virtual_account'],
+    ['conta', 'numero'],
+    ['contaRecebedora', 'number'],
+    ['data', 'virtualAccount'],
+    ['created', 'virtualAccount'],
+    ['detailed', 'virtualAccount'],
+  ])
+
   return {
     id,
     pixCopyPaste,
     qrCodeBase64: toDataImage(qrRaw),
+    virtualAccount,
     raw: payload,
   }
 }
@@ -435,6 +447,7 @@ async function createNormalizedCob(input: CreateCobInput): Promise<NormalizedCob
       id: merged.id || createdNormalized.id,
       pixCopyPaste: merged.pixCopyPaste,
       qrCodeBase64: merged.qrCodeBase64,
+      virtualAccount: merged.virtualAccount || createdNormalized.virtualAccount,
       raw: { created, detailed },
     }
   } catch (error) {

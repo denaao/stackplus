@@ -377,7 +377,10 @@ export default function CashierPage() {
 
     setCheckingChargeStatus(true)
     try {
-      const { data } = await api.get(`/banking/annapay/cob/${chargeId}`)
+      const virtualAccount = prepaidChargeResult?.charge?.virtualAccount
+      const { data } = await api.get(`/banking/annapay/cob/${chargeId}`, {
+        params: virtualAccount ? { virtualAccount } : undefined,
+      })
       const status = extractCobStatus(data)
       if (isPaidCobStatus(status)) {
         setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
@@ -402,8 +405,11 @@ export default function CashierPage() {
       if (stopped || autoProcessingPaidCharge || registeringPendingPrepaid) return
 
       const chargeId = prepaidChargeResult.charge.id
+      const virtualAccount = prepaidChargeResult.charge.virtualAccount
       try {
-        const { data } = await api.get(`/banking/annapay/cob/${chargeId}`)
+        const { data } = await api.get(`/banking/annapay/cob/${chargeId}`, {
+          params: virtualAccount ? { virtualAccount } : undefined,
+        })
         const status = extractCobStatus(data)
         if (isPaidCobStatus(status)) {
           setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
@@ -837,7 +843,7 @@ export default function CashierPage() {
               </div>
             ) : null}
 
-            <p className="text-xs text-zinc-400">Confirme o pagamento antes de registrar a compra no caixa.</p>
+            <p className="text-xs text-zinc-400">Escaneie o QR code para efetuar o pagamento. O sistema verificará automaticamente.</p>
 
             {chargeStatusMessage && (
               <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3 text-xs text-zinc-300">
@@ -848,27 +854,11 @@ export default function CashierPage() {
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
-                onClick={verifyPrepaidChargeStatus}
-                disabled={checkingChargeStatus || registeringPendingPrepaid || autoProcessingPaidCharge}
-                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {checkingChargeStatus || autoProcessingPaidCharge ? 'Consultando...' : 'Verificar pagamento'}
-              </button>
-              <button
-                type="button"
                 onClick={() => setShowPrepaidModal(false)}
-                disabled={registeringPendingPrepaid || autoProcessingPaidCharge}
+                disabled={registeringPendingPrepaid || autoProcessingPaidCharge || checkingChargeStatus}
                 className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
               >
-                Fechar
-              </button>
-              <button
-                type="button"
-                onClick={() => registerPendingPrepaidTransaction()}
-                disabled={registeringPendingPrepaid || !pendingPrepaidTransaction}
-                className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {registeringPendingPrepaid ? 'Registrando...' : 'Pagamento confirmado'}
+                {registeringPendingPrepaid ? 'Registrando...' : autoProcessingPaidCharge ? 'Processando pagamento...' : 'Fechar'}
               </button>
             </div>
           </div>
