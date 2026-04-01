@@ -21,6 +21,7 @@ type SessionFinancialChargePendingRow = {
   virtualAccount: string | null
   amount: string | number
   status: string
+  updatedAt: string
 }
 
 type AnnapayTokenCache = {
@@ -576,7 +577,30 @@ function extractNumericCandidates(obj: Record<string, unknown>): number[] {
   return values
 }
 
-function hasChargeInStatements(payload: unknown, chargeId: string, amount: number): boolean {
+function extractDateCandidate(obj: Record<string, unknown>): string | null {
+  const candidates = [
+    obj.horario,
+    obj.data,
+    obj.dataHora,
+    obj.dataHoraPagamento,
+    obj.paidAt,
+    obj.createdAt,
+    obj.updatedAt,
+    obj.liquidadoEm,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string' || !candidate.trim()) continue
+    const parsed = new Date(candidate)
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString()
+    }
+  }
+
+  return null
+}
+
+function findChargeInStatements(payload: unknown, chargeId: string, amount: number): { found: boolean; paidAt: string | null } {
   const targetCharge = chargeId.toLowerCase()
   const targetAmount = Number(amount.toFixed(2))
 
@@ -587,8 +611,10 @@ function hasChargeInStatements(payload: unknown, chargeId: string, amount: numbe
       .join(' ')
       .toLowerCase()
 
+    const paidAt = extractDateCandidate(obj)
+
     const hasChargeRef = textBlob.includes(targetCharge)
-    if (hasChargeRef) return true
+    if (hasChargeRef) return { found: true, paidAt }
 
     const numericCandidates = extractNumericCandidates(obj)
     const amountMatch = numericCandidates.some((value) => Math.abs(Number(value.toFixed(2)) - targetAmount) < 0.01)
@@ -596,11 +622,25 @@ function hasChargeInStatements(payload: unknown, chargeId: string, amount: numbe
     const hasPaymentSignal = textBlob.includes('endtoendid') || textBlob.includes('e2eid') || textBlob.includes('receb') || textBlob.includes('liquid')
 
     if (amountMatch && (looksCredit || hasPaymentSignal)) {
-      return true
+      return { found: true, paidAt }
     }
   }
 
-  return false
+  return { found: false, paidAt: null }
+}
+
+function hasChargeInStatements(payload: unknown, chargeId: string, amount: number): boolean {
+  return findChargeInStatements(payload, chargeId, amount).found
+}
+
+function extractPaidAtDeep(payload: unknown): string | null {
+  const objects = flattenObjects(payload)
+  for (const obj of objects) {
+    const paidAt = extractDateCandidate(obj)
+    if (paidAt) return paidAt
+  }
+
+  return null
 }
 
 function extractStatusDeep(payload: unknown): string | null {
@@ -1242,7 +1282,8 @@ async function getSessionFinancialPendingCharge(sessionId: string, userId: strin
       "userId",
       "virtualAccount",
       "amount"::text AS "amount",
-      "status"
+      "status",
+      "updatedAt"::text AS "updatedAt"
     FROM "SessionFinancialChargePending"
     WHERE "sessionId" = ${sessionId} AND "userId" = ${userId}
     LIMIT 1
@@ -1303,7 +1344,7 @@ async function resolveSessionFinancialChargeStatus(input: {
   chargeId: string
   amount: number
   virtualAccount: string
-}): Promise<{ paid: boolean; normalizedCharge: NormalizedCobResult | null }> {
+}): Promise<{ paid: boolean; normalizedCharge: NormalizedCobResult | null; paidAt: string | null }> {
   const checkStatements = async () => {
     const now = new Date()
     // Use a larger window to catch late settlement indexing on provider side.
@@ -1316,7 +1357,7 @@ async function resolveSessionFinancialChargeStatus(input: {
       virtualAccount: input.virtualAccount,
     })
 
-    return hasChargeInStatements(statementsPayload, input.chargeId, input.amount)
+    return findChargeInStatements(statementsPayload, input.chargeId, input.amount)
   }
 
   try {
@@ -1324,30 +1365,32 @@ async function resolveSessionFinancialChargeStatus(input: {
     const status = extractStatusDeep(payload)
     const paidByCob = isPaidStatus(status) || payloadHasPixConfirmation(payload)
     if (paidByCob) {
-      return { paid: true, normalizedCharge: normalizeCobPayload(payload) }
+      return { paid: true, normalizedCharge: normalizeCobPayload(payload), paidAt: extractPaidAtDeep(payload) }
     }
 
     try {
-      const paidByStatements = await checkStatements()
-      if (paidByStatements) {
-        return { paid: true, normalizedCharge: normalizeCobPayload(payload) }
+      const statementMatch = await checkStatements()
+      if (statementMatch.found) {
+        return { paid: true, normalizedCharge: normalizeCobPayload(payload), paidAt: statementMatch.paidAt }
       }
     } catch {
       // Keep charge as pending when statements lookup is unavailable.
     }
 
-    return { paid: false, normalizedCharge: normalizeCobPayload(payload) }
+    return { paid: false, normalizedCharge: normalizeCobPayload(payload), paidAt: null }
   } catch {
     try {
-      const paidByStatements = await checkStatements()
+      const statementMatch = await checkStatements()
       return {
-        paid: paidByStatements,
+        paid: statementMatch.found,
         normalizedCharge: null,
+        paidAt: statementMatch.paidAt,
       }
     } catch {
       return {
         paid: false,
         normalizedCharge: null,
+        paidAt: null,
       }
     }
   }
@@ -1411,6 +1454,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
   const charges: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; charge?: unknown; skippedReason?: string }> = []
   const payouts: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; payoutOrder?: unknown; skippedReason?: string }> = []
+  const receivedPayments: Array<{ userId: string; name: string; amount: number; paidAt: string }> = []
 
   async function pushPayout(params: {
     userId: string
@@ -1500,6 +1544,12 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         const pendingCharge = await getSessionFinancialPendingCharge(session.id, player.userId)
 
         if (pendingCharge?.status === 'SETTLED') {
+          receivedPayments.push({
+            userId: player.userId,
+            name: player.user.name,
+            amount,
+            paidAt: pendingCharge.updatedAt,
+          })
           continue
         }
 
@@ -1516,6 +1566,12 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
             if (statusCheck.paid) {
               await markSessionFinancialChargeAsSettled(session.id, player.userId)
+              receivedPayments.push({
+                userId: player.userId,
+                name: player.user.name,
+                amount,
+                paidAt: statusCheck.paidAt || new Date().toISOString(),
+              })
               continue
             }
 
@@ -1601,10 +1657,12 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     summary: {
       chargesCreated: charges.filter((item) => !item.skippedReason && item.charge).length,
       chargesSkipped: charges.filter((item) => item.skippedReason).length,
+      receivedPayments: receivedPayments.length,
       payoutsCreatedPendingApproval: payouts.filter((item) => !item.skippedReason && item.payoutOrder).length,
       payoutsSkipped: payouts.filter((item) => item.skippedReason).length,
     },
     charges,
+    receivedPayments,
     payouts,
   }
 }

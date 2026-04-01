@@ -80,10 +80,12 @@ interface FinancialReport {
   summary: {
     chargesCreated: number
     chargesSkipped: number
+    receivedPayments: number
     payoutsCreatedPendingApproval: number
     payoutsSkipped: number
   }
   charges: FinancialReportItem[]
+  receivedPayments: Array<{ userId: string; name: string; amount: number; paidAt: string }>
   payouts: FinancialReportItem[]
 }
 
@@ -404,6 +406,7 @@ export default function SessionManagePage() {
       addText(`Gerado em: ${formatDateTime(financialReport.generatedAt)}`)
       addText(`Cobranças geradas: ${financialReport.summary.chargesCreated}`)
       addText(`Cobranças com pendência manual: ${financialReport.summary.chargesSkipped}`)
+      addText(`Pagamentos recebidos: ${financialReport.summary.receivedPayments}`)
       addText(`Ordens PIX aprovadas: ${approvedPixIds.length} de ${financialReport.summary.payoutsCreatedPendingApproval}`)
       addText(`Ordens PIX com pendência manual: ${financialReport.summary.payoutsSkipped}`)
 
@@ -413,6 +416,16 @@ export default function SessionManagePage() {
       } else {
         sortedPlayers.forEach((player, index) => {
           addText(`${index + 1}. ${player.user.name} • Resultado: ${formatCurrency(Number(player.result))} • Buy-in: ${formatCurrency(Number(player.chipsIn))} • Cashout: ${formatCurrency(Number(player.chipsOut))}${player.hasCashedOut ? ' • Cashout registrado' : ''}`)
+        })
+      }
+
+      addSection('Pagamentos Recebidos Pelo Host')
+      if (financialReport.receivedPayments.length === 0) {
+        addText('Nenhum pagamento recebido identificado até o momento.')
+      } else {
+        financialReport.receivedPayments.forEach((item) => {
+          addText(`${item.name} • ${formatCurrency(Number(item.amount))}`, { weight: 'bold', gap: 2 })
+          addText(`Recebido em: ${formatDateTime(item.paidAt)}`, { gap: 2 })
         })
       }
 
@@ -702,6 +715,10 @@ export default function SessionManagePage() {
                     <p className="mt-1 font-semibold text-zinc-100">{financialReport.summary.chargesCreated}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                    <p className="text-zinc-500">Pagamentos recebidos</p>
+                    <p className="mt-1 font-semibold text-zinc-100">{financialReport.summary.receivedPayments}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
                     <p className="text-zinc-500">Ordens PIX</p>
                     <p className="mt-1 font-semibold text-zinc-100">{financialReport.summary.payoutsCreatedPendingApproval}</p>
                   </div>
@@ -709,6 +726,21 @@ export default function SessionManagePage() {
                     <p className="text-zinc-500">Gerado em</p>
                     <p className="mt-1 font-semibold text-zinc-100">{new Date(financialReport.generatedAt).toLocaleString('pt-BR')}</p>
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-emerald-300">✅ Pagamentos recebidos pelo host</p>
+                  {financialReport.receivedPayments.length === 0 ? (
+                    <p className="text-sm text-zinc-500">Nenhum pagamento recebido identificado até o momento.</p>
+                  ) : (
+                    financialReport.receivedPayments.map((item) => (
+                      <div key={`received-${item.userId}`} className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm">
+                        <p className="font-bold text-zinc-100">{item.name}</p>
+                        <p className="text-lg font-black text-emerald-300">+{formatCurrency(Number(item.amount))}</p>
+                        <p className="mt-2 text-xs text-zinc-300">Pago em: {new Date(item.paidAt).toLocaleString('pt-BR')}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 {/* Jogadores que devem pagar (negativos) */}
