@@ -288,6 +288,7 @@ model PrepaidChargePending {
   chargeId     String          @unique
   sessionId    String
   userId       String
+  virtualAccount String?
   type         TransactionType
   chips        Decimal         @db.Decimal(10, 2)
   amount       Decimal         @db.Decimal(10, 2)

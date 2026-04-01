@@ -6,6 +6,7 @@ type PendingChargeRow = {
   chargeId: string
   sessionId: string
   userId: string
+  virtualAccount: string | null
   type: string
   chips: string | number
   amount: string | number
@@ -813,6 +814,7 @@ export async function generatePrepaidPurchaseCharge(input: {
         "chargeId",
         "sessionId",
         "userId",
+        "virtualAccount",
         "type",
         "chips",
         "amount",
@@ -825,6 +827,7 @@ export async function generatePrepaidPurchaseCharge(input: {
         ${charge.id},
         ${input.sessionId},
         ${input.userId},
+        ${virtualAccount},
         ${input.type}::"TransactionType",
         ${input.chips},
         ${amount},
@@ -837,6 +840,7 @@ export async function generatePrepaidPurchaseCharge(input: {
       DO UPDATE SET
         "sessionId" = EXCLUDED."sessionId",
         "userId" = EXCLUDED."userId",
+        "virtualAccount" = EXCLUDED."virtualAccount",
         "type" = EXCLUDED."type",
         "chips" = EXCLUDED."chips",
         "amount" = EXCLUDED."amount",
@@ -869,6 +873,7 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
       "chargeId",
       "sessionId",
       "userId",
+      "virtualAccount",
       "type"::text AS "type",
       "chips"::text AS "chips",
       "amount"::text AS "amount",
@@ -954,6 +959,7 @@ export async function settlePrepaidChargeById(chargeId: string, virtualAccount?:
       "chargeId",
       "sessionId",
       "userId",
+      "virtualAccount",
       "type"::text AS "type",
       "chips"::text AS "chips",
       "amount"::text AS "amount",
@@ -1002,8 +1008,9 @@ export async function settlePrepaidChargeById(chargeId: string, virtualAccount?:
   }
 
   let cobPayload: unknown
+  const effectiveVirtualAccount = (virtualAccount?.trim() || pending.virtualAccount || null)
   try {
-    cobPayload = await getCobById(trimmedChargeId, virtualAccount)
+    cobPayload = await getCobById(trimmedChargeId, effectiveVirtualAccount)
   } catch {
     return {
       settled: false,
