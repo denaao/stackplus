@@ -638,29 +638,32 @@ function toDataImage(value: string | null): string | null {
 
 function normalizeCobPayload(payload: unknown): NormalizedCobResult {
   const source = payload as any
+  // IMPORTANTE: Priorizar o ID próprio da Annapay ANTES de txid (que é um identificador PIX diferente)
   const id = getStringByPaths(source, [
+    ['id'],
+    ['ID'],
+    ['cob', 'id'],
+    ['data', 'id'],
+    ['response', 'id'],
+    ['created', 'id'],
+    ['detailed', 'id'],
+    ['loc', 'id'],
+    ['pix', 'id'],
+    // Fallback para txid se não encontrar id
     ['txid'],
     ['txId'],
-    ['id'],
-    ['cob', 'id'],
     ['cob', 'txid'],
     ['cob', 'txId'],
     ['pix', 'txid'],
     ['pix', 'txId'],
-    ['pix', 'id'],
-    ['data', 'id'],
     ['data', 'txid'],
     ['data', 'txId'],
-    ['response', 'id'],
     ['response', 'txid'],
     ['response', 'txId'],
     ['response', 'pix', 'txid'],
     ['response', 'pix', 'txId'],
-    ['loc', 'id'],
-    ['created', 'id'],
     ['created', 'txid'],
     ['created', 'txId'],
-    ['detailed', 'id'],
     ['detailed', 'txid'],
     ['detailed', 'txId'],
   ])
