@@ -14,6 +14,15 @@ type PendingChargeRow = {
   status: string
 }
 
+type SessionFinancialChargePendingRow = {
+  chargeId: string
+  sessionId: string
+  userId: string
+  virtualAccount: string | null
+  amount: string | number
+  status: string
+}
+
 type AnnapayTokenCache = {
   token: string
   expiresAt: number
@@ -1220,6 +1229,111 @@ export async function settlePrepaidChargeById(chargeId: string, virtualAccount?:
   }
 }
 
+async function getSessionFinancialPendingCharge(sessionId: string, userId: string): Promise<SessionFinancialChargePendingRow | null> {
+  const rows = await prisma.$queryRaw<Array<SessionFinancialChargePendingRow>>`
+    SELECT
+      "chargeId",
+      "sessionId",
+      "userId",
+      "virtualAccount",
+      "amount"::text AS "amount",
+      "status"
+    FROM "SessionFinancialChargePending"
+    WHERE "sessionId" = ${sessionId} AND "userId" = ${userId}
+    LIMIT 1
+  `
+
+  return rows[0] || null
+}
+
+async function upsertSessionFinancialPendingCharge(input: {
+  chargeId: string
+  sessionId: string
+  userId: string
+  virtualAccount: string
+  amount: number
+}) {
+  const id = randomUUID()
+  await prisma.$executeRaw`
+    INSERT INTO "SessionFinancialChargePending" (
+      "id",
+      "chargeId",
+      "sessionId",
+      "userId",
+      "virtualAccount",
+      "amount",
+      "status",
+      "createdAt",
+      "updatedAt"
+    ) VALUES (
+      ${id},
+      ${input.chargeId},
+      ${input.sessionId},
+      ${input.userId},
+      ${input.virtualAccount},
+      ${input.amount},
+      'PENDING',
+      NOW(),
+      NOW()
+    )
+    ON CONFLICT ("sessionId", "userId")
+    DO UPDATE SET
+      "chargeId" = EXCLUDED."chargeId",
+      "virtualAccount" = EXCLUDED."virtualAccount",
+      "amount" = EXCLUDED."amount",
+      "status" = 'PENDING',
+      "updatedAt" = NOW()
+  `
+}
+
+async function markSessionFinancialChargeAsSettled(sessionId: string, userId: string) {
+  await prisma.$executeRaw`
+    UPDATE "SessionFinancialChargePending"
+    SET "status" = 'SETTLED', "updatedAt" = NOW()
+    WHERE "sessionId" = ${sessionId} AND "userId" = ${userId}
+  `
+}
+
+async function resolveSessionFinancialChargeStatus(input: {
+  chargeId: string
+  amount: number
+  virtualAccount: string
+}): Promise<{ paid: boolean; normalizedCharge: NormalizedCobResult | null }> {
+  try {
+    const payload = await getCobById(input.chargeId, input.virtualAccount)
+    const status = extractStatusDeep(payload)
+    const paidByCob = isPaidStatus(status) || payloadHasPixConfirmation(payload)
+    if (paidByCob) {
+      return { paid: true, normalizedCharge: normalizeCobPayload(payload) }
+    }
+
+    return { paid: false, normalizedCharge: normalizeCobPayload(payload) }
+  } catch {
+    try {
+      const now = new Date()
+      const start = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      const statementsPayload = await getStatements({
+        inicio: start.toISOString(),
+        fim: now.toISOString(),
+        itensPorPagina: 200,
+        paginaAtual: 0,
+        virtualAccount: input.virtualAccount,
+      })
+
+      const paidByStatements = hasChargeInStatements(statementsPayload, input.chargeId, input.amount)
+      return {
+        paid: paidByStatements,
+        normalizedCharge: null,
+      }
+    } catch {
+      return {
+        paid: false,
+        normalizedCharge: null,
+      }
+    }
+  }
+}
+
 export async function generateSessionFinancialReport(sessionId: string, hostId: string) {
   const session = await prisma.session.findUniqueOrThrow({
     where: { id: sessionId },
@@ -1266,6 +1380,47 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   const charges: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; charge?: unknown; skippedReason?: string }> = []
   const payouts: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; payoutOrder?: unknown; skippedReason?: string }> = []
 
+  async function pushPayout(params: {
+    userId: string
+    name: string
+    pixType: string | null
+    pixKey: string | null
+    amount: number
+    mode: ResolvedPlayerMode
+    skippedReason: string
+    description: string
+  }) {
+    const recipientCpfCnpj = resolveCpfCnpjFromPix({ pixType: params.pixType, pixKey: params.pixKey }).cpfCnpj
+    if (!params.pixKey || !recipientCpfCnpj) {
+      payouts.push({
+        userId: params.userId,
+        name: params.name,
+        amount: params.amount,
+        mode: params.mode,
+        skippedReason: params.skippedReason,
+      })
+      return
+    }
+
+    const payoutOrder = await createPix({
+      valor: params.amount,
+      descricao: params.description,
+      destinatario: {
+        tipo: 'CHAVE',
+        chave: params.pixKey,
+        cpfCnpjRecebedor: recipientCpfCnpj,
+      },
+    }, virtualAccount)
+
+    payouts.push({
+      userId: params.userId,
+      name: params.name,
+      amount: params.amount,
+      mode: params.mode,
+      payoutOrder,
+    })
+  }
+
   for (const player of session.playerStates) {
     const playerTransactions = session.transactions.filter((transaction) => transaction.userId === player.userId)
     const purchaseTransactions = playerTransactions.filter((transaction) => (
@@ -1277,40 +1432,22 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     }, 0))
     const chipsOut = amountToFixed(Number(player.chipsOut))
     const playerCaixinha = staffUserIds.includes(player.userId) ? caixinhaPerStaff : 0
-    const settlementBalance = amountToFixed(chipsOut - postpaidOpenAmount + playerCaixinha)
+    const settlementBalance = amountToFixed(chipsOut - postpaidOpenAmount)
     const mode: ResolvedPlayerMode = postpaidOpenAmount > 0 ? 'POSTPAID' : 'PREPAID'
 
     // Purchases already settled via prepaid charges stay frozen and are not billed again.
     // Only postpaid purchases remain open for final settlement, and cashout offsets them first.
     if (settlementBalance > 0) {
-        const recipientCpfCnpj = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey }).cpfCnpj
-        if (!player.user.pixKey || !recipientCpfCnpj) {
-          payouts.push({
-            userId: player.userId,
-            name: player.user.name,
-            amount: settlementBalance,
-            mode,
-            skippedReason: 'Jogador sem dados PIX completos para criar ordem de pagamento',
-          })
-        } else {
-          const payoutOrder = await createPix({
-            valor: settlementBalance,
-            descricao: `Liquidação StackPlus - Sessão ${session.id}`,
-            destinatario: {
-              tipo: 'CHAVE',
-              chave: player.user.pixKey,
-              cpfCnpjRecebedor: recipientCpfCnpj,
-            },
-          }, virtualAccount)
-          payouts.push({
-            userId: player.userId,
-            name: player.user.name,
-            amount: settlementBalance,
-            mode,
-            payoutOrder,
-          })
-        }
-      continue
+      await pushPayout({
+        userId: player.userId,
+        name: player.user.name,
+        pixType: player.user.pixType,
+        pixKey: player.user.pixKey,
+        amount: settlementBalance,
+        mode,
+        skippedReason: 'Jogador sem dados PIX completos para criar ordem de pagamento',
+        description: `Liquidação StackPlus - Sessão ${session.id}`,
+      })
     }
 
     if (settlementBalance < 0) {
@@ -1325,18 +1462,57 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
           skippedReason: 'Jogador sem PIX do tipo CPF/CNPJ para cobrança automática',
         })
       } else {
-        const charge = await createNormalizedCob({
-          calendario: { expiracao: 86400 },
-          devedor: {
-            ...(debtor.cpf ? { cpf: debtor.cpf } : {}),
-            ...(debtor.cnpj ? { cnpj: debtor.cnpj } : {}),
-            nome: player.user.name,
-          },
-          valor: {
-            original: amount.toFixed(2),
-          },
-          solicitacaoPagador: `Liquidação StackPlus - Sessão ${session.id}`,
-        }, virtualAccount)
+        let charge: NormalizedCobResult | null = null
+        const pendingCharge = await getSessionFinancialPendingCharge(session.id, player.userId)
+
+        if (pendingCharge?.status === 'SETTLED') {
+          continue
+        }
+
+        if (pendingCharge?.status !== 'SETTLED' && pendingCharge?.chargeId) {
+          const pendingAmount = amountToFixed(Number(pendingCharge.amount))
+          const sameAmount = pendingAmount === amount
+
+          if (sameAmount) {
+            const statusCheck = await resolveSessionFinancialChargeStatus({
+              chargeId: pendingCharge.chargeId,
+              amount,
+              virtualAccount: pendingCharge.virtualAccount || virtualAccount,
+            })
+
+            if (statusCheck.paid) {
+              await markSessionFinancialChargeAsSettled(session.id, player.userId)
+              continue
+            }
+
+            charge = statusCheck.normalizedCharge
+          }
+        }
+
+        if (!charge) {
+          charge = await createNormalizedCob({
+            calendario: { expiracao: 86400 },
+            devedor: {
+              ...(debtor.cpf ? { cpf: debtor.cpf } : {}),
+              ...(debtor.cnpj ? { cnpj: debtor.cnpj } : {}),
+              nome: player.user.name,
+            },
+            valor: {
+              original: amount.toFixed(2),
+            },
+            solicitacaoPagador: `Liquidação StackPlus - Sessão ${session.id}`,
+          }, virtualAccount)
+
+          if (charge.id) {
+            await upsertSessionFinancialPendingCharge({
+              chargeId: charge.id,
+              sessionId: session.id,
+              userId: player.userId,
+              virtualAccount,
+              amount,
+            })
+          }
+        }
 
         charges.push({
           userId: player.userId,
@@ -1346,7 +1522,19 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
           charge,
         })
       }
-      continue
+    }
+
+    if (playerCaixinha > 0) {
+      await pushPayout({
+        userId: player.userId,
+        name: player.user.name,
+        pixType: player.user.pixType,
+        pixKey: player.user.pixKey,
+        amount: playerCaixinha,
+        mode,
+        skippedReason: 'Staff sem dados PIX completos para pagamento da caixinha',
+        description: `Caixinha StackPlus - Sessão ${session.id}`,
+      })
     }
   }
 

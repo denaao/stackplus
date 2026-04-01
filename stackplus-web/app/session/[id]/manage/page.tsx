@@ -121,19 +121,6 @@ function extractPixCopyPaste(payload: any): string | null {
   return null
 }
 
-function extractQrCode(payload: any): string | null {
-  const candidates = [
-    payload?.qrCodeBase64,
-    payload?.qrcode,
-    payload?.pixQrCodeBase64,
-    payload?.data?.qrcode,
-  ]
-  for (const value of candidates) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-  return null
-}
-
 function extractPayoutPixKey(payload: any): string | null {
   const candidates = [
     payload?.destinatario?.chave,
@@ -736,7 +723,6 @@ export default function SessionManagePage() {
                   ) : (
                     financialReport.charges.map((item) => {
                       const pixCopyPaste = extractPixCopyPaste(item.charge)
-                      const qrCode = extractQrCode(item.charge)
                       const isCopied = copiedChargeId === item.userId
                       return (
                         <div key={`charge-${item.userId}`} className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-sm">
@@ -745,9 +731,6 @@ export default function SessionManagePage() {
                               <p className="font-bold text-zinc-100">{item.name}</p>
                               <p className="text-lg font-black text-red-400">-{formatCurrency(Number(item.amount))}</p>
                             </div>
-                            {qrCode && (
-                              <img src={qrCode} alt="QR Code PIX" className="w-24 h-24 rounded border border-zinc-700" />
-                            )}
                           </div>
                           {item.skippedReason ? (
                             <p className="mt-2 text-xs text-red-300">⚠ {item.skippedReason}</p>

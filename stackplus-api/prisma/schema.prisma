@@ -97,6 +97,7 @@ model User {
   sessionStaffAssignments SessionStaff[]
   sessionParticipantAssignments SessionParticipant[]
   prepaidChargePendings PrepaidChargePending[]
+  sessionFinancialChargePendings SessionFinancialChargePending[]
 }
 
 model WhatsAppInstanceConfig {
@@ -213,6 +214,7 @@ model Session {
   staffAssignments SessionStaff[]
   participantAssignments SessionParticipant[]
   prepaidChargePendings PrepaidChargePending[]
+  sessionFinancialChargePendings SessionFinancialChargePending[]
 
   @@index([homeGameId])
   @@index([status])
@@ -302,5 +304,24 @@ model PrepaidChargePending {
 
   @@index([sessionId])
   @@index([userId])
+  @@index([status])
+}
+
+model SessionFinancialChargePending {
+  id             String   @id @default(uuid())
+  chargeId       String
+  sessionId      String
+  userId         String
+  virtualAccount String?
+  amount         Decimal  @db.Decimal(10, 2)
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([chargeId])
   @@index([status])
 }
