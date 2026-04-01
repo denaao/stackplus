@@ -71,7 +71,7 @@ function pixErrorMessage(pixType: PixType) {
 export default function ProfilePage() {
   const router = useRouter()
   const { user, setAuth } = useAuthStore()
-  const [form, setForm] = useState({ name: '', phone: '', pixType: 'CPF' as PixType, pixKey: '' })
+  const [form, setForm] = useState({ name: '', cpf: '', phone: '', pixType: 'CPF' as PixType, pixKey: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -82,6 +82,7 @@ export default function ProfilePage() {
     api.get('/auth/me').then(({ data }) => {
       setForm({
         name: data.name || '',
+        cpf: data.cpf ? maskCpf(data.cpf) : '',
         phone: data.phone || '',
         pixType: (data.pixType as PixType) || 'CPF',
         pixKey: data.pixKey || '',
@@ -109,6 +110,16 @@ export default function ProfilePage() {
       return
     }
 
+    if (form.cpf.trim() !== '' && !isValidCpf(form.cpf)) {
+      setError('Informe um CPF válido.')
+      return
+    }
+
+    if (form.pixType !== 'CPF' && form.pixType !== 'CNPJ' && !isValidCpf(form.cpf)) {
+      setError('Para PIX por e-mail/telefone/chave aleatória, informe um CPF válido.')
+      return
+    }
+
     if (form.phone.trim()) {
       const d = onlyDigits(form.phone)
       if (d.length < 10 || d.length > 11) { setError('Telefone deve ter 10 ou 11 dígitos.'); return }
@@ -118,6 +129,7 @@ export default function ProfilePage() {
     try {
       const { data } = await api.put('/auth/me', {
         name: form.name.trim(),
+        cpf: form.cpf.trim() || null,
         phone: form.phone.trim() || null,
         pixType: form.pixType,
         pixKey: form.pixKey.trim(),
@@ -171,6 +183,18 @@ export default function ProfilePage() {
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
               placeholder="(11) 99999-9999"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF {form.pixType !== 'CPF' && form.pixType !== 'CNPJ' ? '' : <span className="text-zinc-600 normal-case">(opcional)</span>}</label>
+            <input
+              type="text"
+              required={form.pixType !== 'CPF' && form.pixType !== 'CNPJ'}
+              value={form.cpf}
+              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              placeholder="000.000.000-00"
             />
           </div>
 

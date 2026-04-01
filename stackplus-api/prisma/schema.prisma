@@ -80,6 +80,7 @@ model User {
   id           String   @id @default(uuid())
   name         String
   email        String   @unique
+  cpf          String?  @unique
   phone        String?
   pixType      PixKeyType?
   pixKey       String?

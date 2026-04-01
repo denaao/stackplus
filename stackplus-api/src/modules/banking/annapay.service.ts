@@ -504,9 +504,10 @@ function resolvePlayerMode(financialModule: FinancialModuleValue, memberMode: Me
   return memberMode === 'PREPAID' ? 'PREPAID' : 'POSTPAID'
 }
 
-function resolveCpfCnpjFromPix(input: { pixType: string | null; pixKey: string | null }) {
+function resolveCpfCnpjFromPix(input: { pixType: string | null; pixKey: string | null; cpf?: string | null }) {
   const digits = (input.pixKey || '').replace(/\D/g, '')
   const pixType = String(input.pixType || '').toUpperCase()
+  const cpfDigits = (input.cpf || '').replace(/\D/g, '')
 
   if (pixType === 'CPF' && digits.length === 11) {
     return { cpf: digits, cnpj: null as string | null, cpfCnpj: digits }
@@ -514,6 +515,10 @@ function resolveCpfCnpjFromPix(input: { pixType: string | null; pixKey: string |
 
   if (pixType === 'CNPJ' && digits.length === 14) {
     return { cpf: null as string | null, cnpj: digits, cpfCnpj: digits }
+  }
+
+  if (cpfDigits.length === 11) {
+    return { cpf: cpfDigits, cnpj: null as string | null, cpfCnpj: cpfDigits }
   }
 
   return { cpf: null as string | null, cnpj: null as string | null, cpfCnpj: null as string | null }
@@ -913,7 +918,7 @@ export async function generatePrepaidPurchaseCharge(input: {
     }),
     prisma.user.findUniqueOrThrow({
       where: { id: input.userId },
-      select: { id: true, name: true, pixType: true, pixKey: true },
+      select: { id: true, name: true, cpf: true, pixType: true, pixKey: true },
     }),
     getHomeGameFinancialModule(session.homeGameId),
   ])
@@ -936,9 +941,9 @@ export async function generatePrepaidPurchaseCharge(input: {
     }
   }
 
-  const debtor = resolveCpfCnpjFromPix({ pixType: user.pixType, pixKey: user.pixKey })
+  const debtor = resolveCpfCnpjFromPix({ pixType: user.pixType, pixKey: user.pixKey, cpf: user.cpf })
   if (!debtor.cpf && !debtor.cnpj) {
-    throw new Error('No módulo pré-pago o jogador precisa ter chave PIX do tipo CPF ou CNPJ para gerar cobrança')
+    throw new Error('No módulo pré-pago o jogador precisa ter CPF cadastrado ou chave PIX do tipo CPF/CNPJ para gerar cobrança')
   }
 
   const virtualAccount = resolveVirtualAccount()
@@ -1367,6 +1372,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
             select: {
               id: true,
               name: true,
+              cpf: true,
               pixType: true,
               pixKey: true,
             },
@@ -1380,6 +1386,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
             select: {
               id: true,
               name: true,
+              cpf: true,
               pixType: true,
               pixKey: true,
             },
@@ -1408,6 +1415,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   async function pushPayout(params: {
     userId: string
     name: string
+    cpf?: string | null
     pixType: string | null
     pixKey: string | null
     amount: number
@@ -1415,7 +1423,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     skippedReason: string
     description: string
   }) {
-    const recipientCpfCnpj = resolveCpfCnpjFromPix({ pixType: params.pixType, pixKey: params.pixKey }).cpfCnpj
+    const recipientCpfCnpj = resolveCpfCnpjFromPix({ pixType: params.pixType, pixKey: params.pixKey, cpf: params.cpf }).cpfCnpj
     if (!params.pixKey || !recipientCpfCnpj) {
       payouts.push({
         userId: params.userId,
@@ -1466,6 +1474,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       await pushPayout({
         userId: player.userId,
         name: player.user.name,
+        cpf: player.user.cpf,
         pixType: player.user.pixType,
         pixKey: player.user.pixKey,
         amount: settlementBalance,
@@ -1477,14 +1486,14 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
     if (settlementBalance < 0) {
       const amount = amountToFixed(Math.abs(settlementBalance))
-      const debtor = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey })
+      const debtor = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey, cpf: player.user.cpf })
       if (!debtor.cpf && !debtor.cnpj) {
         charges.push({
           userId: player.userId,
           name: player.user.name,
           amount,
           mode,
-          skippedReason: 'Jogador sem PIX do tipo CPF/CNPJ para cobrança automática',
+          skippedReason: 'Jogador sem CPF cadastrado ou chave PIX CPF/CNPJ para cobrança automática',
         })
       } else {
         let charge: NormalizedCobResult | null = null
@@ -1554,6 +1563,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       await pushPayout({
         userId: player.userId,
         name: player.user.name,
+        cpf: player.user.cpf,
         pixType: player.user.pixType,
         pixKey: player.user.pixKey,
         amount: playerCaixinha,
@@ -1572,6 +1582,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       await pushPayout({
         userId: staff.userId,
         name: staff.user.name,
+        cpf: staff.user.cpf,
         pixType: staff.user.pixType,
         pixKey: staff.user.pixKey,
         amount: caixinhaPerStaff,

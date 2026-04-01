@@ -100,7 +100,7 @@ function pixErrorMessage(pixType: PixType) {
 export default function RegisterPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', pixType: 'CPF' as PixType, pixKey: '', role: 'PLAYER' })
+  const [form, setForm] = useState({ name: '', email: '', cpf: '', phone: '', password: '', pixType: 'CPF' as PixType, pixKey: '', role: 'PLAYER' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -134,6 +134,16 @@ export default function RegisterPage() {
         setError('Telefone deve ter 10 ou 11 dígitos (com DDD).')
         return
       }
+    }
+
+    if (form.cpf.trim() !== '' && !isValidCpf(form.cpf)) {
+      setError('Informe um CPF válido.')
+      return
+    }
+
+    if (form.pixType !== 'CPF' && form.pixType !== 'CNPJ' && !isValidCpf(form.cpf)) {
+      setError('Para PIX por e-mail/telefone/chave aleatória, informe um CPF válido no cadastro.')
+      return
     }
 
     if (!validatePixKey(form.pixType, form.pixKey)) {
@@ -173,6 +183,17 @@ export default function RegisterPage() {
             <label className="text-xs text-zinc-400 uppercase tracking-wide">E-mail</label>
             <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400" placeholder="seu@email.com" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF {form.pixType !== 'CPF' && form.pixType !== 'CNPJ' ? '' : <span className="text-zinc-600 normal-case">(opcional)</span>}</label>
+            <input
+              type="text"
+              required={form.pixType !== 'CPF' && form.pixType !== 'CNPJ'}
+              value={form.cpf}
+              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              placeholder="000.000.000-00"
+            />
           </div>
           <div className="space-y-1">
             <label className="text-xs text-zinc-400 uppercase tracking-wide">Telefone <span className="text-zinc-600 normal-case">(opcional)</span></label>
