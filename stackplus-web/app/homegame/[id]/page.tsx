@@ -64,6 +64,7 @@ export default function HomeGamePage() {
   const [financialModule, setFinancialModule] = useState<'POSTPAID' | 'PREPAID' | 'HYBRID'>('POSTPAID')
   const [hybridMemberModes, setHybridMemberModes] = useState<Record<string, 'POSTPAID' | 'PREPAID'>>({})
   const [savingFinancialConfig, setSavingFinancialConfig] = useState(false)
+  const [isEditingFinancialConfig, setIsEditingFinancialConfig] = useState(false)
 
   function initFinancialConfig(gameData: HomeGame) {
     const nextModule = gameData.financialModule || 'POSTPAID'
@@ -104,6 +105,7 @@ export default function HomeGamePage() {
 
       setGame(data)
       initFinancialConfig(data)
+      setIsEditingFinancialConfig(false)
       alert('Configuração financeira salva com sucesso.')
     } catch (err) {
       alert(typeof err === 'string' ? err : 'Não foi possível salvar a configuração financeira')
@@ -258,13 +260,17 @@ export default function HomeGamePage() {
               </div>
               <button
                 type="button"
-                onClick={saveFinancialConfig}
+                onClick={isEditingFinancialConfig ? saveFinancialConfig : () => setIsEditingFinancialConfig(true)}
                 disabled={savingFinancialConfig}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
               >
-                {savingFinancialConfig ? 'Salvando...' : 'Salvar configuração'}
+                {savingFinancialConfig ? 'Salvando...' : isEditingFinancialConfig ? 'Salvar configuração' : 'Alterar configuração'}
               </button>
             </div>
+
+            {!isEditingFinancialConfig && (
+              <p className="mt-3 text-xs text-zinc-500">Configuração salva. Clique em Alterar configuração para liberar a edição do modo de cobrança.</p>
+            )}
 
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[
@@ -276,11 +282,12 @@ export default function HomeGamePage() {
                   key={option.key}
                   type="button"
                   onClick={() => setFinancialModule(option.key as 'POSTPAID' | 'PREPAID' | 'HYBRID')}
+                  disabled={!isEditingFinancialConfig}
                   className={`rounded-lg border px-3 py-3 text-sm font-bold transition-colors ${
                     financialModule === option.key
                       ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
                       : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   {option.label}
                 </button>
@@ -303,22 +310,24 @@ export default function HomeGamePage() {
                             <button
                               type="button"
                               onClick={() => setHybridMemberModes((prev) => ({ ...prev, [member.user.id]: 'POSTPAID' }))}
+                              disabled={!isEditingFinancialConfig}
                               className={`rounded-md px-2 py-2 text-xs font-bold transition-colors ${
                                 memberMode === 'POSTPAID'
                                   ? 'bg-blue-600 text-white'
                                   : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                              }`}
+                              } disabled:cursor-not-allowed disabled:opacity-60`}
                             >
                               Pós-pago
                             </button>
                             <button
                               type="button"
                               onClick={() => setHybridMemberModes((prev) => ({ ...prev, [member.user.id]: 'PREPAID' }))}
+                              disabled={!isEditingFinancialConfig}
                               className={`rounded-md px-2 py-2 text-xs font-bold transition-colors ${
                                 memberMode === 'PREPAID'
                                   ? 'bg-amber-500 text-zinc-900'
                                   : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                              }`}
+                              } disabled:cursor-not-allowed disabled:opacity-60`}
                             >
                               Pré-pago
                             </button>
