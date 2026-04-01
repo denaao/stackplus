@@ -432,27 +432,32 @@ function normalizeCobPayload(payload: unknown): NormalizedCobResult {
   }
 }
 
-async function createNormalizedCob(input: CreateCobInput): Promise<NormalizedCobResult> {
+async function createNormalizedCob(input: CreateCobInput, virtualAccount?: string | null): Promise<NormalizedCobResult> {
+  const resolved = resolveVirtualAccount(virtualAccount)
   const created = await createCob(input)
   const createdNormalized = normalizeCobPayload(created)
 
   if (createdNormalized.pixCopyPaste || createdNormalized.qrCodeBase64 || !createdNormalized.id) {
-    return createdNormalized
+    return {
+      ...createdNormalized,
+      virtualAccount: resolved,
+    }
   }
 
   try {
-    const detailed = await getCobById(createdNormalized.id)
+    const detailed = await getCobById(createdNormalized.id, virtualAccount)
     const merged = normalizeCobPayload({ created, detailed })
     return {
       id: merged.id || createdNormalized.id,
       pixCopyPaste: merged.pixCopyPaste,
       qrCodeBase64: merged.qrCodeBase64,
-      virtualAccount: merged.virtualAccount || createdNormalized.virtualAccount,
+      virtualAccount: merged.virtualAccount || resolved,
       raw: { created, detailed },
     }
   } catch (error) {
     return {
       ...createdNormalized,
+      virtualAccount: resolved,
       raw: {
         created,
         lookupError: error instanceof Error ? error.message : 'Falha ao consultar detalhe da cobrança',
@@ -538,6 +543,7 @@ export async function generatePrepaidPurchaseCharge(input: {
     throw new Error('No módulo pré-pago o jogador precisa ter chave PIX do tipo CPF ou CNPJ para gerar cobrança')
   }
 
+  const virtualAccount = resolveVirtualAccount()
   const charge = await createNormalizedCob({
     calendario: { expiracao: 3600 },
     devedor: {
@@ -549,7 +555,7 @@ export async function generatePrepaidPurchaseCharge(input: {
       original: amount.toFixed(2),
     },
     solicitacaoPagador: `StackPlus ${input.type} - Sessão ${session.id}`,
-  })
+  }, virtualAccount)
 
   return {
     sessionId: input.sessionId,
@@ -584,6 +590,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
   if (session.status !== 'FINISHED') throw new Error('A sessão precisa estar finalizada para gerar o relatório financeiro')
 
+  const virtualAccount = resolveVirtualAccount()
   const [financialModule, memberMap] = await Promise.all([
     getHomeGameFinancialModule(session.homeGameId),
     getHomeGameMemberModes(session.homeGameId),
@@ -619,7 +626,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
             original: amount.toFixed(2),
           },
           solicitacaoPagador: `Liquidação StackPlus - Sessão ${session.id}`,
-        })
+        }, virtualAccount)
 
         charges.push({
           userId: player.userId,
