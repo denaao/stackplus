@@ -1360,7 +1360,17 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         },
       },
       staffAssignments: {
-        select: { userId: true },
+        select: {
+          userId: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              pixType: true,
+              pixKey: true,
+            },
+          },
+        },
       },
     },
   })
@@ -1376,6 +1386,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   const caixinhaPerStaff = totalCaixinha > 0 && staffUserIds.length > 0
     ? amountToFixed(Math.floor(Math.round(totalCaixinha * 100) / staffUserIds.length) / 100)
     : 0
+  const caixinhaRecipientsProcessed = new Set<string>()
 
   const charges: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; charge?: unknown; skippedReason?: string }> = []
   const payouts: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; payoutOrder?: unknown; skippedReason?: string }> = []
@@ -1525,6 +1536,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     }
 
     if (playerCaixinha > 0) {
+      caixinhaRecipientsProcessed.add(player.userId)
       await pushPayout({
         userId: player.userId,
         name: player.user.name,
@@ -1532,6 +1544,24 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         pixKey: player.user.pixKey,
         amount: playerCaixinha,
         mode,
+        skippedReason: 'Staff sem dados PIX completos para pagamento da caixinha',
+        description: `Caixinha StackPlus - Sessão ${session.id}`,
+      })
+    }
+  }
+
+  // Staff outside playerStates must also receive their caixinha share.
+  if (caixinhaPerStaff > 0) {
+    for (const staff of session.staffAssignments) {
+      if (caixinhaRecipientsProcessed.has(staff.userId)) continue
+
+      await pushPayout({
+        userId: staff.userId,
+        name: staff.user.name,
+        pixType: staff.user.pixType,
+        pixKey: staff.user.pixKey,
+        amount: caixinhaPerStaff,
+        mode: 'PREPAID',
         skippedReason: 'Staff sem dados PIX completos para pagamento da caixinha',
         description: `Caixinha StackPlus - Sessão ${session.id}`,
       })
