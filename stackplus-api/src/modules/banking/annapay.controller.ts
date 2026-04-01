@@ -38,6 +38,7 @@ export async function getStatements(req: AuthRequest, res: Response) {
     tipo: typeof req.query.Tipo === 'string' ? req.query.Tipo : undefined,
     itensPorPagina: req.query['Paginacao.ItensPorPagina'] ? Number(req.query['Paginacao.ItensPorPagina']) : undefined,
     paginaAtual: req.query['Paginacao.paginaAtual'] ? Number(req.query['Paginacao.paginaAtual']) : undefined,
+    virtualAccount: typeof req.query.virtualAccount === 'string' ? req.query.virtualAccount : null,
   })
 
   return res.json(data)

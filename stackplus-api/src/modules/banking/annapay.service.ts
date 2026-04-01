@@ -33,6 +33,7 @@ type StatementsInput = {
   tipo?: string
   itensPorPagina?: number
   paginaAtual?: number
+  virtualAccount?: string | null
 }
 
 type CreateCobInput = {
@@ -335,6 +336,7 @@ export async function getStatements(input: StatementsInput) {
   return requestWithAuth<unknown>({
     method: 'GET',
     path: '/statements',
+    virtualAccount: resolveVirtualAccount(input.virtualAccount),
     query: {
       Inicio: input.inicio,
       Fim: input.fim,
@@ -455,6 +457,77 @@ function resolveCpfCnpjFromPix(input: { pixType: string | null; pixKey: string |
 
 function amountToFixed(value: number) {
   return Number(value.toFixed(2))
+}
+
+function flattenObjects(payload: unknown): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = []
+  const stack: unknown[] = [payload]
+
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || typeof current !== 'object') continue
+
+    if (Array.isArray(current)) {
+      current.forEach((item) => stack.push(item))
+      continue
+    }
+
+    const obj = current as Record<string, unknown>
+    out.push(obj)
+    Object.values(obj).forEach((value) => {
+      if (value && typeof value === 'object') stack.push(value)
+    })
+  }
+
+  return out
+}
+
+function extractNumericCandidates(obj: Record<string, unknown>): number[] {
+  const values: number[] = []
+
+  Object.values(obj).forEach((value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      values.push(value)
+      return
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '')
+      const parsed = Number(normalized)
+      if (Number.isFinite(parsed) && normalized !== '') {
+        values.push(parsed)
+      }
+    }
+  })
+
+  return values
+}
+
+function hasChargeInStatements(payload: unknown, chargeId: string, amount: number): boolean {
+  const targetCharge = chargeId.toLowerCase()
+  const targetAmount = Number(amount.toFixed(2))
+
+  const objects = flattenObjects(payload)
+  for (const obj of objects) {
+    const textBlob = Object.values(obj)
+      .filter((value) => typeof value === 'string')
+      .join(' ')
+      .toLowerCase()
+
+    const hasChargeRef = textBlob.includes(targetCharge)
+    if (hasChargeRef) return true
+
+    const numericCandidates = extractNumericCandidates(obj)
+    const amountMatch = numericCandidates.some((value) => Math.abs(Number(value.toFixed(2)) - targetAmount) < 0.01)
+    const looksCredit = textBlob.includes('credito') || textBlob.includes('crédito') || textBlob.includes('qrcode pago') || textBlob.includes('pix')
+    const hasPaymentSignal = textBlob.includes('endtoendid') || textBlob.includes('e2eid') || textBlob.includes('receb') || textBlob.includes('liquid')
+
+    if (amountMatch && (looksCredit || hasPaymentSignal)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function extractStatusDeep(payload: unknown): string | null {
@@ -1012,6 +1085,42 @@ export async function settlePrepaidChargeById(chargeId: string, virtualAccount?:
   try {
     cobPayload = await getCobById(trimmedChargeId, effectiveVirtualAccount)
   } catch {
+    // Fallback: when cob lookup is unavailable, validate payment by statements history.
+    try {
+      const now = new Date()
+      const start = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      const statementsPayload = await getStatements({
+        inicio: start.toISOString(),
+        fim: now.toISOString(),
+        itensPorPagina: 200,
+        paginaAtual: 0,
+        virtualAccount: effectiveVirtualAccount,
+      })
+
+      const foundInStatements = hasChargeInStatements(statementsPayload, trimmedChargeId, Number(pending.amount))
+      if (foundInStatements) {
+        const syntheticPayload = {
+          id: trimmedChargeId,
+          status: 'paid-by-statements',
+          source: 'statements-fallback',
+        }
+
+        const settledFromStatements = await settlePrepaidChargeFromWebhook(syntheticPayload)
+        if (settledFromStatements.processed) {
+          return {
+            settled: true,
+            reason: settledFromStatements.reason,
+            chargeId: trimmedChargeId,
+            sessionId: settledFromStatements.sessionId,
+            transactionResult: settledFromStatements.transactionResult,
+            message: 'Pagamento confirmado por extrato e transação registrada.',
+          }
+        }
+      }
+    } catch {
+      // Ignore fallback errors and return an availability message below.
+    }
+
     return {
       settled: false,
       reason: 'status-unavailable' as const,
