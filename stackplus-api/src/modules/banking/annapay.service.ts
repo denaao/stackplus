@@ -1197,9 +1197,45 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
   for (const player of session.playerStates) {
     const result = Number(player.result)
+    const chipsOut = amountToFixed(Number(player.chipsOut))
     const mode = resolvePlayerMode(financialModule, memberMap.get(player.userId) || null)
 
-    if (result < 0 && mode === 'POSTPAID') {
+    // PREPAID: players already paid upfront, so no charges. Payout = full cashout value.
+    if (mode === 'PREPAID') {
+      if (chipsOut > 0) {
+        const recipientCpfCnpj = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey }).cpfCnpj
+        if (!player.user.pixKey || !recipientCpfCnpj) {
+          payouts.push({
+            userId: player.userId,
+            name: player.user.name,
+            amount: chipsOut,
+            mode,
+            skippedReason: 'Jogador sem dados PIX completos para criar ordem de pagamento',
+          })
+        } else {
+          const payoutOrder = await createPix({
+            valor: chipsOut,
+            descricao: `Liquidação StackPlus - Sessão ${session.id}`,
+            destinatario: {
+              tipo: 'CHAVE',
+              chave: player.user.pixKey,
+              cpfCnpjRecebedor: recipientCpfCnpj,
+            },
+          })
+          payouts.push({
+            userId: player.userId,
+            name: player.user.name,
+            amount: chipsOut,
+            mode,
+            payoutOrder,
+          })
+        }
+      }
+      continue
+    }
+
+    // POSTPAID: charges for losers, payouts for winners based on net result
+    if (result < 0) {
       const amount = amountToFixed(Math.abs(result))
       const debtor = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey })
       if (!debtor.cpf && !debtor.cnpj) {

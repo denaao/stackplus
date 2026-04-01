@@ -531,7 +531,11 @@ export default function SessionManagePage() {
                 {/* Jogadores que devem pagar (negativos) */}
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-wide text-red-400">🔴 Devem pagar ao host</p>
-                  {financialReport.charges.length === 0 ? (
+                  {financialReport.financialModule === 'PREPAID' ? (
+                    <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3 text-sm text-zinc-400">
+                      Home game pré-pago — todos os valores foram cobrados antecipadamente na entrada. Nenhuma cobrança adicional é gerada no fechamento.
+                    </div>
+                  ) : financialReport.charges.length === 0 ? (
                     <p className="text-sm text-zinc-500">Nenhuma cobrança gerada.</p>
                   ) : (
                     financialReport.charges.map((item) => {
@@ -580,7 +584,12 @@ export default function SessionManagePage() {
 
                 {/* Jogadores que devem receber (positivos) */}
                 <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-green-400">🟢 Devem receber do host</p>
+                  <p className="text-xs uppercase tracking-wide text-green-400">
+                    🟢 {financialReport.financialModule === 'PREPAID' ? 'Devolvem cashout (pré-pago)' : 'Devem receber do host'}
+                  </p>
+                  {financialReport.financialModule === 'PREPAID' && (
+                    <p className="text-xs text-zinc-500">Valor total do cashout de cada jogador — inclui buy-in devolvido + lucro.</p>
+                  )}
                   {financialReport.payouts.length === 0 ? (
                     <p className="text-sm text-zinc-500">Nenhuma ordem de pagamento gerada.</p>
                   ) : (
