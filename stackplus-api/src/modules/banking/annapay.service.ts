@@ -1299,6 +1299,21 @@ async function resolveSessionFinancialChargeStatus(input: {
   amount: number
   virtualAccount: string
 }): Promise<{ paid: boolean; normalizedCharge: NormalizedCobResult | null }> {
+  const checkStatements = async () => {
+    const now = new Date()
+    // Use a larger window to catch late settlement indexing on provider side.
+    const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const statementsPayload = await getStatements({
+      inicio: start.toISOString(),
+      fim: now.toISOString(),
+      itensPorPagina: 300,
+      paginaAtual: 0,
+      virtualAccount: input.virtualAccount,
+    })
+
+    return hasChargeInStatements(statementsPayload, input.chargeId, input.amount)
+  }
+
   try {
     const payload = await getCobById(input.chargeId, input.virtualAccount)
     const status = extractStatusDeep(payload)
@@ -1307,20 +1322,19 @@ async function resolveSessionFinancialChargeStatus(input: {
       return { paid: true, normalizedCharge: normalizeCobPayload(payload) }
     }
 
+    try {
+      const paidByStatements = await checkStatements()
+      if (paidByStatements) {
+        return { paid: true, normalizedCharge: normalizeCobPayload(payload) }
+      }
+    } catch {
+      // Keep charge as pending when statements lookup is unavailable.
+    }
+
     return { paid: false, normalizedCharge: normalizeCobPayload(payload) }
   } catch {
     try {
-      const now = new Date()
-      const start = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-      const statementsPayload = await getStatements({
-        inicio: start.toISOString(),
-        fim: now.toISOString(),
-        itensPorPagina: 200,
-        paginaAtual: 0,
-        virtualAccount: input.virtualAccount,
-      })
-
-      const paidByStatements = hasChargeInStatements(statementsPayload, input.chargeId, input.amount)
+      const paidByStatements = await checkStatements()
       return {
         paid: paidByStatements,
         normalizedCharge: null,
