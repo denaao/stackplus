@@ -1456,21 +1456,6 @@ async function resolveSessionFinancialChargeStatus(input: {
   virtualAccount: string
   debtorCpf?: string | null
 }): Promise<{ paid: boolean; normalizedCharge: NormalizedCobResult | null; paidAt: string | null }> {
-  const checkStatements = async () => {
-    const now = new Date()
-    // Use a larger window to catch late settlement indexing on provider side.
-    const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const statementsPayload = await getStatements({
-      inicio: start.toISOString(),
-      fim: now.toISOString(),
-      itensPorPagina: 300,
-      paginaAtual: 0,
-      virtualAccount: input.virtualAccount,
-    })
-
-    return findChargeInStatements(statementsPayload, input.chargeId, input.amount, input.debtorCpf)
-  }
-
   try {
     // Strict lookup on the exact virtual account avoids cross-account false positives.
     const payload = await requestWithAuth<unknown>({
@@ -1486,30 +1471,12 @@ async function resolveSessionFinancialChargeStatus(input: {
       return { paid: true, normalizedCharge: normalizeCobPayload(payload), paidAt: extractPaidAtDeep(payload) }
     }
 
-    try {
-      const statementMatch = await checkStatements()
-      if (statementMatch.found) {
-        return { paid: true, normalizedCharge: normalizeCobPayload(payload), paidAt: statementMatch.paidAt }
-      }
-    } catch {
-      // Keep charge as pending when statements lookup is unavailable.
-    }
-
     return { paid: false, normalizedCharge: normalizeCobPayload(payload), paidAt: null }
   } catch {
-    try {
-      const statementMatch = await checkStatements()
-      return {
-        paid: statementMatch.found,
-        normalizedCharge: null,
-        paidAt: statementMatch.paidAt,
-      }
-    } catch {
-      return {
-        paid: false,
-        normalizedCharge: null,
-        paidAt: null,
-      }
+    return {
+      paid: false,
+      normalizedCharge: null,
+      paidAt: null,
     }
   }
 }
