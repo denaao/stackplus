@@ -371,12 +371,18 @@ export default function CashierPage() {
       return
     }
 
+    if (autoProcessingPaidCharge || registeringPendingPrepaid) {
+      return
+    }
+
     setCheckingChargeStatus(true)
     try {
       const { data } = await api.get(`/banking/annapay/cob/${chargeId}`)
       const status = extractCobStatus(data)
       if (isPaidCobStatus(status)) {
         setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
+        setAutoProcessingPaidCharge(true)
+        await registerPendingPrepaidTransaction({ closeModalOnStart: true, automatic: true })
         return
       }
 
@@ -843,15 +849,15 @@ export default function CashierPage() {
               <button
                 type="button"
                 onClick={verifyPrepaidChargeStatus}
-                disabled={checkingChargeStatus || registeringPendingPrepaid}
+                disabled={checkingChargeStatus || registeringPendingPrepaid || autoProcessingPaidCharge}
                 className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
               >
-                {checkingChargeStatus ? 'Consultando...' : 'Verificar pagamento'}
+                {checkingChargeStatus || autoProcessingPaidCharge ? 'Consultando...' : 'Verificar pagamento'}
               </button>
               <button
                 type="button"
                 onClick={() => setShowPrepaidModal(false)}
-                disabled={registeringPendingPrepaid}
+                disabled={registeringPendingPrepaid || autoProcessingPaidCharge}
                 className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
               >
                 Fechar
