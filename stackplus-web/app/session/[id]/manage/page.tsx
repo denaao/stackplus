@@ -89,33 +89,61 @@ function extractPixOrderId(payload: any): string | null {
   const candidates = [
     payload?.id,
     payload?.pixId,
+    payload?.orderId,
+    payload?.order_id,
     payload?.data?.id,
+    payload?.data?.pixId,
     payload?.response?.id,
     payload?.response?.pixId,
+    payload?.result?.id,
   ]
-
   for (const value of candidates) {
     if (typeof value === 'string' && value.trim()) return value.trim()
   }
-
   return null
 }
 
 function extractPixCopyPaste(payload: any): string | null {
   const candidates = [
-    payload?.pixCopiaECola,
     payload?.pixCopyPaste,
+    payload?.pixCopiaECola,
     payload?.copyPaste,
     payload?.copiaECola,
     payload?.pix?.copiaECola,
     payload?.charge?.pixCopiaECola,
     payload?.data?.pixCopiaECola,
   ]
-
   for (const value of candidates) {
     if (typeof value === 'string' && value.trim()) return value.trim()
   }
+  return null
+}
 
+function extractQrCode(payload: any): string | null {
+  const candidates = [
+    payload?.qrCodeBase64,
+    payload?.qrcode,
+    payload?.pixQrCodeBase64,
+    payload?.data?.qrcode,
+  ]
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
+}
+
+function extractPayoutPixKey(payload: any): string | null {
+  const candidates = [
+    payload?.destinatario?.chave,
+    payload?.recipient?.key,
+    payload?.chave,
+    payload?.pixKey,
+    payload?.data?.destinatario?.chave,
+    payload?.response?.destinatario?.chave,
+  ]
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
   return null
 }
 
@@ -139,6 +167,7 @@ export default function SessionManagePage() {
   const [financialLoading, setFinancialLoading] = useState(false)
   const [approvingPixId, setApprovingPixId] = useState<string | null>(null)
   const [approvedPixIds, setApprovedPixIds] = useState<string[]>([])
+  const [copiedChargeId, setCopiedChargeId] = useState<string | null>(null)
 
   function normalizeSession(data: Session): Session {
     const distribution = Array.isArray(data.caixinhaDistribution) ? data.caixinhaDistribution : []
@@ -499,59 +528,98 @@ export default function SessionManagePage() {
                   </div>
                 </div>
 
+                {/* Jogadores que devem pagar (negativos) */}
                 <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-zinc-400">Jogadores que devem pagar</p>
+                  <p className="text-xs uppercase tracking-wide text-red-400">🔴 Devem pagar ao host</p>
                   {financialReport.charges.length === 0 ? (
                     <p className="text-sm text-zinc-500">Nenhuma cobrança gerada.</p>
                   ) : (
-                    financialReport.charges.map((item) => (
-                      <div key={`charge-${item.userId}`} className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3 text-sm">
-                        <p className="font-semibold text-zinc-100">{item.name} • {Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                        {item.skippedReason ? (
-                          <p className="mt-1 text-xs text-red-300">{item.skippedReason}</p>
-                        ) : (
-                          <p className="mt-1 text-xs text-green-300">Cobrança PIX criada.</p>
-                        )}
-                        {extractPixCopyPaste(item.charge) && (
-                          <textarea readOnly value={extractPixCopyPaste(item.charge) || ''} className="mt-2 w-full min-h-[70px] rounded border border-zinc-700 bg-zinc-950 p-2 text-xs text-zinc-300" />
-                        )}
-                      </div>
-                    ))
+                    financialReport.charges.map((item) => {
+                      const pixCopyPaste = extractPixCopyPaste(item.charge)
+                      const qrCode = extractQrCode(item.charge)
+                      const isCopied = copiedChargeId === item.userId
+                      return (
+                        <div key={`charge-${item.userId}`} className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-bold text-zinc-100">{item.name}</p>
+                              <p className="text-lg font-black text-red-400">-{Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                            </div>
+                            {qrCode && (
+                              <img src={qrCode} alt="QR Code PIX" className="w-24 h-24 rounded border border-zinc-700" />
+                            )}
+                          </div>
+                          {item.skippedReason ? (
+                            <p className="mt-2 text-xs text-red-300">⚠ {item.skippedReason}</p>
+                          ) : pixCopyPaste ? (
+                            <div className="mt-3">
+                              <p className="mb-1 text-xs text-zinc-400">PIX Copia e Cola · válido por 24h</p>
+                              <div className="flex gap-2">
+                                <input readOnly value={pixCopyPaste} className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-300 font-mono" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(pixCopyPaste)
+                                    setCopiedChargeId(item.userId)
+                                    setTimeout(() => setCopiedChargeId(null), 2000)
+                                  }}
+                                  className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-bold text-zinc-200 hover:bg-zinc-700 whitespace-nowrap"
+                                >
+                                  {isCopied ? '✓ Copiado' : 'Copiar'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs text-green-300">Cobrança PIX gerada (sem copia e cola disponível).</p>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
                 </div>
 
+                {/* Jogadores que devem receber (positivos) */}
                 <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-zinc-400">Ordens PIX pendentes (quem deve receber)</p>
+                  <p className="text-xs uppercase tracking-wide text-green-400">🟢 Devem receber do host</p>
                   {financialReport.payouts.length === 0 ? (
-                    <p className="text-sm text-zinc-500">Nenhuma ordem PIX pendente.</p>
+                    <p className="text-sm text-zinc-500">Nenhuma ordem de pagamento gerada.</p>
                   ) : (
                     financialReport.payouts.map((item) => {
                       const orderId = extractPixOrderId(item.payoutOrder)
+                      const pixKey = extractPayoutPixKey(item.payoutOrder)
                       const isApproved = orderId ? approvedPixIds.includes(orderId) : false
-
                       return (
-                        <div key={`payout-${item.userId}`} className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3 text-sm">
+                        <div key={`payout-${item.userId}`} className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-sm">
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <p className="font-semibold text-zinc-100">{item.name} • {Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                              {item.skippedReason ? (
-                                <p className="mt-1 text-xs text-red-300">{item.skippedReason}</p>
-                              ) : (
-                                <p className="mt-1 text-xs text-zinc-400">Ordem criada em estado pendente.</p>
-                              )}
+                              <p className="font-bold text-zinc-100">{item.name}</p>
+                              <p className="text-lg font-black text-green-400">+{Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                              {pixKey && <p className="mt-1 text-xs text-zinc-400">Chave PIX: <span className="text-zinc-200 font-mono">{pixKey}</span></p>}
                             </div>
-                            {orderId && !item.skippedReason && (
-                              <button
-                                type="button"
-                                onClick={() => approvePixOrder(orderId)}
-                                disabled={approvingPixId === orderId || isApproved}
-                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-500 disabled:opacity-50"
-                              >
-                                {isApproved ? 'Aprovado' : approvingPixId === orderId ? 'Aprovando...' : 'Aprovar PIX'}
-                              </button>
+                            {!item.skippedReason && (
+                              <div className="text-right">
+                                {isApproved ? (
+                                  <div className="rounded-lg bg-green-900/50 border border-green-500/30 px-3 py-2 text-xs font-bold text-green-300">
+                                    ✓ PIX enviado
+                                  </div>
+                                ) : orderId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => approvePixOrder(orderId)}
+                                    disabled={approvingPixId === orderId}
+                                    className="rounded-lg bg-green-600 px-4 py-2 text-xs font-bold text-white hover:bg-green-500 disabled:opacity-50"
+                                  >
+                                    {approvingPixId === orderId ? 'Enviando...' : 'Enviar PIX'}
+                                  </button>
+                                ) : (
+                                  <p className="text-xs text-zinc-500">Aguardando confirmação</p>
+                                )}
+                              </div>
                             )}
                           </div>
-                          {orderId && <p className="mt-2 text-[11px] text-zinc-500">Ordem: {orderId}</p>}
+                          {item.skippedReason && (
+                            <p className="mt-2 text-xs text-red-300">⚠ {item.skippedReason}</p>
+                          )}
                         </div>
                       )
                     })
