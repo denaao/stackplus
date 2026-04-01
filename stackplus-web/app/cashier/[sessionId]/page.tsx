@@ -398,7 +398,20 @@ export default function CashierPage() {
   }
 
   useEffect(() => {
-    if (!showPrepaidModal || !prepaidChargeResult?.charge?.id) return
+    if (!showPrepaidModal || !prepaidChargeResult?.charge?.id) {
+      console.log('[Polling] Not ready:', { 
+        showPrepaidModal, 
+        'charge.id': prepaidChargeResult?.charge?.id,
+        'full charge': prepaidChargeResult?.charge 
+      })
+      return
+    }
+
+    console.log('[Polling] Starting with:', { 
+      chargeId: prepaidChargeResult.charge.id,
+      virtualAccount: prepaidChargeResult.charge.virtualAccount,
+      fullCharge: prepaidChargeResult.charge
+    })
 
     let stopped = false
     const run = async () => {
@@ -406,12 +419,21 @@ export default function CashierPage() {
 
       const chargeId = prepaidChargeResult.charge.id
       const virtualAccount = prepaidChargeResult.charge.virtualAccount
+      
+      console.log('[Polling] Running check...', { chargeId, virtualAccount })
+
       try {
         const { data } = await api.get(`/banking/annapay/cob/${chargeId}`, {
           params: virtualAccount ? { virtualAccount } : undefined,
         })
+        
+        console.log('[Polling] Response:', data)
+        
         const status = extractCobStatus(data)
+        console.log('[Polling] Extracted status:', status)
+        
         if (isPaidCobStatus(status)) {
+          console.log('[Polling] Status is PAID! Registering transaction...')
           setChargeStatusMessage(`Pagamento identificado na Annapay (status: ${status}).`)
           stopped = true
           setAutoProcessingPaidCharge(true)
@@ -420,7 +442,8 @@ export default function CashierPage() {
         }
 
         setChargeStatusMessage(`Aguardando pagamento... status atual: ${status || 'desconhecido'}.`)
-      } catch {
+      } catch (err) {
+        console.log('[Polling] Error:', err)
         // Keep polling; intermittent failures should not break the cashier flow.
       }
     }
