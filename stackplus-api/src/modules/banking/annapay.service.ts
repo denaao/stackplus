@@ -879,8 +879,8 @@ export async function generatePrepaidPurchaseCharge(input: {
   const charge = await createNormalizedCob({
     calendario: { expiracao: 3600 },
     devedor: {
-      cpf: debtor.cpf,
-      cnpj: debtor.cnpj,
+      ...(debtor.cpf ? { cpf: debtor.cpf } : {}),
+      ...(debtor.cnpj ? { cnpj: debtor.cnpj } : {}),
       nome: user.name,
     },
     valor: {
@@ -1250,8 +1250,8 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         const charge = await createNormalizedCob({
           calendario: { expiracao: 86400 },
           devedor: {
-            cpf: debtor.cpf,
-            cnpj: debtor.cnpj,
+            ...(debtor.cpf ? { cpf: debtor.cpf } : {}),
+            ...(debtor.cnpj ? { cnpj: debtor.cnpj } : {}),
             nome: player.user.name,
           },
           valor: {
