@@ -7,6 +7,8 @@ import { joinSession, leaveSession } from '@/services/socket'
 import { getSocket } from '@/services/socket'
 import { useAuthStore } from '@/store/useStore'
 
+type PdfFontWeight = 'normal' | 'bold'
+
 interface Session {
   id: string; status: string; startedAt?: string
   rake?: string | number | null
@@ -147,6 +149,31 @@ function extractPayoutPixKey(payload: any): string | null {
   return null
 }
 
+function formatCurrency(value: number) {
+  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('pt-BR')
+}
+
+function formatFinancialModule(value: FinancialReport['financialModule']) {
+  if (value === 'PREPAID') return 'Pré-pago'
+  if (value === 'HYBRID') return 'Híbrido'
+  return 'Pós-pago'
+}
+
+function sanitizeFileName(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase()
+}
+
 export default function SessionManagePage() {
   const router = useRouter()
   const params = useParams()
@@ -168,6 +195,7 @@ export default function SessionManagePage() {
   const [approvingPixId, setApprovingPixId] = useState<string | null>(null)
   const [approvedPixIds, setApprovedPixIds] = useState<string[]>([])
   const [copiedChargeId, setCopiedChargeId] = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   function normalizeSession(data: Session): Session {
     const distribution = Array.isArray(data.caixinhaDistribution) ? data.caixinhaDistribution : []
@@ -324,6 +352,145 @@ export default function SessionManagePage() {
     }
   }
 
+  async function downloadFinancialReportPdf() {
+    if (!session || !financialReport) return
+
+    setPdfLoading(true)
+    try {
+      const { jsPDF } = await import('jspdf')
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const margin = 40
+      const maxWidth = pageWidth - (margin * 2)
+      let y = 40
+
+      const ensureSpace = (needed = 18) => {
+        if (y + needed <= pageHeight - margin) return
+        doc.addPage()
+        y = 40
+      }
+
+      const addText = (text: string, options?: { size?: number; color?: [number, number, number]; gap?: number; weight?: PdfFontWeight }) => {
+        const size = options?.size ?? 11
+        const color = options?.color ?? [24, 24, 27]
+        const gap = options?.gap ?? 8
+        const weight = options?.weight ?? 'normal'
+        const lines = doc.splitTextToSize(text, maxWidth)
+        doc.setFont('helvetica', weight)
+        doc.setFontSize(size)
+        doc.setTextColor(color[0], color[1], color[2])
+
+        lines.forEach((line: string) => {
+          ensureSpace(size + 8)
+          doc.text(line, margin, y)
+          y += size + 4
+        })
+
+        y += gap
+      }
+
+      const addSection = (title: string) => {
+        y += 4
+        addText(title, { size: 14, color: [88, 28, 135], gap: 4, weight: 'bold' })
+        ensureSpace(12)
+        doc.setDrawColor(216, 180, 254)
+        doc.line(margin, y - 2, pageWidth - margin, y - 2)
+        y += 10
+      }
+
+      addText('Relatório de Liquidação Financeira', { size: 20, color: [17, 24, 39], gap: 2, weight: 'bold' })
+      addText(`${session.homeGame.name} • Sessão ${session.id}`, { size: 11, color: [82, 82, 91], gap: 10 })
+
+      addSection('Resumo da Sessão')
+      addText(`Home game: ${session.homeGame.name}`)
+      addText(`Sessão: ${session.id}`)
+      addText(`Modalidade: ${gameType === 'CASH_GAME' ? 'Cash Game' : 'Torneio'}`)
+      addText(`Variante: ${pokerVariantLabels[pokerVariant]}`)
+      addText(`Status: ${session.status}`)
+      addText(`Início: ${formatDateTime(session.startedAt)}`)
+      addText(`Encerramento: ${formatDateTime((session as Session & { finishedAt?: string }).finishedAt)}`)
+      addText(`Valor da ficha: ${formatCurrency(Number(session.homeGame.chipValue || 0))}`)
+
+      addSection('Resumo Financeiro')
+      addText(`Módulo financeiro: ${formatFinancialModule(financialReport.financialModule)}`)
+      addText(`Gerado em: ${formatDateTime(financialReport.generatedAt)}`)
+      addText(`Cobranças geradas: ${financialReport.summary.chargesCreated}`)
+      addText(`Cobranças com pendência manual: ${financialReport.summary.chargesSkipped}`)
+      addText(`Ordens PIX aprovadas: ${approvedPixIds.length} de ${financialReport.summary.payoutsCreatedPendingApproval}`)
+      addText(`Ordens PIX com pendência manual: ${financialReport.summary.payoutsSkipped}`)
+
+      addSection('Ranking Final')
+      if (sortedPlayers.length === 0) {
+        addText('Nenhum jogador registrado na sessão.')
+      } else {
+        sortedPlayers.forEach((player, index) => {
+          addText(`${index + 1}. ${player.user.name} • Resultado: ${formatCurrency(Number(player.result))} • Buy-in: ${formatCurrency(Number(player.chipsIn))} • Cashout: ${formatCurrency(Number(player.chipsOut))}${player.hasCashedOut ? ' • Cashout registrado' : ''}`)
+        })
+      }
+
+      addSection('Cobranças ao Host')
+      if (financialReport.financialModule === 'PREPAID') {
+        addText('Home game pré-pago: nenhuma cobrança adicional é gerada no fechamento.')
+      } else if (financialReport.charges.length === 0) {
+        addText('Nenhuma cobrança gerada.')
+      } else {
+        financialReport.charges.forEach((item) => {
+          addText(`${item.name} • ${formatCurrency(Number(item.amount))}`, { weight: 'bold', gap: 2 })
+          if (item.skippedReason) {
+            addText(`Pendência: ${item.skippedReason}`, { color: [153, 27, 27] })
+            return
+          }
+
+          const pixCopyPaste = extractPixCopyPaste(item.charge)
+          addText('Status: cobrança PIX gerada para pagamento ao host.', { color: [22, 101, 52], gap: 2 })
+          if (pixCopyPaste) addText(`PIX copia e cola: ${pixCopyPaste}`)
+        })
+      }
+
+      addSection('Pagamentos do Host')
+      if (financialReport.payouts.length === 0) {
+        addText('Nenhuma ordem PIX gerada.')
+      } else {
+        financialReport.payouts.forEach((item) => {
+          const orderId = extractPixOrderId(item.payoutOrder)
+          const pixKey = extractPayoutPixKey(item.payoutOrder)
+          const isApproved = orderId ? approvedPixIds.includes(orderId) : false
+
+          addText(`${item.name} • ${formatCurrency(Number(item.amount))}`, { weight: 'bold', gap: 2 })
+          if (pixKey) addText(`Chave PIX: ${pixKey}`, { gap: 2 })
+          if (orderId) addText(`Ordem PIX: ${orderId}`, { gap: 2 })
+          if (item.skippedReason) {
+            addText(`Pendência: ${item.skippedReason}`, { color: [153, 27, 27] })
+          } else {
+            addText(`Status: ${isApproved ? 'PIX enviado pelo host' : 'Aguardando envio do host'}`, {
+              color: isApproved ? [22, 101, 52] : [161, 98, 7],
+            })
+          }
+        })
+      }
+
+      if (sessionCaixinha > 0) {
+        addSection('Divisão da Caixinha')
+        addText(`Total da caixinha: ${formatCurrency(sessionCaixinha)}`)
+        if (staffCaixinhaWinners.length === 0) {
+          addText('Nenhum staff configurado para divisão.')
+        } else {
+          staffCaixinhaWinners.forEach((item) => {
+            addText(`${item.name} • ${formatCurrency(Number(item.amount))}${item.pixKey ? ` • PIX ${item.pixType ? `(${item.pixType}) ` : ''}${item.pixKey}` : ''}`)
+          })
+        }
+      }
+
+      const fileName = `liquidacao-${sanitizeFileName(session.homeGame.name)}-${session.id.slice(0, 8)}.pdf`
+      doc.save(fileName)
+    } catch (err) {
+      alert(typeof err === 'string' ? err : 'Não foi possível gerar o PDF da liquidação financeira')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!session || participantsLoaded) return
     const currentGameType = session.gameType || session.homeGame.gameType || 'CASH_GAME'
@@ -355,6 +522,17 @@ export default function SessionManagePage() {
       pixKey: assignment.user.pixKey || null,
     }))
   const sortedPlayers = [...(session.playerStates || [])].sort((a, b) => parseFloat(b.result) - parseFloat(a.result))
+  const financialHasSkippedItems = financialReport
+    ? [...financialReport.charges, ...financialReport.payouts].some((item) => Boolean(item.skippedReason))
+    : true
+  const financialHasPendingPayoutApproval = financialReport
+    ? financialReport.payouts.some((item) => {
+        if (item.skippedReason) return true
+        const orderId = extractPixOrderId(item.payoutOrder)
+        return !orderId || !approvedPixIds.includes(orderId)
+      })
+    : true
+  const canDownloadFinancialPdf = Boolean(financialReport) && !financialHasSkippedItems && !financialHasPendingPayoutApproval
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -497,18 +675,36 @@ export default function SessionManagePage() {
                 <p className="text-xs uppercase tracking-wide text-purple-200">Liquidação Financeira (Annapay)</p>
                 <p className="mt-1 text-sm text-zinc-300">Gera cobranças PIX para negativos pós-pago e ordens PIX pendentes para positivos.</p>
               </div>
-              <button
-                type="button"
-                onClick={generateFinancialReport}
-                disabled={financialLoading}
-                className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-50"
-              >
-                {financialLoading ? 'Gerando...' : 'Gerar relatório financeiro'}
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {financialReport && (
+                  <button
+                    type="button"
+                    onClick={downloadFinancialReportPdf}
+                    disabled={!canDownloadFinancialPdf || pdfLoading}
+                    className="rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {pdfLoading ? 'Gerando PDF...' : 'Baixar PDF da liquidação'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={generateFinancialReport}
+                  disabled={financialLoading}
+                  className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-50"
+                >
+                  {financialLoading ? 'Gerando...' : 'Gerar relatório financeiro'}
+                </button>
+              </div>
             </div>
 
             {financialReport && (
               <div className="mt-4 space-y-4">
+                <div className={`rounded-lg border p-3 text-xs ${canDownloadFinancialPdf ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-zinc-700 bg-zinc-900/60 text-zinc-400'}`}>
+                  {canDownloadFinancialPdf
+                    ? 'Liquidação concluída. O PDF completo desta etapa já pode ser baixado.'
+                    : 'O PDF será liberado quando não houver pendências manuais e todas as ordens PIX tiverem sido enviadas pelo host.'}
+                </div>
+
                 <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                   <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
                     <p className="text-zinc-500">Módulo</p>
@@ -547,7 +743,7 @@ export default function SessionManagePage() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="font-bold text-zinc-100">{item.name}</p>
-                              <p className="text-lg font-black text-red-400">-{Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                              <p className="text-lg font-black text-red-400">-{formatCurrency(Number(item.amount))}</p>
                             </div>
                             {qrCode && (
                               <img src={qrCode} alt="QR Code PIX" className="w-24 h-24 rounded border border-zinc-700" />
@@ -602,7 +798,7 @@ export default function SessionManagePage() {
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <p className="font-bold text-zinc-100">{item.name}</p>
-                              <p className="text-lg font-black text-green-400">+{Number(item.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                              <p className="text-lg font-black text-green-400">+{formatCurrency(Number(item.amount))}</p>
                               {pixKey && <p className="mt-1 text-xs text-zinc-400">Chave PIX: <span className="text-zinc-200 font-mono">{pixKey}</span></p>}
                             </div>
                             {!item.skippedReason && (
