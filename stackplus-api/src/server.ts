@@ -7,7 +7,7 @@ import { initSocket } from './socket/socket'
 dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 const PORT = process.env.PORT || 3001
-const WEBHOOK_SYNC_INTERVAL_MS = Number(process.env.ANNAPAY_WEBHOOK_SYNC_INTERVAL_MS || '300000')
+const WEBHOOK_SYNC_INTERVAL_MS = Number(process.env.ANNAPAY_WEBHOOK_SYNC_INTERVAL_MS || '0')
 
 const server = http.createServer(app)
 
@@ -31,6 +31,7 @@ server.listen(PORT, () => {
 
   runWebhookSync()
   if (WEBHOOK_SYNC_INTERVAL_MS > 0) {
+    console.log(`[annapay] periodic webhook sync enabled (${WEBHOOK_SYNC_INTERVAL_MS}ms)`)
     setInterval(runWebhookSync, WEBHOOK_SYNC_INTERVAL_MS)
   }
 })
