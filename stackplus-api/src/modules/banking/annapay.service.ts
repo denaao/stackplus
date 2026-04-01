@@ -459,10 +459,11 @@ export async function createPix(input: CreatePixInput, virtualAccount?: string |
   })
 }
 
-export async function confirmPix(id: string) {
+export async function confirmPix(id: string, virtualAccount?: string | null) {
   return requestWithAuth<unknown>({
     method: 'PUT',
     path: `/pix/${encodeURIComponent(id)}`,
+    virtualAccount: resolveVirtualAccount(virtualAccount),
   })
 }
 
