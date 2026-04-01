@@ -2,6 +2,8 @@ import { prisma } from '../../lib/prisma'
 import { TransactionType } from '@prisma/client'
 import { randomUUID } from 'crypto'
 
+type PayoutPurposeValue = 'SETTLEMENT' | 'CAIXINHA'
+
 type PendingChargeRow = {
   chargeId: string
   sessionId: string
@@ -18,6 +20,17 @@ type SessionFinancialChargePendingRow = {
   chargeId: string
   sessionId: string
   userId: string
+  virtualAccount: string | null
+  amount: string | number
+  status: string
+  updatedAt: string
+}
+
+type SessionFinancialPayoutPendingRow = {
+  sessionId: string
+  userId: string
+  purpose: PayoutPurposeValue
+  payoutOrderId: string
   virtualAccount: string | null
   amount: string | number
   status: string
@@ -470,11 +483,19 @@ export async function createPix(input: CreatePixInput, virtualAccount?: string |
 }
 
 export async function confirmPix(id: string, virtualAccount?: string | null) {
-  return requestWithAuth<unknown>({
+  const result = await requestWithAuth<unknown>({
     method: 'PUT',
     path: `/pix/${encodeURIComponent(id)}`,
     virtualAccount: resolveVirtualAccount(virtualAccount),
   })
+
+  await prisma.$executeRaw`
+    UPDATE "SessionFinancialPayoutPending"
+    SET "status" = 'SENT', "updatedAt" = NOW()
+    WHERE "payoutOrderId" = ${id}
+  `
+
+  return result
 }
 
 export async function testLogin() {
@@ -740,6 +761,20 @@ function getStringByPaths(payload: any, paths: string[][]): string | null {
   }
 
   return null
+}
+
+function extractPixOrderId(payload: unknown): string | null {
+  return getStringByPaths(payload as any, [
+    ['id'],
+    ['pixId'],
+    ['orderId'],
+    ['order_id'],
+    ['data', 'id'],
+    ['data', 'pixId'],
+    ['response', 'id'],
+    ['response', 'pixId'],
+    ['result', 'id'],
+  ])
 }
 
 function toDataImage(value: string | null): string | null {
@@ -1340,6 +1375,70 @@ async function markSessionFinancialChargeAsSettled(sessionId: string, userId: st
   `
 }
 
+async function getSessionFinancialPendingPayout(sessionId: string, userId: string, purpose: PayoutPurposeValue): Promise<SessionFinancialPayoutPendingRow | null> {
+  const rows = await prisma.$queryRaw<Array<SessionFinancialPayoutPendingRow>>`
+    SELECT
+      "sessionId",
+      "userId",
+      "purpose"::text AS "purpose",
+      "payoutOrderId",
+      "virtualAccount",
+      "amount"::text AS "amount",
+      "status",
+      "updatedAt"::text AS "updatedAt"
+    FROM "SessionFinancialPayoutPending"
+    WHERE "sessionId" = ${sessionId}
+      AND "userId" = ${userId}
+      AND "purpose" = ${purpose}::"SessionFinancialPayoutPurpose"
+    LIMIT 1
+  `
+
+  return rows[0] || null
+}
+
+async function upsertSessionFinancialPendingPayout(input: {
+  sessionId: string
+  userId: string
+  purpose: PayoutPurposeValue
+  payoutOrderId: string
+  virtualAccount: string
+  amount: number
+}) {
+  const id = randomUUID()
+  await prisma.$executeRaw`
+    INSERT INTO "SessionFinancialPayoutPending" (
+      "id",
+      "sessionId",
+      "userId",
+      "purpose",
+      "payoutOrderId",
+      "virtualAccount",
+      "amount",
+      "status",
+      "createdAt",
+      "updatedAt"
+    ) VALUES (
+      ${id},
+      ${input.sessionId},
+      ${input.userId},
+      ${input.purpose}::"SessionFinancialPayoutPurpose",
+      ${input.payoutOrderId},
+      ${input.virtualAccount},
+      ${input.amount},
+      'PENDING',
+      NOW(),
+      NOW()
+    )
+    ON CONFLICT ("sessionId", "userId", "purpose")
+    DO UPDATE SET
+      "payoutOrderId" = EXCLUDED."payoutOrderId",
+      "virtualAccount" = EXCLUDED."virtualAccount",
+      "amount" = EXCLUDED."amount",
+      "status" = 'PENDING',
+      "updatedAt" = NOW()
+  `
+}
+
 async function resolveSessionFinancialChargeStatus(input: {
   chargeId: string
   amount: number
@@ -1455,6 +1554,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   const charges: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; charge?: unknown; skippedReason?: string }> = []
   const payouts: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; payoutOrder?: unknown; skippedReason?: string }> = []
   const receivedPayments: Array<{ userId: string; name: string; amount: number; paidAt: string }> = []
+  const sentPayouts: Array<{ userId: string; name: string; amount: number; sentAt: string }> = []
 
   async function pushPayout(params: {
     userId: string
@@ -1463,10 +1563,36 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     pixType: string | null
     pixKey: string | null
     amount: number
+    purpose: PayoutPurposeValue
     mode: ResolvedPlayerMode
     skippedReason: string
     description: string
   }) {
+    const existingPayout = await getSessionFinancialPendingPayout(session.id, params.userId, params.purpose)
+    if (existingPayout) {
+      const sameAmount = amountToFixed(Number(existingPayout.amount)) === params.amount
+      if (sameAmount && existingPayout.status === 'SENT') {
+        sentPayouts.push({
+          userId: params.userId,
+          name: params.name,
+          amount: params.amount,
+          sentAt: existingPayout.updatedAt,
+        })
+        return
+      }
+
+      if (sameAmount && existingPayout.status !== 'SENT') {
+        payouts.push({
+          userId: params.userId,
+          name: params.name,
+          amount: params.amount,
+          mode: params.mode,
+          payoutOrder: { id: existingPayout.payoutOrderId },
+        })
+        return
+      }
+    }
+
     const recipientCpfCnpj = resolveCpfCnpjFromPix({ pixType: params.pixType, pixKey: params.pixKey, cpf: params.cpf }).cpfCnpj
     if (!params.pixKey || !recipientCpfCnpj) {
       payouts.push({
@@ -1496,6 +1622,18 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       mode: params.mode,
       payoutOrder,
     })
+
+    const payoutOrderId = extractPixOrderId(payoutOrder)
+    if (payoutOrderId) {
+      await upsertSessionFinancialPendingPayout({
+        sessionId: session.id,
+        userId: params.userId,
+        purpose: params.purpose,
+        payoutOrderId,
+        virtualAccount,
+        amount: params.amount,
+      })
+    }
   }
 
   for (const player of session.playerStates) {
@@ -1522,6 +1660,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         pixType: player.user.pixType,
         pixKey: player.user.pixKey,
         amount: settlementBalance,
+        purpose: 'SETTLEMENT',
         mode,
         skippedReason: 'Jogador sem dados PIX completos para criar ordem de pagamento',
         description: `Liquidação StackPlus - Sessão ${session.id}`,
@@ -1623,6 +1762,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         pixType: player.user.pixType,
         pixKey: player.user.pixKey,
         amount: playerCaixinha,
+        purpose: 'CAIXINHA',
         mode,
         skippedReason: 'Staff sem dados PIX completos para pagamento da caixinha',
         description: `Caixinha StackPlus - Sessão ${session.id}`,
@@ -1642,6 +1782,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
         pixType: staff.user.pixType,
         pixKey: staff.user.pixKey,
         amount: caixinhaPerStaff,
+        purpose: 'CAIXINHA',
         mode: 'PREPAID',
         skippedReason: 'Staff sem dados PIX completos para pagamento da caixinha',
         description: `Caixinha StackPlus - Sessão ${session.id}`,
@@ -1658,11 +1799,13 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       chargesCreated: charges.filter((item) => !item.skippedReason && item.charge).length,
       chargesSkipped: charges.filter((item) => item.skippedReason).length,
       receivedPayments: receivedPayments.length,
+      payoutsSent: sentPayouts.length,
       payoutsCreatedPendingApproval: payouts.filter((item) => !item.skippedReason && item.payoutOrder).length,
       payoutsSkipped: payouts.filter((item) => item.skippedReason).length,
     },
     charges,
     receivedPayments,
+    sentPayouts,
     payouts,
   }
 }

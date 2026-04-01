@@ -705,26 +705,26 @@ export default function SessionManagePage() {
                     : 'O PDF será liberado quando não houver pendências manuais e todas as ordens PIX tiverem sido enviadas pelo host.'}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
                     <p className="text-zinc-500">Módulo</p>
-                    <p className="mt-1 font-semibold text-zinc-100">{financialReport.financialModule}</p>
+                    <p className="mt-0.5 font-semibold text-zinc-100">{financialReport.financialModule}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
                     <p className="text-zinc-500">Cobranças</p>
-                    <p className="mt-1 font-semibold text-zinc-100">{financialReport.summary.chargesCreated}</p>
+                    <p className="mt-0.5 font-semibold text-zinc-100">{financialReport.summary.chargesCreated}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
                     <p className="text-zinc-500">Pagamentos recebidos</p>
-                    <p className="mt-1 font-semibold text-zinc-100">{financialReport.summary.receivedPayments}</p>
+                    <p className="mt-0.5 font-semibold text-zinc-100">{financialReport.summary.receivedPayments}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
                     <p className="text-zinc-500">Ordens PIX</p>
-                    <p className="mt-1 font-semibold text-zinc-100">{financialReport.summary.payoutsCreatedPendingApproval}</p>
+                    <p className="mt-0.5 font-semibold text-zinc-100">{financialReport.summary.payoutsCreatedPendingApproval}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
                     <p className="text-zinc-500">Gerado em</p>
-                    <p className="mt-1 font-semibold text-zinc-100">{new Date(financialReport.generatedAt).toLocaleString('pt-BR')}</p>
+                    <p className="mt-0.5 font-semibold text-zinc-100">{new Date(financialReport.generatedAt).toLocaleString('pt-BR')}</p>
                   </div>
                 </div>
 
@@ -735,9 +735,13 @@ export default function SessionManagePage() {
                   ) : (
                     financialReport.receivedPayments.map((item) => (
                       <div key={`received-${item.userId}`} className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm">
-                        <p className="font-bold text-zinc-100">{item.name}</p>
-                        <p className="text-lg font-black text-emerald-300">+{formatCurrency(Number(item.amount))}</p>
-                        <p className="mt-2 text-xs text-zinc-300">Pago em: {new Date(item.paidAt).toLocaleString('pt-BR')}</p>
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <span className="min-w-0 flex-1 truncate font-bold text-zinc-100">{item.name}</span>
+                          <span className="shrink-0 text-base font-black text-emerald-300">+{formatCurrency(Number(item.amount))}</span>
+                          <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-100 whitespace-nowrap">
+                            Pago em: {new Date(item.paidAt).toLocaleString('pt-BR')}
+                          </span>
+                        </div>
                       </div>
                     ))
                   )}
