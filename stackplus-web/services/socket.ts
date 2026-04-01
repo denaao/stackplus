@@ -12,7 +12,8 @@ export function getSocket(): Socket {
 
     socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
       auth: { token },
-      transports: ['websocket'],
+      // Keep polling fallback enabled for environments where WebSocket upgrade is blocked.
+      transports: ['polling', 'websocket'],
     })
   }
   return socket
