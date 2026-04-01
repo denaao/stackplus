@@ -439,10 +439,11 @@ export async function getCobById(id: string, virtualAccount?: string | null) {
   })
 }
 
-export async function createPix(input: CreatePixInput) {
+export async function createPix(input: CreatePixInput, virtualAccount?: string | null) {
   return requestWithAuth<unknown>({
     method: 'POST',
     path: '/pix',
+    virtualAccount: resolveVirtualAccount(virtualAccount),
     body: input,
   })
 }
@@ -1261,7 +1262,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
               chave: player.user.pixKey,
               cpfCnpjRecebedor: recipientCpfCnpj,
             },
-          })
+          }, virtualAccount)
           payouts.push({
             userId: player.userId,
             name: player.user.name,
@@ -1331,7 +1332,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
             chave: player.user.pixKey,
             cpfCnpjRecebedor: recipientCpfCnpj,
           },
-        })
+        }, virtualAccount)
 
         payouts.push({
           userId: player.userId,
