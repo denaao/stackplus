@@ -302,8 +302,10 @@ export default function CashierPage() {
         const sameUser = transaction.userId === pending.userId
         const sameType = transaction.type === pending.type
         const sameSession = pending.sessionId === sessionId
+        const marker = `[charge:${pending.chargeId}]`
+        const noteHasMarker = typeof transaction.note === 'string' && transaction.note.includes(marker)
 
-        if (!sameUser || !sameType || !sameSession) {
+        if (!sameUser || !sameType || !sameSession || !noteHasMarker) {
           return pending
         }
 
@@ -496,13 +498,7 @@ export default function CashierPage() {
       if (tx.userId !== pendingPrepaidTransaction.userId) return false
       if (tx.type !== pendingPrepaidTransaction.type) return false
 
-      if (typeof tx.note === 'string' && tx.note.includes(marker)) {
-        return true
-      }
-
-      const amountEqual = Math.abs(Number(tx.amount) - pendingPrepaidTransaction.amount) < 0.01
-      const chipsEqual = Math.abs(Number(tx.chips) - pendingPrepaidTransaction.chips) < 0.01
-      return amountEqual && chipsEqual
+      return typeof tx.note === 'string' && tx.note.includes(marker)
     })
 
     if (!found) return false
