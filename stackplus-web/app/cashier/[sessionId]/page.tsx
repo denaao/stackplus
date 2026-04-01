@@ -747,9 +747,6 @@ export default function CashierPage() {
             <>
               <h2 className="text-lg font-bold mb-4">Registrar Transação</h2>
               <form onSubmit={handleSubmit} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
-                {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">{error}</div>}
-                {success && <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3">{success}</div>}
-
                 <div className="space-y-1">
                   <label className="text-xs text-zinc-400 uppercase tracking-wide">Jogador</label>
                   <select
@@ -818,6 +815,9 @@ export default function CashierPage() {
                   className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50">
                   {loading ? 'Registrando...' : 'Registrar'}
                 </button>
+
+                {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">{error}</div>}
+                {success && <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3">{success}</div>}
               </form>
             </>
           )}
