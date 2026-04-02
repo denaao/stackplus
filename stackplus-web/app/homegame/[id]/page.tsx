@@ -24,6 +24,7 @@ interface Session {
   id: string; status: string; startedAt?: string; finishedAt?: string; createdAt: string
   pokerVariant?: 'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'
   gameType?: 'CASH_GAME' | 'TOURNAMENT'
+  financialModule?: 'POSTPAID' | 'PREPAID' | 'HYBRID'
   _count: { playerStates: number; transactions: number }
 }
 
@@ -62,6 +63,7 @@ export default function HomeGamePage() {
   const [tourLevelsUntilBreak, setTourLevelsUntilBreak] = useState('4')
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [financialModule, setFinancialModule] = useState<'POSTPAID' | 'PREPAID' | 'HYBRID'>('POSTPAID')
+  const [newSessionFinancialModule, setNewSessionFinancialModule] = useState<'POSTPAID' | 'PREPAID' | 'HYBRID'>('POSTPAID')
   const [hybridMemberModes, setHybridMemberModes] = useState<Record<string, 'POSTPAID' | 'PREPAID'>>({})
   const [savingFinancialConfig, setSavingFinancialConfig] = useState(false)
   const [isEditingFinancialConfig, setIsEditingFinancialConfig] = useState(false)
@@ -118,6 +120,7 @@ export default function HomeGamePage() {
     if (!game) return
     setPokerVariant('HOLDEN')
     setNewSessionType('CASH_GAME')
+    setNewSessionFinancialModule(game.financialModule || 'POSTPAID')
     setCashChipValue(String(game.chipValue || '1'))
     setCashSmallBlind('1')
     setCashBigBlind('2')
@@ -136,7 +139,12 @@ export default function HomeGamePage() {
   async function createSession() {
     setCreating(true)
     try {
-      let payload: Record<string, string | number> = { homeGameId: id, pokerVariant, gameType: newSessionType }
+      let payload: Record<string, string | number> = {
+        homeGameId: id,
+        pokerVariant,
+        gameType: newSessionType,
+        financialModule: newSessionFinancialModule,
+      }
 
       if (newSessionType === 'CASH_GAME') {
         const chipValue = parseFloat(cashChipValue)
@@ -423,6 +431,31 @@ export default function HomeGamePage() {
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
             <h3 className="text-lg font-bold">Nova Partida</h3>
             <p className="mt-1 text-sm text-zinc-400">Escolha o tipo da partida e preencha a configuracao.</p>
+
+            <div className="mt-5">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Módulo financeiro</p>
+              <p className="mt-1 text-xs text-zinc-400">Defina se esta partida será pós-paga, pré-paga ou híbrida antes de escolher a estrutura.</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {[
+                  { key: 'POSTPAID', label: 'Pós-pago' },
+                  { key: 'PREPAID', label: 'Pré-pago' },
+                  { key: 'HYBRID', label: 'Híbrido' },
+                ].map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setNewSessionFinancialModule(option.key as 'POSTPAID' | 'PREPAID' | 'HYBRID')}
+                    className={`rounded-xl border px-4 py-3 text-sm font-bold transition-colors ${
+                      newSessionFinancialModule === option.key
+                        ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
+                        : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button

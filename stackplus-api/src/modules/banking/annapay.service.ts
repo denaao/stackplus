@@ -554,6 +554,53 @@ function amountToFixed(value: number) {
   return Number(value.toFixed(2))
 }
 
+function buildRakebackByUserId(params: {
+  totalRake: number
+  rakebackAssignments: Array<{ userId: string; percent?: unknown }>
+}) {
+  const totalRake = Number(params.totalRake || 0)
+  const rakebackAssignments = Array.isArray(params.rakebackAssignments) ? params.rakebackAssignments : []
+
+  if (totalRake <= 0 || rakebackAssignments.length === 0) return {} as Record<string, number>
+
+  const percents = rakebackAssignments.map((assignment) => {
+    const value = Number(assignment.percent || 0)
+    return Number.isFinite(value) && value > 0 ? value : 0
+  })
+
+  if (percents.every((value) => value <= 0)) return {} as Record<string, number>
+
+  const totalRakeCents = Math.round(totalRake * 100)
+  const parts = rakebackAssignments.map((assignment, index) => {
+    const percent = percents[index]
+    const rawCents = totalRakeCents * (percent / 100)
+    const cents = Math.floor(rawCents)
+    return {
+      userId: assignment.userId,
+      cents,
+      remainder: rawCents - cents,
+    }
+  })
+
+  const targetCents = Math.round(totalRakeCents * (percents.reduce((sum, value) => sum + value, 0) / 100))
+  let remaining = targetCents - parts.reduce((sum, item) => sum + item.cents, 0)
+
+  if (remaining > 0) {
+    const byRemainder = [...parts].sort((a, b) => b.remainder - a.remainder)
+    let cursor = 0
+    while (remaining > 0 && byRemainder.length > 0) {
+      byRemainder[cursor % byRemainder.length].cents += 1
+      remaining -= 1
+      cursor += 1
+    }
+  }
+
+  return parts.reduce<Record<string, number>>((acc, item) => {
+    acc[item.userId] = amountToFixed(item.cents / 100)
+    return acc
+  }, {})
+}
+
 function flattenObjects(payload: unknown): Array<Record<string, unknown>> {
   const out: Array<Record<string, unknown>> = []
   const stack: unknown[] = [payload]
@@ -946,11 +993,11 @@ function extractVirtualAccountCandidates(payload: unknown): string[] {
   return Array.from(result)
 }
 
-async function getHomeGameFinancialModule(homeGameId: string): Promise<FinancialModuleValue> {
+async function getSessionFinancialModule(sessionId: string): Promise<FinancialModuleValue> {
   const rows = await prisma.$queryRaw<Array<{ financialModule: string | null }>>`
     SELECT "financialModule"::text AS "financialModule"
-    FROM "HomeGame"
-    WHERE "id" = ${homeGameId}
+    FROM "Session"
+    WHERE "id" = ${sessionId}
     LIMIT 1
   `
 
@@ -998,7 +1045,7 @@ export async function generatePrepaidPurchaseCharge(input: {
       where: { id: input.userId },
       select: { id: true, name: true, cpf: true, pixType: true, pixKey: true },
     }),
-    getHomeGameFinancialModule(session.homeGameId),
+    getSessionFinancialModule(session.id),
   ])
 
   if (!member) throw new Error('Jogador não é membro deste Home Game')
@@ -1521,6 +1568,12 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
           },
         },
       },
+      rakebackAssignments: {
+        select: {
+          userId: true,
+          percent: true,
+        },
+      },
     },
   })
 
@@ -1528,7 +1581,11 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   if (session.status !== 'FINISHED') throw new Error('A sessão precisa estar finalizada para gerar o relatório financeiro')
 
   const virtualAccount = resolveVirtualAccount()
-  const financialModule = await getHomeGameFinancialModule(session.homeGameId)
+  const financialModule = await getSessionFinancialModule(session.id)
+  const rakebackByUserId = buildRakebackByUserId({
+    totalRake: Number(session.rake || 0),
+    rakebackAssignments: session.rakebackAssignments,
+  })
 
   const totalCaixinha = Number(session.caixinha || 0)
   const staffUserIds = session.staffAssignments.map((s) => s.userId)
@@ -1633,19 +1690,27 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     }, 0))
     const chipsOut = amountToFixed(Number(player.chipsOut))
     const playerCaixinha = staffUserIds.includes(player.userId) ? caixinhaPerStaff : 0
-    const settlementBalance = amountToFixed(chipsOut - postpaidOpenAmount)
+    const playerRakeback = amountToFixed(Number(rakebackByUserId[player.userId] || 0))
+    const settlementBalance = amountToFixed(chipsOut - postpaidOpenAmount + playerRakeback)
+    // Net final balance per player: settlement +/- caixinha.
+    // This prevents the same player from appearing in both charge and payout lists.
+    const netBalance = amountToFixed(settlementBalance + playerCaixinha)
     const mode: ResolvedPlayerMode = postpaidOpenAmount > 0 ? 'POSTPAID' : 'PREPAID'
+
+    if (playerCaixinha > 0) {
+      caixinhaRecipientsProcessed.add(player.userId)
+    }
 
     // Purchases already settled via prepaid charges stay frozen and are not billed again.
     // Only postpaid purchases remain open for final settlement, and cashout offsets them first.
-    if (settlementBalance > 0) {
+    if (netBalance > 0) {
       await pushPayout({
         userId: player.userId,
         name: player.user.name,
         cpf: player.user.cpf,
         pixType: player.user.pixType,
         pixKey: player.user.pixKey,
-        amount: settlementBalance,
+        amount: netBalance,
         purpose: 'SETTLEMENT',
         mode,
         skippedReason: 'Jogador sem dados PIX completos para criar ordem de pagamento',
@@ -1653,8 +1718,8 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       })
     }
 
-    if (settlementBalance < 0) {
-      const amount = amountToFixed(Math.abs(settlementBalance))
+    if (netBalance < 0) {
+      const amount = amountToFixed(Math.abs(netBalance))
       const debtor = resolveCpfCnpjFromPix({ pixType: player.user.pixType, pixKey: player.user.pixKey, cpf: player.user.cpf })
       if (!debtor.cpf && !debtor.cnpj) {
         charges.push({
@@ -1751,22 +1816,6 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
           charge,
         })
       }
-    }
-
-    if (playerCaixinha > 0) {
-      caixinhaRecipientsProcessed.add(player.userId)
-      await pushPayout({
-        userId: player.userId,
-        name: player.user.name,
-        cpf: player.user.cpf,
-        pixType: player.user.pixType,
-        pixKey: player.user.pixKey,
-        amount: playerCaixinha,
-        purpose: 'CAIXINHA',
-        mode,
-        skippedReason: 'Staff sem dados PIX completos para pagamento da caixinha',
-        description: `Caixinha StackPlus - Sessão ${session.id}`,
-      })
     }
   }
 

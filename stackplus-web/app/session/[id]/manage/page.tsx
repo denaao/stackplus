@@ -15,17 +15,26 @@ interface Session {
   caixinha?: string | number | null
   caixinhaPerStaff?: number
   caixinhaDistribution?: Array<{ userId: string; name: string; amount: number; pixType?: string | null; pixKey?: string | null }>
+  totalRakeback?: number
+  rakebackDistribution?: Array<{ userId: string; name: string; percent: number; amount: number; pixType?: string | null; pixKey?: string | null }>
   pokerVariant?: 'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'
   gameType?: 'CASH_GAME' | 'TOURNAMENT'
   homeGame: { name: string; chipValue: string; gameType?: 'CASH_GAME' | 'TOURNAMENT'; hostId: string }
   cashier?: { id: string; name: string }
   playerStates: PlayerState[]
   staffAssignments: StaffAssignment[]
+  rakebackAssignments: RakebackAssignment[]
   participantAssignments: ParticipantAssignment[]
 }
 
 interface StaffAssignment {
   userId: string
+  user: { id: string; name: string; email?: string; pixType?: string | null; pixKey?: string | null }
+}
+
+interface RakebackAssignment {
+  userId: string
+  percent?: number
   user: { id: string; name: string; email?: string; pixType?: string | null; pixKey?: string | null }
 }
 
@@ -153,6 +162,41 @@ function formatFinancialModule(value: FinancialReport['financialModule']) {
   return 'Pós-pago'
 }
 
+function parseMoneyValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string') return null
+
+  const normalized = value
+    .replace(/\s/g, '')
+    .replace(/R\$/gi, '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function extractBankBalance(payload: any): number | null {
+  const candidates = [
+    payload?.saldo,
+    payload?.balance,
+    payload?.availableBalance,
+    payload?.disponivel,
+    payload?.valor,
+    payload?.data?.saldo,
+    payload?.data?.balance,
+    payload?.data?.availableBalance,
+    payload?.conta?.saldo,
+  ]
+
+  for (const candidate of candidates) {
+    const value = parseMoneyValue(candidate)
+    if (value != null) return value
+  }
+
+  return null
+}
+
 function sanitizeFileName(value: string) {
   return value
     .normalize('NFD')
@@ -174,6 +218,8 @@ export default function SessionManagePage() {
   const [showStaffModal, setShowStaffModal] = useState(false)
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([])
+  const [selectedRakebackIds, setSelectedRakebackIds] = useState<string[]>([])
+  const [selectedRakebackPercent, setSelectedRakebackPercent] = useState<Record<string, string>>({})
   const [staffLoading, setStaffLoading] = useState(false)
   const [participantOptions, setParticipantOptions] = useState<ParticipantOption[]>([])
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
@@ -181,6 +227,9 @@ export default function SessionManagePage() {
   const [participantsLoaded, setParticipantsLoaded] = useState(false)
   const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null)
   const [financialLoading, setFinancialLoading] = useState(false)
+  const [bankBalance, setBankBalance] = useState<number | null>(null)
+  const [bankBalanceLoading, setBankBalanceLoading] = useState(false)
+  const [bankBalanceError, setBankBalanceError] = useState<string | null>(null)
   const [approvingPixId, setApprovingPixId] = useState<string | null>(null)
   const [approvedPixIds, setApprovedPixIds] = useState<string[]>([])
   const [copiedChargeId, setCopiedChargeId] = useState<string | null>(null)
@@ -192,9 +241,17 @@ export default function SessionManagePage() {
       ...data,
       playerStates: Array.isArray(data.playerStates) ? data.playerStates : [],
       staffAssignments: Array.isArray(data.staffAssignments) ? data.staffAssignments : [],
+      rakebackAssignments: Array.isArray(data.rakebackAssignments)
+        ? data.rakebackAssignments.map((assignment) => ({
+            ...assignment,
+            percent: Number(assignment.percent || 0),
+          }))
+        : [],
       participantAssignments: Array.isArray(data.participantAssignments) ? data.participantAssignments : [],
       caixinhaDistribution: distribution,
       caixinhaPerStaff: typeof data.caixinhaPerStaff === 'number' ? data.caixinhaPerStaff : 0,
+      totalRakeback: typeof data.totalRakeback === 'number' ? data.totalRakeback : 0,
+      rakebackDistribution: Array.isArray(data.rakebackDistribution) ? data.rakebackDistribution : [],
     }
   }
 
@@ -264,6 +321,11 @@ export default function SessionManagePage() {
       setSession(normalized)
       setStaffOptions(options)
       setSelectedStaffIds(normalized.staffAssignments.map((assignment) => assignment.userId))
+      setSelectedRakebackIds(normalized.rakebackAssignments.map((assignment) => assignment.userId))
+      setSelectedRakebackPercent(normalized.rakebackAssignments.reduce<Record<string, string>>((acc, assignment) => {
+        acc[assignment.userId] = String(Number(assignment.percent || 0))
+        return acc
+      }, {}))
       setShowStaffModal(true)
     } catch (err) {
       alert(typeof err === 'string' ? err : 'Não foi possível carregar o staff')
@@ -273,9 +335,20 @@ export default function SessionManagePage() {
   }
 
   async function saveStaff() {
+    const rakebackPayload = selectedRakebackIds.map((userId) => ({
+      userId,
+      percent: Number(selectedRakebackPercent[userId] || 0),
+    }))
+    const totalRakebackPercent = rakebackPayload.reduce((sum, item) => sum + (Number.isFinite(item.percent) ? item.percent : 0), 0)
+    if (totalRakebackPercent > 100) {
+      alert('A soma do rakeback do staff não pode passar de 100%')
+      return
+    }
+
     setStaffLoading(true)
     try {
-      const { data } = await api.put(`/sessions/${sessionId}/staff`, { userIds: selectedStaffIds })
+      await api.put(`/sessions/${sessionId}/staff`, { userIds: selectedStaffIds })
+      const { data } = await api.put(`/sessions/${sessionId}/rakeback`, { assignments: rakebackPayload })
       setSession(normalizeSession(data))
       setShowStaffModal(false)
     } catch (err) {
@@ -326,6 +399,23 @@ export default function SessionManagePage() {
       alert(typeof err === 'string' ? err : 'Não foi possível gerar o relatório financeiro')
     } finally {
       setFinancialLoading(false)
+    }
+  }
+
+  async function loadBankBalance() {
+    setBankBalanceLoading(true)
+    setBankBalanceError(null)
+    try {
+      const { data } = await api.get('/banking/annapay/balance')
+      const parsed = extractBankBalance(data)
+      setBankBalance(parsed)
+      if (parsed == null) {
+        setBankBalanceError('Saldo indisponível no retorno da conta')
+      }
+    } catch (err) {
+      setBankBalanceError(typeof err === 'string' ? err : 'Não foi possível carregar saldo bancário')
+    } finally {
+      setBankBalanceLoading(false)
     }
   }
 
@@ -429,43 +519,77 @@ export default function SessionManagePage() {
         })
       }
 
-      addSection('Cobranças ao Host')
-      if (financialReport.financialModule === 'PREPAID') {
-        addText('Home game pré-pago: nenhuma cobrança adicional é gerada no fechamento.')
-      } else if (financialReport.charges.length === 0) {
-        addText('Nenhuma cobrança gerada.')
-      } else {
-        financialReport.charges.forEach((item) => {
-          addText(`${item.name} • ${formatCurrency(Number(item.amount))}`, { weight: 'bold', gap: 2 })
-          if (item.skippedReason) {
-            addText(`Pendência: ${item.skippedReason}`, { color: [153, 27, 27] })
-            return
-          }
+      addSection('Liquidação Líquida por Jogador')
+      const netByUser = new Map<string, {
+        userId: string
+        name: string
+        amount: number
+        kind: 'RECEIVE_FROM_HOST' | 'PAY_HOST'
+        skippedReason?: string
+        pixCopyPaste?: string | null
+        pixKey?: string | null
+        orderId?: string | null
+        approved?: boolean
+      }>()
 
-          const pixCopyPaste = extractPixCopyPaste(item.charge)
-          addText('Status: cobrança PIX gerada para pagamento ao host.', { color: [22, 101, 52], gap: 2 })
-          if (pixCopyPaste) addText(`PIX copia e cola: ${pixCopyPaste}`)
+      for (const charge of financialReport.charges) {
+        netByUser.set(charge.userId, {
+          userId: charge.userId,
+          name: charge.name,
+          amount: Number(charge.amount),
+          kind: 'PAY_HOST',
+          skippedReason: charge.skippedReason,
+          pixCopyPaste: extractPixCopyPaste(charge.charge),
         })
       }
 
-      addSection('Pagamentos do Host')
-      if (financialReport.payouts.length === 0) {
-        addText('Nenhuma ordem PIX gerada.')
-      } else {
-        financialReport.payouts.forEach((item) => {
-          const orderId = extractPixOrderId(item.payoutOrder)
-          const pixKey = extractPayoutPixKey(item.payoutOrder)
-          const isApproved = orderId ? approvedPixIds.includes(orderId) : false
+      for (const payout of financialReport.payouts) {
+        const orderId = extractPixOrderId(payout.payoutOrder)
+        netByUser.set(payout.userId, {
+          userId: payout.userId,
+          name: payout.name,
+          amount: Number(payout.amount),
+          kind: 'RECEIVE_FROM_HOST',
+          skippedReason: payout.skippedReason,
+          pixKey: extractPayoutPixKey(payout.payoutOrder),
+          orderId,
+          approved: orderId ? approvedPixIds.includes(orderId) : false,
+        })
+      }
 
-          addText(`${item.name} • ${formatCurrency(Number(item.amount))}`, { weight: 'bold', gap: 2 })
-          if (pixKey) addText(`Chave PIX: ${pixKey}`, { gap: 2 })
-          if (orderId) addText(`Ordem PIX: ${orderId}`, { gap: 2 })
+      const netItems = Array.from(netByUser.values())
+      if (netItems.length === 0) {
+        addText('Nenhuma liquidação pendente para jogadores.')
+      } else {
+        netItems.forEach((item) => {
+          const signedAmount = item.kind === 'RECEIVE_FROM_HOST'
+            ? `+${formatCurrency(item.amount)}`
+            : `-${formatCurrency(item.amount)}`
+          const direction = item.kind === 'RECEIVE_FROM_HOST'
+            ? 'Deve receber do host'
+            : 'Deve pagar ao host'
+
+          addText(`${item.name} • ${signedAmount}`, { weight: 'bold', gap: 2 })
+          addText(direction, { gap: 2 })
+
+          if (item.pixCopyPaste) {
+            addText(`PIX copia e cola: ${item.pixCopyPaste}`, { gap: 2 })
+          }
+          if (item.pixKey) {
+            addText(`Chave PIX: ${item.pixKey}`, { gap: 2 })
+          }
+          if (item.orderId) {
+            addText(`Ordem PIX: ${item.orderId}`, { gap: 2 })
+          }
+
           if (item.skippedReason) {
             addText(`Pendência: ${item.skippedReason}`, { color: [153, 27, 27] })
-          } else {
-            addText(`Status: ${isApproved ? 'PIX enviado pelo host' : 'Aguardando envio do host'}`, {
-              color: isApproved ? [22, 101, 52] : [161, 98, 7],
+          } else if (item.kind === 'RECEIVE_FROM_HOST') {
+            addText(`Status: ${item.approved ? 'PIX enviado pelo host' : 'Aguardando envio do host'}`, {
+              color: item.approved ? [22, 101, 52] : [161, 98, 7],
             })
+          } else {
+            addText('Status: cobrança PIX gerada para pagamento ao host.', { color: [22, 101, 52], gap: 2 })
           }
         })
       }
@@ -500,6 +624,13 @@ export default function SessionManagePage() {
     setParticipantsLoaded(true)
   }, [session, participantsLoaded, user?.id])
 
+  useEffect(() => {
+    if (!session) return
+    const currentIsHost = user?.id === session.homeGame.hostId
+    if (!currentIsHost || session.status !== 'FINISHED') return
+    loadBankBalance()
+  }, [session?.id, session?.status, user?.id])
+
   if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-yellow-400 font-black text-2xl">STACKPLUS</div>
   if (!session) return null
 
@@ -508,10 +639,29 @@ export default function SessionManagePage() {
   const isHost = user?.id === session.homeGame.hostId
   const canStartSession = gameType !== 'CASH_GAME' || session.participantAssignments.length >= 2
   const sessionCaixinha = Number(session.caixinha || 0)
+  const sessionRake = Number(session.rake || 0)
   const hasDistribution = Array.isArray(session.caixinhaDistribution) && session.caixinhaDistribution.length > 0
+  const hasRakebackDistribution = Array.isArray(session.rakebackDistribution) && session.rakebackDistribution.length > 0
   const fallbackCaixinhaPerStaff = session.staffAssignments.length > 0
     ? Number((sessionCaixinha / session.staffAssignments.length).toFixed(2))
     : 0
+  const staffRakebackWinners = hasRakebackDistribution
+    ? session.rakebackDistribution || []
+    : (session.rakebackAssignments || [])
+      .filter((assignment) => Number(assignment.percent || 0) > 0)
+      .map((assignment) => ({
+        userId: assignment.userId,
+        name: assignment.user.name,
+        percent: Number(assignment.percent || 0),
+        amount: Number((sessionRake * Number(assignment.percent || 0) / 100).toFixed(2)),
+        pixType: assignment.user.pixType || null,
+        pixKey: assignment.user.pixKey || null,
+      }))
+  const selectedStaffTotalPercent = selectedRakebackIds.reduce((sum, userId) => {
+    const value = Number(selectedRakebackPercent[userId] || 0)
+    if (!Number.isFinite(value) || value < 0) return sum
+    return sum + value
+  }, 0)
   const staffCaixinhaWinners = hasDistribution
     ? session.caixinhaDistribution || []
     : (session.staffAssignments || []).map((assignment) => ({
@@ -641,33 +791,6 @@ export default function SessionManagePage() {
           </div>
         )}
 
-        {session.staffAssignments.length > 0 && (
-          <div className="mb-6 rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
-            <p className="text-xs uppercase tracking-wide text-blue-200">Staff da partida</p>
-            <p className="mt-2 text-sm text-zinc-200">{session.staffAssignments.map((assignment) => assignment.user.name).join(', ')}</p>
-          </div>
-        )}
-        {session.status === 'FINISHED' && sessionCaixinha > 0 && (
-          <div className="mb-6 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
-            <p className="text-xs uppercase tracking-wide text-emerald-200">Divisão da Caixinha</p>
-            <p className="mt-1 text-sm text-zinc-200">Total registrado: R$ {sessionCaixinha.toFixed(2)}</p>
-            {staffCaixinhaWinners.length > 0 ? (
-              <div className="mt-3 space-y-2">
-                {staffCaixinhaWinners.map((item) => (
-                  <div key={item.userId} className="flex items-center justify-between rounded-lg border border-emerald-500/20 bg-zinc-900/60 px-3 py-2 text-sm">
-                    <div>
-                      <span className="text-zinc-100">{item.name}</span>
-                      {item.pixKey && <p className="text-xs text-zinc-400">PIX{item.pixType ? ` (${item.pixType})` : ''}: {item.pixKey}</p>}
-                    </div>
-                    <span className="font-semibold text-emerald-300">R$ {Number(item.amount).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-zinc-400">Não há staff selecionado para esta sessão.</p>
-            )}
-          </div>
-        )}
         {session.status === 'FINISHED' && isHost && (
           <div className="mb-6 rounded-xl border border-purple-500/25 bg-purple-500/10 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -676,6 +799,14 @@ export default function SessionManagePage() {
                 <p className="mt-1 text-sm text-zinc-300">Gera cobranças PIX para negativos pós-pago e ordens PIX pendentes para positivos.</p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={loadBankBalance}
+                  disabled={bankBalanceLoading}
+                  className="rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {bankBalanceLoading ? 'Atualizando saldo...' : 'Atualizar saldo'}
+                </button>
                 {financialReport && (
                   <button
                     type="button"
@@ -695,6 +826,18 @@ export default function SessionManagePage() {
                   {financialLoading ? 'Gerando...' : 'Gerar relatório financeiro'}
                 </button>
               </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-cyan-500/25 bg-cyan-500/10 p-3">
+              <p className="text-xs uppercase tracking-wide text-cyan-200">Saldo bancário atual</p>
+              {bankBalanceLoading ? (
+                <p className="mt-1 text-sm text-zinc-300">Consultando saldo...</p>
+              ) : bankBalance != null ? (
+                <p className="mt-1 text-lg font-black text-cyan-100">{formatCurrency(bankBalance)}</p>
+              ) : (
+                <p className="mt-1 text-sm text-zinc-300">Saldo indisponível</p>
+              )}
+              {bankBalanceError && <p className="mt-1 text-xs text-red-300">{bankBalanceError}</p>}
             </div>
 
             {financialReport && (
@@ -882,26 +1025,79 @@ export default function SessionManagePage() {
                       {isPositive ? '+' : ''}R$ {result.toFixed(2)}
                     </p>
                     <p className="text-xs text-zinc-400">Inv: R$ {parseFloat(p.chipsIn).toFixed(2)}</p>
+                    {p.hasCashedOut && (
+                      <p className="text-xs text-zinc-400">Cashout: R$ {parseFloat(p.chipsOut).toFixed(2)}</p>
+                    )}
                   </div>
-                  {p.hasCashedOut && <span className="text-xs bg-zinc-700 text-zinc-400 px-2 py-0.5 rounded">Cashout</span>}
                 </div>
               )
             })
           )}
         </div>
+
+        {session.staffAssignments.length > 0 && (
+          <div className="mt-6 rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
+            <p className="text-xs uppercase tracking-wide text-blue-200">Staff da partida</p>
+            <p className="mt-2 text-sm text-zinc-200">{session.staffAssignments.map((assignment) => assignment.user.name).join(', ')}</p>
+          </div>
+        )}
+        {session.status === 'FINISHED' && sessionRake > 0 && (
+          <div className="mt-6 rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
+            <p className="text-xs uppercase tracking-wide text-amber-200">Divisão do Rakeback</p>
+            <p className="mt-1 text-sm text-zinc-200">Rake registrado: R$ {sessionRake.toFixed(2)}</p>
+            <p className="mt-1 text-sm text-zinc-300">Total de rakeback distribuído: R$ {Number(session.totalRakeback || 0).toFixed(2)}</p>
+            {staffRakebackWinners.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {staffRakebackWinners.map((item) => (
+                  <div key={item.userId} className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-zinc-900/60 px-3 py-2 text-sm">
+                    <div>
+                      <span className="text-zinc-100">{item.name}</span>
+                      <p className="text-xs text-zinc-400">{Number(item.percent).toFixed(2)}% do rake</p>
+                    </div>
+                    <span className="font-semibold text-amber-300">R$ {Number(item.amount).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-zinc-400">Não há rakeback configurado para esta sessão.</p>
+            )}
+          </div>
+        )}
+        {session.status === 'FINISHED' && sessionCaixinha > 0 && (
+          <div className="mt-6 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+            <p className="text-xs uppercase tracking-wide text-emerald-200">Divisão da Caixinha</p>
+            <p className="mt-1 text-sm text-zinc-200">Total registrado: R$ {sessionCaixinha.toFixed(2)}</p>
+            {staffCaixinhaWinners.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {staffCaixinhaWinners.map((item) => (
+                  <div key={item.userId} className="flex items-center justify-between rounded-lg border border-emerald-500/20 bg-zinc-900/60 px-3 py-2 text-sm">
+                    <div>
+                      <span className="text-zinc-100">{item.name}</span>
+                      {item.pixKey && <p className="text-xs text-zinc-400">PIX{item.pixType ? ` (${item.pixType})` : ''}: {item.pixKey}</p>}
+                    </div>
+                    <span className="font-semibold text-emerald-300">R$ {Number(item.amount).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-zinc-400">Não há staff selecionado para esta sessão.</p>
+            )}
+          </div>
+        )}
       </main>
 
       {showStaffModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
             <h3 className="text-lg font-bold">Staff da Partida</h3>
-            <p className="mt-1 text-sm text-zinc-400">Selecione quem participa da divisão da caixinha desta partida.</p>
+            <p className="mt-1 text-sm text-zinc-400">Staff (caixinha) e Rakeback são configurações separadas.</p>
 
-            <div className="mt-5 max-h-80 space-y-2 overflow-y-auto pr-1">
+            <p className="mt-4 text-xs uppercase tracking-wide text-zinc-500">Staff da partida (divide caixinha)</p>
+            <div className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
                 const checked = selectedStaffIds.includes(person.id)
                 return (
-                  <label key={person.id} className="flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 cursor-pointer">
+                  <label key={`staff-${person.id}`} className="flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={checked}
@@ -919,6 +1115,54 @@ export default function SessionManagePage() {
               })}
             </div>
 
+            <p className="mt-4 text-xs uppercase tracking-wide text-zinc-500">Rakeback (% do rake)</p>
+            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
+              {staffOptions.map((person) => {
+                const checked = selectedRakebackIds.includes(person.id)
+                return (
+                  <div key={`rakeback-${person.id}`} className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setSelectedRakebackIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
+                          if (!checked && selectedRakebackPercent[person.id] == null) {
+                            setSelectedRakebackPercent((prev) => ({ ...prev, [person.id]: '0' }))
+                          }
+                        }}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-zinc-100">{person.name}</p>
+                        {person.email && <p className="text-xs text-zinc-500">{person.email}</p>}
+                      </div>
+                    </label>
+                    {checked && (
+                      <div className="mt-3">
+                        <label className="text-xs uppercase tracking-wide text-zinc-500">% de Rakeback</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={selectedRakebackPercent[person.id] ?? '0'}
+                          onChange={(e) => setSelectedRakebackPercent((prev) => ({ ...prev, [person.id]: e.target.value }))}
+                          className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm">
+              <p className="text-zinc-300">Total de rakeback selecionado: <span className={selectedStaffTotalPercent > 100 ? 'text-red-400 font-semibold' : 'text-emerald-300 font-semibold'}>{selectedStaffTotalPercent.toFixed(2)}%</span></p>
+              {selectedStaffTotalPercent > 100 && <p className="mt-1 text-xs text-red-400">A soma não pode ultrapassar 100%.</p>}
+            </div>
+
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
@@ -930,7 +1174,7 @@ export default function SessionManagePage() {
               <button
                 type="button"
                 onClick={saveStaff}
-                disabled={staffLoading}
+                disabled={staffLoading || selectedStaffTotalPercent > 100}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-50"
               >
                 {staffLoading ? 'Salvando...' : 'Salvar Staff'}

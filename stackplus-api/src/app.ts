@@ -10,6 +10,8 @@ const app = express()
 app.use(helmet())
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'https://www.stackplus.com.br',
+  'https://stackplus.com.br',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',

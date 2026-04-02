@@ -117,3 +117,107 @@ export async function getTransactions(sessionId: string, userId?: string) {
     orderBy: { createdAt: 'desc' },
   })
 }
+
+export async function deleteTransaction(transactionId: string) {
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.transaction.findUniqueOrThrow({
+      where: { id: transactionId },
+      include: {
+        session: {
+          include: {
+            homeGame: true,
+          },
+        },
+      },
+    })
+
+    if (target.session.status !== 'ACTIVE') {
+      throw new Error('Só é possível excluir transações com a sessão ativa')
+    }
+
+    await tx.transaction.delete({ where: { id: transactionId } })
+
+    const remaining = await tx.transaction.findMany({
+      where: {
+        sessionId: target.sessionId,
+        userId: target.userId,
+      },
+      orderBy: [
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
+    })
+
+    if (remaining.length === 0) {
+      await tx.playerSessionState.deleteMany({
+        where: {
+          sessionId: target.sessionId,
+          userId: target.userId,
+        },
+      })
+
+      return {
+        deleted: true,
+        sessionId: target.sessionId,
+        userId: target.userId,
+      }
+    }
+
+    let chipsInAmount = 0
+    let chipsOutAmount = 0
+    let currentStackChips = 0
+    let hasCashedOut = false
+
+    for (const transaction of remaining) {
+      const amount = Number(transaction.amount)
+      const chips = Number(transaction.chips)
+
+      if (
+        transaction.type === TransactionType.BUYIN ||
+        transaction.type === TransactionType.REBUY ||
+        transaction.type === TransactionType.ADDON
+      ) {
+        chipsInAmount += amount
+        currentStackChips += chips
+        continue
+      }
+
+      if (transaction.type === TransactionType.CASHOUT) {
+        chipsOutAmount += amount
+        currentStackChips = 0
+        hasCashedOut = true
+      }
+    }
+
+    await tx.playerSessionState.upsert({
+      where: {
+        sessionId_userId: {
+          sessionId: target.sessionId,
+          userId: target.userId,
+        },
+      },
+      create: {
+        sessionId: target.sessionId,
+        userId: target.userId,
+        chipsIn: chipsInAmount,
+        chipsOut: chipsOutAmount,
+        currentStack: currentStackChips,
+        result: chipsOutAmount - chipsInAmount,
+        hasCashedOut,
+      },
+      update: {
+        chipsIn: chipsInAmount,
+        chipsOut: chipsOutAmount,
+        currentStack: currentStackChips,
+        result: chipsOutAmount - chipsInAmount,
+        hasCashedOut,
+      },
+    })
+
+    return {
+      deleted: true,
+      sessionId: target.sessionId,
+      userId: target.userId,
+    }
+  })
+}

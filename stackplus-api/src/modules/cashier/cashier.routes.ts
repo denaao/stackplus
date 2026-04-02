@@ -44,4 +44,21 @@ router.get('/transactions', authenticate, async (req: AuthRequest, res: Response
   res.json(transactions)
 })
 
+router.delete('/transaction/:transactionId', authenticate, async (req: AuthRequest, res: Response) => {
+  const result = await CashierService.deleteTransaction(req.params.transactionId)
+
+  try {
+    const io = getIO()
+    io.to(`session:${result.sessionId}`).emit('transaction:deleted', { transactionId: req.params.transactionId })
+
+    const { getRanking } = await import('../ranking/ranking.service')
+    const ranking = await getRanking(result.sessionId)
+    io.to(`session:${result.sessionId}`).emit('ranking:updated', ranking)
+  } catch (error) {
+    console.warn('[cashier] realtime broadcast failed after delete:', error)
+  }
+
+  res.json(result)
+})
+
 export default router

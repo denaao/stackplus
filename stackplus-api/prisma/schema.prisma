@@ -101,6 +101,7 @@ model User {
   cashierSessions Session[]       @relation("CashierSessions")
   playerStates    PlayerSessionState[]
   sessionStaffAssignments SessionStaff[]
+  sessionRakebackAssignments SessionRakeback[]
   sessionParticipantAssignments SessionParticipant[]
   prepaidChargePendings PrepaidChargePending[]
   sessionFinancialChargePendings SessionFinancialChargePending[]
@@ -193,6 +194,7 @@ model Session {
   homeGameId  String
   pokerVariant String?
   gameType    GameType      @default(CASH_GAME)
+  financialModule FinancialModule @default(POSTPAID)
   chipValue   Decimal?      @db.Decimal(10, 2)
   smallBlind  Decimal?      @db.Decimal(10, 2)
   bigBlind    Decimal?      @db.Decimal(10, 2)
@@ -219,6 +221,7 @@ model Session {
   transactions Transaction[]
   playerStates PlayerSessionState[]
   staffAssignments SessionStaff[]
+  rakebackAssignments SessionRakeback[]
   participantAssignments SessionParticipant[]
   prepaidChargePendings PrepaidChargePending[]
   sessionFinancialChargePendings SessionFinancialChargePending[]
@@ -232,6 +235,21 @@ model SessionParticipant {
   id        String   @id @default(uuid())
   sessionId String
   userId    String
+  createdAt DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model SessionRakeback {
+  id        String   @id @default(uuid())
+  sessionId String
+  userId    String
+  percent   Decimal  @default(0) @db.Decimal(5, 2)
   createdAt DateTime @default(now())
 
   session Session @relation(fields: [sessionId], references: [id])

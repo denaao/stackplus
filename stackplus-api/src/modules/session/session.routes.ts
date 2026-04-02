@@ -10,6 +10,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     homeGameId,
     pokerVariant,
     gameType,
+    financialModule,
     chipValue,
     smallBlind,
     bigBlind,
@@ -26,6 +27,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     homeGameId: z.string().uuid(),
     pokerVariant: z.enum(['HOLDEN', 'BUTTON_CHOICE', 'PINEAPPLE', 'OMAHA', 'OMAHA_FIVE', 'OMAHA_SIX']).optional(),
     gameType: z.enum(['CASH_GAME', 'TOURNAMENT']).optional(),
+    financialModule: z.enum(['POSTPAID', 'PREPAID', 'HYBRID']).optional(),
     chipValue: z.number().positive().optional(),
     smallBlind: z.number().nonnegative().optional(),
     bigBlind: z.number().nonnegative().optional(),
@@ -43,6 +45,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   const session = await SessionService.createSession(homeGameId, req.user!.userId, {
     pokerVariant,
     gameType,
+    financialModule,
     chipValue,
     smallBlind,
     bigBlind,
@@ -102,6 +105,17 @@ router.patch('/:id/end', authenticate, async (req: AuthRequest, res: Response) =
 router.put('/:id/staff', authenticate, async (req: AuthRequest, res: Response) => {
   const { userIds } = z.object({ userIds: z.array(z.string().uuid()) }).parse(req.body)
   const session = await SessionService.updateSessionStaff(req.params.id, req.user!.userId, userIds)
+  res.json(session)
+})
+
+router.put('/:id/rakeback', authenticate, async (req: AuthRequest, res: Response) => {
+  const { assignments } = z.object({
+    assignments: z.array(z.object({
+      userId: z.string().uuid(),
+      percent: z.number().min(0).max(100),
+    })),
+  }).parse(req.body)
+  const session = await SessionService.updateSessionRakeback(req.params.id, req.user!.userId, assignments)
   res.json(session)
 })
 

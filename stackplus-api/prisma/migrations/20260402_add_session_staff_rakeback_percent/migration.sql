@@ -1,0 +1,2 @@
+ALTER TABLE "SessionStaff"
+ADD COLUMN "rakebackPercent" DECIMAL(5,2) NOT NULL DEFAULT 0;

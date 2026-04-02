@@ -27,6 +27,12 @@ interface StaffAssignment {
   user: { id: string; name: string; email?: string }
 }
 
+interface RakebackAssignment {
+  userId: string
+  percent?: number
+  user: { id: string; name: string; email?: string }
+}
+
 interface PrepaidChargeResult {
   playerMode: 'POSTPAID' | 'PREPAID'
   requiresCharge: boolean
@@ -249,6 +255,7 @@ export default function CashierPage() {
   const [checkingChargeStatus, setCheckingChargeStatus] = useState(false)
   const [chargeStatusMessage, setChargeStatusMessage] = useState('')
   const [autoProcessingPaidCharge, setAutoProcessingPaidCharge] = useState(false)
+  const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null)
 
   async function refreshCashierSnapshot() {
     const [sessionResponse, transactionsResponse] = await Promise.all([
@@ -269,11 +276,30 @@ export default function CashierPage() {
         api.get(`/groups/${data.homeGameId}/members`),
         api.get('/cashier/transactions', { params: { sessionId } }),
       ])
-      const allMembers: Member[] = membersResponse.data.map((m: any) => ({
-        id: m.user.id,
-        name: m.user.name,
-        paymentMode: m.paymentMode || null,
-      }))
+      const memberMap = new Map<string, Member>()
+
+      for (const m of membersResponse.data || []) {
+        memberMap.set(m.user.id, {
+          id: m.user.id,
+          name: m.user.name,
+          paymentMode: m.paymentMode || null,
+        })
+      }
+
+      // Host may not exist in /groups/:homeGameId/members, so we merge selected
+      // session participants to ensure anyone selected for the match appears.
+      for (const assignment of Array.isArray(data.participantAssignments) ? data.participantAssignments : []) {
+        if (!assignment?.userId || !assignment?.user?.name) continue
+        if (!memberMap.has(assignment.userId)) {
+          memberMap.set(assignment.userId, {
+            id: assignment.userId,
+            name: assignment.user.name,
+            paymentMode: null,
+          })
+        }
+      }
+
+      const allMembers: Member[] = Array.from(memberMap.values())
       const participantIds: string[] = Array.isArray(data.participantAssignments)
         ? data.participantAssignments.map((assignment: any) => assignment.userId)
         : []
@@ -352,7 +378,7 @@ export default function CashierPage() {
     try {
       const amount = Number((parsedChips * chipValue).toFixed(2))
       const selectedMember = members.find((member) => member.id === form.userId)
-      const playerMode = resolvePlayerPaymentMode(session?.homeGame?.financialModule, selectedMember?.paymentMode)
+      const playerMode = resolvePlayerPaymentMode(session?.financialModule || session?.homeGame?.financialModule, selectedMember?.paymentMode)
 
       if (transactionType !== 'CASHOUT' && playerMode === 'PREPAID') {
         const purchaseType = transactionType as 'BUYIN' | 'REBUY' | 'ADDON'
@@ -556,6 +582,23 @@ export default function CashierPage() {
     }
   }
 
+  async function handleDeleteTransaction(transactionId: string) {
+    if (!confirm('Excluir esta transação? Os cálculos do jogador serão refeitos automaticamente.')) return
+
+    setDeletingTransactionId(transactionId)
+    try {
+      await api.delete(`/cashier/transaction/${transactionId}`)
+      await refreshCashierSnapshot()
+      setSuccess('Transação excluída e cálculos atualizados.')
+      setTimeout(() => setSuccess(''), 2500)
+    } catch (err: any) {
+      const message = typeof err === 'string' ? err : 'Erro ao excluir transação'
+      setError(message)
+    } finally {
+      setDeletingTransactionId(null)
+    }
+  }
+
   useEffect(() => {
     if (!showPrepaidModal || !prepaidChargeResult?.charge?.id) return
 
@@ -628,7 +671,15 @@ export default function CashierPage() {
     return sum + (chipsIn - chipsOut)
   }, 0) / chipValue
   const staffAssignments: StaffAssignment[] = Array.isArray(session?.staffAssignments) ? session.staffAssignments : []
+  const rakebackAssignments: RakebackAssignment[] = Array.isArray(session?.rakebackAssignments) ? session.rakebackAssignments : []
+  const parsedRake = parseFloat(endForm.rake || '0') || 0
   const parsedCaixinha = parseFloat(endForm.caixinha || '0') || 0
+  const totalRakebackPercent = rakebackAssignments.reduce((sum, assignment) => {
+    const value = Number(assignment.percent || 0)
+    if (!Number.isFinite(value) || value <= 0) return sum
+    return sum + value
+  }, 0)
+  const hasInvalidRakebackSplit = totalRakebackPercent > 100
   const hasInvalidCaixinhaSplit = parsedCaixinha > 0 && staffAssignments.length > 0
     ? Math.round(parsedCaixinha * 100) % staffAssignments.length !== 0
     : false
@@ -641,6 +692,19 @@ export default function CashierPage() {
       name: assignment.user.name,
       amount: caixinhaPerStaff,
     }))
+    : []
+  const rakebackDistributionPreview = parsedRake > 0 && rakebackAssignments.length > 0
+    ? rakebackAssignments
+      .filter((assignment) => Number(assignment.percent || 0) > 0)
+      .map((assignment) => {
+        const percent = Number(assignment.percent || 0)
+        return {
+          userId: assignment.userId,
+          name: assignment.user.name,
+          percent,
+          amount: Number((parsedRake * percent / 100).toFixed(2)),
+        }
+      })
     : []
 
   async function handleEndSession(e: React.FormEvent) {
@@ -655,6 +719,10 @@ export default function CashierPage() {
     }
     if (hasInvalidCaixinhaSplit) {
       setError('A caixinha deve ser divisível igualmente entre todos do staff')
+      return
+    }
+    if (hasInvalidRakebackSplit) {
+      setError('A soma do rakeback do staff não pode passar de 100%')
       return
     }
     setLoading(true)
@@ -762,24 +830,33 @@ export default function CashierPage() {
 
                 <div className="space-y-1">
                   <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['BUYIN', 'REBUY', 'CASHOUT'].map((t) => {
+                  <div className="flex flex-col gap-2">
+                    {(['BUYIN', 'REBUY', 'CASHOUT'] as const).map((t) => {
                       const isDisabled =
                         (t === 'BUYIN' && hasExistingBuyIn) ||
                         (t === 'CASHOUT' && Boolean(selectedPlayerState?.hasCashedOut)) ||
                         (t === 'REBUY' && Boolean(selectedPlayerState?.hasCashedOut))
+
+                      const activeClass = t === 'CASHOUT'
+                        ? 'bg-red-500 text-white border-2 border-red-300'
+                        : 'bg-yellow-400 text-zinc-900 border-2 border-yellow-200'
+
+                      const idleClass = t === 'CASHOUT'
+                        ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-transparent'
+                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-transparent'
+
                       return (
                         <button
                           key={t}
                           type="button"
                           disabled={isDisabled}
-                          onClick={() => !isDisabled && setTransactionType(t as 'BUYIN' | 'REBUY' | 'CASHOUT')}
-                          className={`py-2 rounded-lg text-sm font-bold transition-colors ${
+                          onClick={() => !isDisabled && setTransactionType(t)}
+                          className={`w-full py-2 rounded-lg text-sm font-bold transition-colors ${
                             isDisabled
                               ? 'bg-zinc-800/60 text-zinc-500 cursor-not-allowed'
                               : currentType === t
-                                ? 'bg-yellow-400 text-zinc-900'
-                                : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                                ? activeClass
+                                : idleClass
                           }`}
                         >
                           {t}
@@ -892,6 +969,16 @@ export default function CashierPage() {
                                 <p className="text-zinc-500">{formatChips(transaction.chips)} fichas</p>
                               </div>
                             </div>
+                            <div className="mt-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTransaction(transaction.id)}
+                                disabled={deletingTransactionId === transaction.id}
+                                className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                              >
+                                {deletingTransactionId === transaction.id ? 'Excluindo...' : 'Excluir transação'}
+                              </button>
+                            </div>
                             {transaction.note && <p className="mt-2 text-zinc-400">{transaction.note}</p>}
                           </div>
                         ))}
@@ -919,7 +1006,31 @@ export default function CashierPage() {
 
             <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
               <p className="text-zinc-400">Staff da partida:</p>
-              <p className="mt-2 text-zinc-100">{staffAssignments.length > 0 ? staffAssignments.map((assignment) => assignment.user.name).join(', ') : 'Nenhum staff selecionado'}</p>
+              <p className="mt-2 text-zinc-100">
+                {staffAssignments.length > 0 ? staffAssignments.map((assignment) => assignment.user.name).join(', ') : 'Nenhum staff selecionado'}
+              </p>
+              <p className="mt-3 text-zinc-400">Rakeback:</p>
+              <p className="mt-1 text-zinc-100">
+                {rakebackAssignments.length > 0
+                  ? rakebackAssignments.map((assignment) => `${assignment.user.name} (${Number(assignment.percent || 0).toFixed(2)}%)`).join(', ')
+                  : 'Nenhum rakeback selecionado'}
+              </p>
+              {parsedRake > 0 && rakebackAssignments.length > 0 && (
+                <p className="mt-2 text-xs text-zinc-400">Rakeback total configurado: {totalRakebackPercent.toFixed(2)}% do rake</p>
+              )}
+              {hasInvalidRakebackSplit && (
+                <p className="mt-2 text-xs text-red-400">A soma das porcentagens de rakeback do staff não pode ultrapassar 100%.</p>
+              )}
+              {rakebackDistributionPreview.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {rakebackDistributionPreview.map((item) => (
+                    <div key={`rakeback-${item.userId}`} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+                      <span className="text-zinc-200">{item.name} ({item.percent.toFixed(2)}%)</span>
+                      <span className="font-semibold text-amber-300">{formatCurrency(item.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {parsedCaixinha > 0 && staffAssignments.length > 0 && (
                 <p className="mt-2 text-xs text-zinc-400">Divisão da caixinha: {formatCurrency(caixinhaPerStaff)} por pessoa</p>
               )}
