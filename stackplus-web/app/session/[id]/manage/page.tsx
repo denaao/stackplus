@@ -1123,81 +1123,76 @@ export default function SessionManagePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
             <h3 className="text-lg font-bold">Staff da Partida</h3>
-            <p className="mt-1 text-sm text-zinc-400">Staff (caixinha) e Rakeback são configurações separadas.</p>
+            <p className="mt-1 text-sm text-zinc-400">Selecione quem faz parte do staff e configure o rakeback.</p>
 
-            <p className="mt-4 text-xs uppercase tracking-wide text-zinc-500">Staff da partida (divide caixinha)</p>
-            <div className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-1">
+            <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Staff (divide caixinha)</p>
+            <div className="mt-3 max-h-40 space-y-2 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
                 const checked = selectedStaffIds.includes(person.id)
                 return (
-                  <label key={`staff-${person.id}`} className="flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedStaffIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
-                      }}
-                      className="mt-1"
-                    />
-                    <div>
-                      <p className="font-medium text-zinc-100">{person.name}</p>
-                      {person.email && <p className="text-xs text-zinc-500">{person.email}</p>}
-                    </div>
-                  </label>
+                  <button
+                    type="button"
+                    key={`staff-${person.id}`}
+                    onClick={() => {
+                      setSelectedStaffIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
+                    }}
+                    className={`w-full rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
+                  >
+                    <p className={`font-semibold ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
+                  </button>
                 )
               })}
             </div>
 
-            <p className="mt-4 text-xs uppercase tracking-wide text-zinc-500">Rakeback (% do rake)</p>
-            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
+            <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Rakeback (% do rake)</p>
+            <div className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
                 const checked = selectedRakebackIds.includes(person.id)
-                return (
-                  <div key={`rakeback-${person.id}`} className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          setSelectedRakebackIds((prev) => {
-                            if (checked) {
-                              const removedIndex = prev.indexOf(person.id)
-                              const next = prev.filter((id) => id !== person.id)
-                              setActiveRakebackIndex((current) => {
-                                if (next.length === 0) return null
-                                if (current == null) return null
-                                if (removedIndex === -1) return current
-                                if (current > removedIndex) return current - 1
-                                if (current === removedIndex) return Math.min(removedIndex, next.length - 1)
-                                return current
-                              })
-                              return next
-                            }
+                const currentPercent = Number(selectedRakebackPercent[person.id] || 0)
 
-                            const next = [...prev, person.id]
-                            setSelectedRakebackPercent((current) => {
-                              if (current[person.id] != null) return current
-                              return { ...current, [person.id]: '0' }
-                            })
-                            setActiveRakebackIndex((current) => current == null ? next.length - 1 : current)
-                            return next
+                return (
+                  <button
+                    type="button"
+                    key={`rakeback-toggle-${person.id}`}
+                    onClick={() => {
+                      setSelectedRakebackIds((prev) => {
+                        if (checked) {
+                          const removedIndex = prev.indexOf(person.id)
+                          const next = prev.filter((id) => id !== person.id)
+                          setActiveRakebackIndex((current) => {
+                            if (next.length === 0) return null
+                            if (current == null) return null
+                            if (removedIndex === -1) return current
+                            if (current > removedIndex) return current - 1
+                            if (current === removedIndex) return Math.min(removedIndex, next.length - 1)
+                            return current
                           })
-                        }}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium text-zinc-100">{person.name}</p>
-                        {person.email && <p className="text-xs text-zinc-500">{person.email}</p>}
-                      </div>
-                    </label>
-                  </div>
+                          return next
+                        }
+
+                        const next = [...prev, person.id]
+                        setSelectedRakebackPercent((current) => {
+                          if (current[person.id] != null) return current
+                          return { ...current, [person.id]: '0' }
+                        })
+                        setActiveRakebackIndex((current) => current == null ? next.length - 1 : current)
+                        return next
+                      })
+                    }}
+                    className={`w-full rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className={`font-semibold ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
+                      {checked && <span className="text-sm font-semibold text-emerald-300">{currentPercent.toFixed(2)}%</span>}
+                    </div>
+                  </button>
                 )
               })}
             </div>
 
             <div className="mt-3 space-y-2">
               {selectedRakebackIds.length === 0 ? (
-                <p className="text-sm text-zinc-400">Nenhuma pessoa selecionada para rakeback.</p>
+                <p className="text-sm text-zinc-400 text-center">Nenhuma pessoa selecionada para rakeback.</p>
               ) : (
                 selectedRakebackIds.map((userId, index) => {
                   const person = staffOptions.find((option) => option.id === userId)
@@ -1217,76 +1212,60 @@ export default function SessionManagePage() {
                   const allowedOptions = Array.from(allowedOptionsSet).sort((a, b) => a - b)
                   const isActive = activeRakebackIndex === index
 
+                  if (!isActive) return null
+
                   return (
-                    <button
-                      type="button"
-                      key={`rakeback-selected-${userId}`}
-                      onClick={() => setActiveRakebackIndex(index)}
-                      className={`w-full rounded-xl border p-3 text-left transition-colors ${isActive ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700'}`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-zinc-100">{person.name}</p>
-                          {person.email && <p className="text-xs text-zinc-500">{person.email}</p>}
-                        </div>
-                        <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-semibold text-zinc-200">
-                          {currentPercent.toFixed(2)}%
-                        </span>
+                    <div key={`rakeback-selected-${userId}`} className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-semibold text-emerald-300">{person.name}</p>
+                        <span className="text-xs text-emerald-200">Editando</span>
                       </div>
+                      <label className="text-xs uppercase tracking-wide text-zinc-400 block mb-2">% de Rakeback</label>
+                      <select
+                        value={selectedRakebackPercent[userId] ?? '0'}
+                        onChange={(e) => {
+                          const nextValue = e.target.value
+                          const nextNumber = Number(nextValue || 0)
+                          const currentTotal = selectedRakebackIds.reduce((sum, id) => {
+                            const value = Number(selectedRakebackPercent[id] || 0)
+                            return sum + (Number.isFinite(value) && value > 0 ? value : 0)
+                          }, 0)
+                          const totalWithNext = currentTotal - currentPercent + nextNumber
 
-                      {isActive && (
-                        <div className="mt-3">
-                          <label className="text-xs uppercase tracking-wide text-zinc-500">% de Rakeback</label>
-                          <select
-                            value={selectedRakebackPercent[userId] ?? '0'}
-                            onChange={(e) => {
-                              const nextValue = e.target.value
-                              const nextNumber = Number(nextValue || 0)
-                              const currentTotal = selectedRakebackIds.reduce((sum, id) => {
-                                const value = Number(selectedRakebackPercent[id] || 0)
-                                return sum + (Number.isFinite(value) && value > 0 ? value : 0)
-                              }, 0)
-                              const totalWithNext = currentTotal - currentPercent + nextNumber
+                          setSelectedRakebackPercent((prev) => ({ ...prev, [userId]: nextValue }))
 
-                              setSelectedRakebackPercent((prev) => ({ ...prev, [userId]: nextValue }))
+                          if (totalWithNext >= 100) {
+                            setActiveRakebackIndex(null)
+                            return
+                          }
 
-                              if (totalWithNext >= 100) {
-                                setActiveRakebackIndex(null)
-                                return
-                              }
-
-                              const nextIndex = index + 1
-                              setActiveRakebackIndex(nextIndex < selectedRakebackIds.length ? nextIndex : null)
-                            }}
-                            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-                          >
-                            {allowedOptions.map((value) => (
-                              <option key={`${userId}-${value}`} value={String(value)}>{value}%</option>
-                            ))}
-                          </select>
-                          <p className="mt-2 text-xs text-zinc-500">Máximo disponível para esta pessoa: {maxForCurrent.toFixed(2)}%</p>
-                        </div>
-                      )}
-                    </button>
+                          const nextIndex = index + 1
+                          setActiveRakebackIndex(nextIndex < selectedRakebackIds.length ? nextIndex : null)
+                        }}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 font-medium"
+                      >
+                        {allowedOptions.map((value) => (
+                          <option key={`${userId}-${value}`} value={String(value)}>{value}%</option>
+                        ))}
+                      </select>
+                    </div>
                   )
                 })
               )}
             </div>
 
-            <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm">
-              <p className="text-zinc-300">Total de rakeback selecionado: <span className={selectedStaffTotalPercent > 100 ? 'text-red-400 font-semibold' : 'text-emerald-300 font-semibold'}>{selectedStaffTotalPercent.toFixed(2)}%</span></p>
-              <p className="mt-1 text-xs text-zinc-500">Restante disponível: {remainingRakebackPercent.toFixed(2)}%</p>
-              {selectedStaffTotalPercent > 100 && <p className="mt-1 text-xs text-red-400">A soma não pode ultrapassar 100%.</p>}
+            <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3 text-sm">
+              <p className="text-zinc-300">Total de rakeback: <span className={selectedStaffTotalPercent > 100 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>{selectedStaffTotalPercent.toFixed(2)}%</span> de 100%</p>
             </div>
 
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {
                   setShowStaffModal(false)
                   setActiveRakebackIndex(null)
                 }}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
               >
                 Cancelar
               </button>
@@ -1294,7 +1273,7 @@ export default function SessionManagePage() {
                 type="button"
                 onClick={saveStaff}
                 disabled={staffLoading || selectedStaffTotalPercent > 100}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
               >
                 {staffLoading ? 'Salvando...' : 'Salvar Staff'}
               </button>
