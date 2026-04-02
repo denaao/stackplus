@@ -227,7 +227,7 @@ export default function SessionManagePage() {
   const [participantOptions, setParticipantOptions] = useState<ParticipantOption[]>([])
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
   const [participantsLoading, setParticipantsLoading] = useState(false)
-  const [participantsLoaded, setParticipantsLoaded] = useState(false)
+  const [showParticipantsPicker, setShowParticipantsPicker] = useState(false)
   const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null)
   const [financialLoading, setFinancialLoading] = useState(false)
   const [bankBalance, setBankBalance] = useState<number | null>(null)
@@ -621,15 +621,6 @@ export default function SessionManagePage() {
   }
 
   useEffect(() => {
-    if (!session || participantsLoaded) return
-    const currentGameType = session.gameType || session.homeGame.gameType || 'CASH_GAME'
-    const currentIsHost = user?.id === session.homeGame.hostId
-    if (!currentIsHost || currentGameType !== 'CASH_GAME') return
-    loadParticipantOptions()
-    setParticipantsLoaded(true)
-  }, [session, participantsLoaded, user?.id])
-
-  useEffect(() => {
     if (!session) return
     const currentIsHost = user?.id === session.homeGame.hostId
     if (!currentIsHost || session.status !== 'FINISHED') return
@@ -642,6 +633,8 @@ export default function SessionManagePage() {
   const gameType = session.gameType || session.homeGame.gameType || 'CASH_GAME'
   const pokerVariant = session.pokerVariant || 'HOLDEN'
   const isHost = user?.id === session.homeGame.hostId
+  const hasSavedStaff = session.staffAssignments.length > 0
+  const hasSavedParticipants = session.participantAssignments.length > 0
   const canStartSession = gameType !== 'CASH_GAME' || session.participantAssignments.length >= 2
   const sessionCaixinha = Number(session.caixinha || 0)
   const sessionRake = Number(session.rake || 0)
@@ -758,58 +751,83 @@ export default function SessionManagePage() {
                 <p className="text-xs uppercase tracking-wide text-zinc-500">Participantes da partida</p>
                 <p className="mt-1 text-sm text-zinc-300">Escolha quem do home game vai participar desta sessão de cash game.</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedParticipantIds(participantOptions.map((person) => person.id))}
-                  disabled={participantsLoading || participantOptions.length === 0}
-                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-                >
-                  Selecionar todos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedParticipantIds([])}
-                  disabled={participantsLoading}
-                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-                >
-                  Limpar
-                </button>
-                <button
-                  type="button"
-                  onClick={saveParticipants}
-                  disabled={participantsLoading}
-                  className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
-                >
-                  {participantsLoading ? 'Salvando...' : 'Salvar participantes'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowParticipantsPicker((prev) => !prev)
+                  if (!showParticipantsPicker) {
+                    await loadParticipantOptions()
+                  }
+                }}
+                disabled={participantsLoading || !hasSavedStaff}
+                className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+              >
+                {showParticipantsPicker ? 'Ocultar participantes' : 'Escolher participantes'}
+              </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {participantOptions.map((person) => {
-                const checked = selectedParticipantIds.includes(person.id)
-                return (
-                  <label key={person.id} className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedParticipantIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
-                      }}
-                      className="mt-1"
-                    />
-                    <div>
-                      <p className="font-medium text-zinc-100">{person.name}</p>
-                      {person.email && <p className="text-xs text-zinc-500">{person.email}</p>}
-                    </div>
-                  </label>
-                )
-              })}
-              {participantOptions.length === 0 && (
-                <p className="text-sm text-zinc-500">Nenhuma pessoa cadastrada no home game.</p>
-              )}
-            </div>
+            {!hasSavedStaff && (
+              <p className="mt-3 text-xs text-amber-300">Salve o staff da partida para habilitar a escolha de participantes.</p>
+            )}
+
+            {hasSavedParticipants && (
+              <p className="mt-3 text-xs text-emerald-300">Participantes salvos: {session.participantAssignments.map((item) => item.user.name).join(', ')}</p>
+            )}
+
+            {showParticipantsPicker && (
+              <>
+                <div className="mt-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedParticipantIds(participantOptions.map((person) => person.id))}
+                    disabled={participantsLoading || participantOptions.length === 0}
+                    className="min-w-[128px] rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    Selecionar todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedParticipantIds([])}
+                    disabled={participantsLoading}
+                    className="min-w-[128px] rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    Limpar
+                  </button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {participantOptions.map((person) => {
+                    const checked = selectedParticipantIds.includes(person.id)
+                    return (
+                      <button
+                        type="button"
+                        key={person.id}
+                        onClick={() => {
+                          setSelectedParticipantIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
+                        }}
+                        className={`rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700'}`}
+                      >
+                        <p className={`font-medium ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
+                      </button>
+                    )
+                  })}
+                  {participantOptions.length === 0 && (
+                    <p className="text-sm text-zinc-500">Nenhuma pessoa cadastrada no home game.</p>
+                  )}
+                </div>
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={saveParticipants}
+                    disabled={participantsLoading}
+                    className="rounded-lg bg-yellow-400 px-4 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+                  >
+                    {participantsLoading ? 'Salvando...' : 'Salvar participantes'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -817,9 +835,10 @@ export default function SessionManagePage() {
           <div className="mb-6">
             <button
               onClick={() => router.push(`/cashier/${sessionId}`)}
-              className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-4 py-3 rounded-lg text-base transition-colors"
+              disabled={!hasSavedParticipants}
+              className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-4 py-3 rounded-lg text-base transition-colors disabled:opacity-50"
             >
-              Ir para o Caixa
+              {hasSavedParticipants ? 'Ir para o Caixa' : 'Salve os participantes para liberar o Caixa'}
             </button>
           </div>
         )}
