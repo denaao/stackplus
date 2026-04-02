@@ -366,21 +366,14 @@ export async function listWebhooks(virtualAccount?: string | null) {
 async function upsertWebhook(input: AnnapayWebhookUpsertInput, virtualAccount?: string | null) {
   const resolvedVirtualAccount = resolveVirtualAccount(virtualAccount)
 
-  try {
-    return await requestWithAuth<unknown>({
-      method: 'PUT',
-      path: '/webhook',
-      virtualAccount: resolvedVirtualAccount,
-      body: input,
-    })
-  } catch {
-    return requestWithAuth<unknown>({
-      method: 'POST',
-      path: '/webhook',
-      virtualAccount: resolvedVirtualAccount,
-      body: input,
-    })
-  }
+  // Annapay currently exposes webhook upsert via PUT.
+  // Avoid POST fallback because it can hide the real validation error from PUT.
+  return requestWithAuth<unknown>({
+    method: 'PUT',
+    path: '/webhook',
+    virtualAccount: resolvedVirtualAccount,
+    body: input,
+  })
 }
 
 export async function syncCobWebhookConfig(virtualAccount?: string | null) {

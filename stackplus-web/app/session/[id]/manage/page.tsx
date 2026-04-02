@@ -66,6 +66,8 @@ const pokerVariantLabels: Record<'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMA
   OMAHA_SIX: 'Omaha Six',
 }
 
+const rakebackStepOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+
 interface PlayerState {
   userId: string; chipsIn: string; chipsOut: string
   currentStack: string; result: string; hasCashedOut: boolean
@@ -220,6 +222,7 @@ export default function SessionManagePage() {
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([])
   const [selectedRakebackIds, setSelectedRakebackIds] = useState<string[]>([])
   const [selectedRakebackPercent, setSelectedRakebackPercent] = useState<Record<string, string>>({})
+  const [activeRakebackIndex, setActiveRakebackIndex] = useState<number | null>(null)
   const [staffLoading, setStaffLoading] = useState(false)
   const [participantOptions, setParticipantOptions] = useState<ParticipantOption[]>([])
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
@@ -326,6 +329,7 @@ export default function SessionManagePage() {
         acc[assignment.userId] = String(Number(assignment.percent || 0))
         return acc
       }, {}))
+      setActiveRakebackIndex(normalized.rakebackAssignments.length > 0 ? 0 : null)
       setShowStaffModal(true)
     } catch (err) {
       alert(typeof err === 'string' ? err : 'Não foi possível carregar o staff')
@@ -351,6 +355,7 @@ export default function SessionManagePage() {
       const { data } = await api.put(`/sessions/${sessionId}/rakeback`, { assignments: rakebackPayload })
       setSession(normalizeSession(data))
       setShowStaffModal(false)
+      setActiveRakebackIndex(null)
     } catch (err) {
       alert(typeof err === 'string' ? err : 'Não foi possível salvar o staff')
     } finally {
@@ -662,6 +667,7 @@ export default function SessionManagePage() {
     if (!Number.isFinite(value) || value < 0) return sum
     return sum + value
   }, 0)
+  const remainingRakebackPercent = Math.max(0, Number((100 - selectedStaffTotalPercent).toFixed(2)))
   const staffCaixinhaWinners = hasDistribution
     ? session.caixinhaDistribution || []
     : (session.staffAssignments || []).map((assignment) => ({
@@ -1153,10 +1159,29 @@ export default function SessionManagePage() {
                         type="checkbox"
                         checked={checked}
                         onChange={() => {
-                          setSelectedRakebackIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
-                          if (!checked && selectedRakebackPercent[person.id] == null) {
-                            setSelectedRakebackPercent((prev) => ({ ...prev, [person.id]: '0' }))
-                          }
+                          setSelectedRakebackIds((prev) => {
+                            if (checked) {
+                              const removedIndex = prev.indexOf(person.id)
+                              const next = prev.filter((id) => id !== person.id)
+                              setActiveRakebackIndex((current) => {
+                                if (next.length === 0) return null
+                                if (current == null) return null
+                                if (removedIndex === -1) return current
+                                if (current > removedIndex) return current - 1
+                                if (current === removedIndex) return Math.min(removedIndex, next.length - 1)
+                                return current
+                              })
+                              return next
+                            }
+
+                            const next = [...prev, person.id]
+                            setSelectedRakebackPercent((current) => {
+                              if (current[person.id] != null) return current
+                              return { ...current, [person.id]: '0' }
+                            })
+                            setActiveRakebackIndex((current) => current == null ? next.length - 1 : current)
+                            return next
+                          })
                         }}
                         className="mt-1"
                       />
@@ -1165,35 +1190,102 @@ export default function SessionManagePage() {
                         {person.email && <p className="text-xs text-zinc-500">{person.email}</p>}
                       </div>
                     </label>
-                    {checked && (
-                      <div className="mt-3">
-                        <label className="text-xs uppercase tracking-wide text-zinc-500">% de Rakeback</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={selectedRakebackPercent[person.id] ?? '0'}
-                          onChange={(e) => setSelectedRakebackPercent((prev) => ({ ...prev, [person.id]: e.target.value }))}
-                          className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-                          placeholder="0.00"
-                        />
-                      </div>
-                    )}
                   </div>
                 )
               })}
             </div>
 
+            <div className="mt-3 space-y-2">
+              {selectedRakebackIds.length === 0 ? (
+                <p className="text-sm text-zinc-400">Nenhuma pessoa selecionada para rakeback.</p>
+              ) : (
+                selectedRakebackIds.map((userId, index) => {
+                  const person = staffOptions.find((option) => option.id === userId)
+                  if (!person) return null
+
+                  const currentPercent = Number(selectedRakebackPercent[userId] || 0)
+                  const othersTotal = selectedRakebackIds.reduce((sum, id) => {
+                    if (id === userId) return sum
+                    const value = Number(selectedRakebackPercent[id] || 0)
+                    return sum + (Number.isFinite(value) && value > 0 ? value : 0)
+                  }, 0)
+                  const maxForCurrent = Math.max(0, Number((100 - othersTotal).toFixed(2)))
+                  const allowedOptionsSet = new Set<number>([
+                    ...rakebackStepOptions.filter((value) => value <= maxForCurrent),
+                    Number(currentPercent.toFixed(2)),
+                  ])
+                  const allowedOptions = Array.from(allowedOptionsSet).sort((a, b) => a - b)
+                  const isActive = activeRakebackIndex === index
+
+                  return (
+                    <button
+                      type="button"
+                      key={`rakeback-selected-${userId}`}
+                      onClick={() => setActiveRakebackIndex(index)}
+                      className={`w-full rounded-xl border p-3 text-left transition-colors ${isActive ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700'}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-zinc-100">{person.name}</p>
+                          {person.email && <p className="text-xs text-zinc-500">{person.email}</p>}
+                        </div>
+                        <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-semibold text-zinc-200">
+                          {currentPercent.toFixed(2)}%
+                        </span>
+                      </div>
+
+                      {isActive && (
+                        <div className="mt-3">
+                          <label className="text-xs uppercase tracking-wide text-zinc-500">% de Rakeback</label>
+                          <select
+                            value={selectedRakebackPercent[userId] ?? '0'}
+                            onChange={(e) => {
+                              const nextValue = e.target.value
+                              const nextNumber = Number(nextValue || 0)
+                              const currentTotal = selectedRakebackIds.reduce((sum, id) => {
+                                const value = Number(selectedRakebackPercent[id] || 0)
+                                return sum + (Number.isFinite(value) && value > 0 ? value : 0)
+                              }, 0)
+                              const totalWithNext = currentTotal - currentPercent + nextNumber
+
+                              setSelectedRakebackPercent((prev) => ({ ...prev, [userId]: nextValue }))
+
+                              if (totalWithNext >= 100) {
+                                setActiveRakebackIndex(null)
+                                return
+                              }
+
+                              const nextIndex = index + 1
+                              setActiveRakebackIndex(nextIndex < selectedRakebackIds.length ? nextIndex : null)
+                            }}
+                            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+                          >
+                            {allowedOptions.map((value) => (
+                              <option key={`${userId}-${value}`} value={String(value)}>{value}%</option>
+                            ))}
+                          </select>
+                          <p className="mt-2 text-xs text-zinc-500">Máximo disponível para esta pessoa: {maxForCurrent.toFixed(2)}%</p>
+                        </div>
+                      )}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
             <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm">
               <p className="text-zinc-300">Total de rakeback selecionado: <span className={selectedStaffTotalPercent > 100 ? 'text-red-400 font-semibold' : 'text-emerald-300 font-semibold'}>{selectedStaffTotalPercent.toFixed(2)}%</span></p>
+              <p className="mt-1 text-xs text-zinc-500">Restante disponível: {remainingRakebackPercent.toFixed(2)}%</p>
               {selectedStaffTotalPercent > 100 && <p className="mt-1 text-xs text-red-400">A soma não pode ultrapassar 100%.</p>}
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowStaffModal(false)}
+                onClick={() => {
+                  setShowStaffModal(false)
+                  setActiveRakebackIndex(null)
+                }}
                 className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
                 Cancelar

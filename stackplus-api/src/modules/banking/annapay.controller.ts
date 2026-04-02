@@ -125,7 +125,9 @@ export async function handleCobWebhook(req: Request, res: Response) {
   if (configuredSecret) {
     const providedSecret = String(req.headers['x-annapay-webhook-secret'] || req.headers['x-webhook-secret'] || '').trim()
     if (!providedSecret || providedSecret !== configuredSecret) {
-      return res.status(401).json({ error: 'Webhook não autorizado' })
+      // Some provider URL validations do not include custom headers.
+      // Return 200 to keep webhook registration flow working, but ignore processing.
+      return res.status(200).json({ received: true, ignored: 'missing-or-invalid-webhook-secret' })
     }
   }
 
