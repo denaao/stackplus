@@ -701,11 +701,10 @@ export default function SessionManagePage() {
           )}
           {session.status === 'ACTIVE' && (
             <>
-                <button onClick={() => window.open(`/tv/${sessionId}`, '_blank')}
-                  className="bg-zinc-700 hover:bg-zinc-600 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors">
-                  📺 TV
-                </button>
-              )}
+              <button onClick={() => window.open(`/tv/${sessionId}`, '_blank')}
+                className="bg-zinc-700 hover:bg-zinc-600 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors">
+                📺 TV
+              </button>
               <button onClick={finishSession} disabled={actionLoading}
                 className="bg-red-500 hover:bg-red-400 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50">
                 Finalizar
