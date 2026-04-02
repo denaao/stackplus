@@ -388,7 +388,6 @@ export default function SessionManagePage() {
       const { data } = await api.put(`/sessions/${sessionId}/participants`, { userIds: selectedParticipantIds })
       setSession(normalizeSession(data))
       setShowParticipantsModal(false)
-      alert('Participantes da partida atualizados')
     } catch (err) {
       alert(typeof err === 'string' ? err : 'Não foi possível salvar participantes')
     } finally {
