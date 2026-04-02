@@ -197,7 +197,6 @@ export default function HomeGamePage() {
     if (!confirmCancelSessionId) return
 
     setDeletingSessionId(confirmCancelSessionId)
-    setDeletingSessionId(sessionId)
     try {
       await api.delete(`/sessions/${confirmCancelSessionId}`)
       setSessions((prev) => prev.filter((s) => s.id !== confirmCancelSessionId))
