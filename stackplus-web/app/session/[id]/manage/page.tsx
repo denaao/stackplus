@@ -1121,12 +1121,12 @@ export default function SessionManagePage() {
 
       {showStaffModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
+          <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
             <h3 className="text-lg font-bold">Staff da Partida</h3>
             <p className="mt-1 text-sm text-zinc-400">Selecione quem faz parte do staff e configure o rakeback.</p>
 
             <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Staff (divide caixinha)</p>
-            <div className="mt-3 max-h-40 space-y-2 overflow-y-auto pr-1">
+            <div className="mt-3 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
                 const checked = selectedStaffIds.includes(person.id)
                 return (
@@ -1136,16 +1136,16 @@ export default function SessionManagePage() {
                     onClick={() => {
                       setSelectedStaffIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
                     }}
-                    className={`w-full rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
+                    className={`rounded-lg border-2 p-2.5 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
                   >
-                    <p className={`font-semibold ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
+                    <p className={`text-sm font-medium ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
                   </button>
                 )
               })}
             </div>
 
             <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Rakeback (% do rake)</p>
-            <div className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
+            <div className="mt-3 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
                 const checked = selectedRakebackIds.includes(person.id)
                 const currentPercent = Number(selectedRakebackPercent[person.id] || 0)
@@ -1179,18 +1179,18 @@ export default function SessionManagePage() {
                         return next
                       })
                     }}
-                    className={`w-full rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
+                    className={`rounded-lg border-2 p-2.5 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <p className={`font-semibold ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
-                      {checked && <span className="text-sm font-semibold text-emerald-300">{currentPercent.toFixed(2)}%</span>}
+                    <div className="flex items-center justify-between gap-1">
+                      <p className={`text-sm font-medium ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
+                      {checked && <span className="text-xs font-semibold text-emerald-300">{currentPercent.toFixed(0)}%</span>}
                     </div>
                   </button>
                 )
               })}
             </div>
 
-            <div className="mt-3 space-y-2">
+            <div className="mt-4 space-y-2">
               {selectedRakebackIds.length === 0 ? (
                 <p className="text-sm text-zinc-400 text-center">Nenhuma pessoa selecionada para rakeback.</p>
               ) : (
