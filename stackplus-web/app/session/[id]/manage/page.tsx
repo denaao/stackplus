@@ -725,15 +725,43 @@ export default function SessionManagePage() {
               </div>
               <button
                 type="button"
-                onClick={openParticipantsModal}
+                onClick={openStaffModal}
+                disabled={staffLoading}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                {staffLoading ? 'Carregando...' : `Configurar Staff${session.staffAssignments.length ? ` (${session.staffAssignments.length})` : ''}`}
+              </button>
             </div>
             {session.staffAssignments.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {participantsLoading ? 'Carregando...' : `Escolher participantes${session.participantAssignments.length ? ` (${session.participantAssignments.length})` : ''}`}
+                {session.staffAssignments.map((assignment) => (
                   <span key={assignment.userId} className="rounded-full bg-blue-500/20 border border-blue-500/30 px-3 py-1 text-xs font-medium text-blue-200">
                     {assignment.user.name}
                   </span>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {gameType === 'CASH_GAME' && isHost && session.status !== 'FINISHED' && (
+          <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Participantes da partida</p>
+                <p className="mt-1 text-sm text-zinc-300">Escolha quem do home game vai participar desta sessão de cash game.</p>
+              </div>
+              <button
+                type="button"
+                onClick={openParticipantsModal}
+                disabled={participantsLoading}
+                className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+              >
+                {participantsLoading ? 'Carregando...' : `Escolher participantes${session.participantAssignments.length ? ` (${session.participantAssignments.length})` : ''}`}
+              </button>
+            </div>
+
+            {hasSavedParticipants && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {session.participantAssignments.map((assignment) => (
                   <span key={assignment.userId} className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200">
@@ -806,36 +834,9 @@ export default function SessionManagePage() {
                   className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50 transition-colors"
                 >
                   {participantsLoading ? 'Salvando...' : 'Salvar participantes'}
-                    const checked = selectedParticipantIds.includes(person.id)
+                </button>
               </div>
             </div>
-                        key={person.id}
-                        onClick={() => {
-                          setSelectedParticipantIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
-                        }}
-                        className={`rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700'}`}
-                      >
-                        <p className={`font-medium ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
-                      </button>
-                    )
-                  })}
-                  {participantOptions.length === 0 && (
-                    <p className="text-sm text-zinc-500">Nenhuma pessoa cadastrada no home game.</p>
-                  )}
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={saveParticipants}
-                    disabled={participantsLoading}
-                    className="rounded-lg bg-yellow-400 px-4 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
-                  >
-                    {participantsLoading ? 'Salvando...' : 'Salvar participantes'}
-                  </button>
-                </div>
-              </>
-            )}
           </div>
         )}
 
