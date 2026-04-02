@@ -270,7 +270,7 @@ export default function DashboardPage() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {[...Array(2)].map((_, i) => (
               <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 animate-pulse h-40" />
             ))}
@@ -282,7 +282,7 @@ export default function DashboardPage() {
             <p className="text-sm mt-1">Crie seu primeiro para começar</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {games.map((game) => {
               const gameType = game.gameType || 'CASH_GAME'
               return (
