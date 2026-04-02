@@ -723,12 +723,12 @@ export default function SessionManagePage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8">
-        {isHost && session.status === 'WAITING' && (
+        {isHost && session.status !== 'FINISHED' && (
           <div className="mb-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-blue-300">Staff da partida</p>
-                <p className="mt-1 text-sm text-zinc-300">Selecione quem faz parte do staff e configure o rakeback.</p>
+                <p className="mt-1 text-sm text-zinc-300">{session.status === 'WAITING' ? 'Selecione quem faz parte do staff e configure o rakeback.' : 'Gerencie o staff durante a partida.'}</p>
               </div>
               <button
                 type="button"
