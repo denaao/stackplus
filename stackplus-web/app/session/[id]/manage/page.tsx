@@ -227,7 +227,7 @@ export default function SessionManagePage() {
   const [participantOptions, setParticipantOptions] = useState<ParticipantOption[]>([])
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
   const [participantsLoading, setParticipantsLoading] = useState(false)
-  const [showParticipantsPicker, setShowParticipantsPicker] = useState(false)
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false)
   const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null)
   const [financialLoading, setFinancialLoading] = useState(false)
   const [bankBalance, setBankBalance] = useState<number | null>(null)
@@ -363,7 +363,7 @@ export default function SessionManagePage() {
     }
   }
 
-  async function loadParticipantOptions() {
+  async function openParticipantsModal() {
     setParticipantsLoading(true)
     try {
       const [{ data: options }, { data: currentSession }] = await Promise.all([
@@ -374,6 +374,7 @@ export default function SessionManagePage() {
       setSession(normalized)
       setParticipantOptions(options)
       setSelectedParticipantIds(normalized.participantAssignments.map((assignment) => assignment.userId))
+      setShowParticipantsModal(true)
     } catch (err) {
       alert(typeof err === 'string' ? err : 'Não foi possível carregar participantes da partida')
     } finally {
@@ -386,6 +387,7 @@ export default function SessionManagePage() {
     try {
       const { data } = await api.put(`/sessions/${sessionId}/participants`, { userIds: selectedParticipantIds })
       setSession(normalizeSession(data))
+      setShowParticipantsModal(false)
       alert('Participantes da partida atualizados')
     } catch (err) {
       alert(typeof err === 'string' ? err : 'Não foi possível salvar participantes')
@@ -724,17 +726,18 @@ export default function SessionManagePage() {
               </div>
               <button
                 type="button"
-                onClick={openStaffModal}
-                disabled={staffLoading}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50"
-              >
-                {staffLoading ? 'Carregando...' : `Configurar Staff${session.staffAssignments.length ? ` (${session.staffAssignments.length})` : ''}`}
-              </button>
+                onClick={openParticipantsModal}
             </div>
             {session.staffAssignments.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {session.staffAssignments.map((assignment) => (
+                {participantsLoading ? 'Carregando...' : `Escolher participantes${session.participantAssignments.length ? ` (${session.participantAssignments.length})` : ''}`}
                   <span key={assignment.userId} className="rounded-full bg-blue-500/20 border border-blue-500/30 px-3 py-1 text-xs font-medium text-blue-200">
+                    {assignment.user.name}
+                  </span>
+                ))}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {session.participantAssignments.map((assignment) => (
+                  <span key={assignment.userId} className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200">
                     {assignment.user.name}
                   </span>
                 ))}
@@ -743,59 +746,70 @@ export default function SessionManagePage() {
           </div>
         )}
 
-        {gameType === 'CASH_GAME' && isHost && session.status !== 'FINISHED' && (
-          <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">Participantes da partida</p>
-                <p className="mt-1 text-sm text-zinc-300">Escolha quem do home game vai participar desta sessão de cash game.</p>
+        {showParticipantsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
+              <h3 className="text-lg font-bold">Participantes da Partida</h3>
+              <p className="mt-1 text-sm text-zinc-400">Selecione os jogadores que vão participar desta sessão.</p>
+
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedParticipantIds(participantOptions.map((person) => person.id))}
+                  disabled={participantsLoading || participantOptions.length === 0}
+                  className="min-w-[128px] rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  Selecionar todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedParticipantIds([])}
+                  disabled={participantsLoading}
+                  className="min-w-[128px] rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  Limpar
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  setShowParticipantsPicker((prev) => !prev)
-                  if (!showParticipantsPicker) {
-                    await loadParticipantOptions()
-                  }
-                }}
-                disabled={participantsLoading}
-                className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
-              >
-                {showParticipantsPicker ? 'Ocultar participantes' : 'Escolher participantes'}
-              </button>
-            </div>
 
-            {hasSavedParticipants && (
-              <p className="mt-3 text-xs text-emerald-300">Participantes salvos: {session.participantAssignments.map((item) => item.user.name).join(', ')}</p>
-            )}
+              <div className="mt-4 grid max-h-[45vh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                {participantOptions.map((person) => {
+                  const checked = selectedParticipantIds.includes(person.id)
+                  return (
+                    <button
+                      type="button"
+                      key={person.id}
+                      onClick={() => {
+                        setSelectedParticipantIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
+                      }}
+                      className={`rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
+                    >
+                      <p className={`text-sm font-medium ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
+                    </button>
+                  )
+                })}
+                {participantOptions.length === 0 && (
+                  <p className="text-sm text-zinc-500">Nenhuma pessoa cadastrada no home game.</p>
+                )}
+              </div>
 
-            {showParticipantsPicker && (
-              <>
-                <div className="mt-4 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedParticipantIds(participantOptions.map((person) => person.id))}
-                    disabled={participantsLoading || participantOptions.length === 0}
-                    className="min-w-[128px] rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-                  >
-                    Selecionar todos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedParticipantIds([])}
-                    disabled={participantsLoading}
-                    className="min-w-[128px] rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-                  >
-                    Limpar
-                  </button>
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {participantOptions.map((person) => {
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowParticipantsModal(false)}
+                  className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={saveParticipants}
+                  disabled={participantsLoading}
+                  className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50 transition-colors"
+                >
+                  {participantsLoading ? 'Salvando...' : 'Salvar participantes'}
                     const checked = selectedParticipantIds.includes(person.id)
-                    return (
-                      <button
-                        type="button"
+              </div>
+            </div>
                         key={person.id}
                         onClick={() => {
                           setSelectedParticipantIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
