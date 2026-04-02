@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { AuthRequest } from '../../middlewares/auth.middleware'
 import * as AnnapayService from './annapay.service'
-import { getIO } from '../../socket/socket'
+import { emitSessionRankingUpdated, getIO, getPrivateSessionRoom } from '../../socket/socket'
 
 export async function login(_req: AuthRequest, res: Response) {
   const data = await AnnapayService.testLogin()
@@ -86,11 +86,11 @@ export async function settlePrepaidCharge(req: AuthRequest, res: Response) {
   if (data.settled && data.sessionId && data.transactionResult) {
     try {
       const io = getIO()
-      io.to(`session:${data.sessionId}`).emit('transaction:new', data.transactionResult)
+      io.to(getPrivateSessionRoom(data.sessionId)).emit('transaction:new', data.transactionResult)
 
       const { getRanking } = await import('../ranking/ranking.service')
       const ranking = await getRanking(data.sessionId)
-      io.to(`session:${data.sessionId}`).emit('ranking:updated', ranking)
+      emitSessionRankingUpdated(data.sessionId, ranking)
     } catch (error) {
       console.warn('[annapay settle] realtime broadcast failed:', error)
     }
@@ -107,11 +107,11 @@ export async function settlePrepaidChargeByBody(req: AuthRequest, res: Response)
   if (data.settled && data.sessionId && data.transactionResult) {
     try {
       const io = getIO()
-      io.to(`session:${data.sessionId}`).emit('transaction:new', data.transactionResult)
+      io.to(getPrivateSessionRoom(data.sessionId)).emit('transaction:new', data.transactionResult)
 
       const { getRanking } = await import('../ranking/ranking.service')
       const ranking = await getRanking(data.sessionId)
-      io.to(`session:${data.sessionId}`).emit('ranking:updated', ranking)
+      emitSessionRankingUpdated(data.sessionId, ranking)
     } catch (error) {
       console.warn('[annapay settle body] realtime broadcast failed:', error)
     }
@@ -136,11 +136,11 @@ export async function handleCobWebhook(req: Request, res: Response) {
   if (result.processed && result.reason === 'registered' && result.transactionResult) {
     try {
       const io = getIO()
-      io.to(`session:${result.sessionId}`).emit('transaction:new', result.transactionResult)
+      io.to(getPrivateSessionRoom(result.sessionId)).emit('transaction:new', result.transactionResult)
 
       const { getRanking } = await import('../ranking/ranking.service')
       const ranking = await getRanking(result.sessionId)
-      io.to(`session:${result.sessionId}`).emit('ranking:updated', ranking)
+      emitSessionRankingUpdated(result.sessionId, ranking)
     } catch (error) {
       console.warn('[annapay webhook] realtime broadcast failed:', error)
     }

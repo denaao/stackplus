@@ -60,6 +60,19 @@ export async function getHomeGameById(id: string) {
   })
 }
 
+export async function getHomeGameByIdForUser(id: string, userId: string) {
+  const game = await getHomeGameById(id)
+
+  const isHost = game.hostId === userId
+  const isMember = game.members.some((member) => member.userId === userId)
+
+  if (!isHost && !isMember) {
+    throw new Error('Acesso negado')
+  }
+
+  return game
+}
+
 export async function updateFinancialConfig(
   homeGameId: string,
   hostId: string,
@@ -151,9 +164,13 @@ export async function deleteHomeGame(homeGameId: string, hostId: string) {
   if (game.hostId !== hostId) throw new Error('Acesso negado')
 
   await prisma.$transaction(async (tx) => {
+    await tx.prepaidChargePending.deleteMany({ where: { session: { homeGameId } } })
+    await tx.sessionFinancialChargePending.deleteMany({ where: { session: { homeGameId } } })
+    await tx.sessionFinancialPayoutPending.deleteMany({ where: { session: { homeGameId } } })
     await tx.transaction.deleteMany({ where: { session: { homeGameId } } })
     await tx.playerSessionState.deleteMany({ where: { session: { homeGameId } } })
     await tx.sessionStaff.deleteMany({ where: { session: { homeGameId } } })
+    await tx.sessionRakeback.deleteMany({ where: { session: { homeGameId } } })
     await tx.sessionParticipant.deleteMany({ where: { session: { homeGameId } } })
     await tx.session.deleteMany({ where: { homeGameId } })
     await tx.homeGameMember.deleteMany({ where: { homeGameId } })

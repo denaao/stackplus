@@ -11,7 +11,6 @@ export async function register(data: {
   password: string
   pixType: PixKeyType
   pixKey: string
-  role?: Role
 }) {
   const existing = await prisma.user.findUnique({ where: { email: data.email } })
   if (existing) throw new Error('Email já cadastrado')
@@ -32,7 +31,7 @@ export async function register(data: {
       pixType: data.pixType,
       pixKey: data.pixKey.trim(),
       passwordHash,
-      role: data.role || Role.PLAYER,
+      role: Role.PLAYER,
     },
     select: { id: true, name: true, email: true, cpf: true, phone: true, pixType: true, pixKey: true, role: true, createdAt: true },
   })

@@ -50,7 +50,6 @@ const registerSchema = z.object({
   password: z.string().min(6),
   pixType: pixTypeEnum,
   pixKey: z.string().trim().min(3).max(120),
-  role: z.enum(['ADMIN', 'HOST', 'PLAYER', 'CASHIER']).optional(),
 }).superRefine((data, ctx) => {
   const raw = data.pixKey.trim()
   const digits = raw.replace(/\D/g, '')

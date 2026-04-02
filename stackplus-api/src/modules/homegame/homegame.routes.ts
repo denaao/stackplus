@@ -50,7 +50,7 @@ router.get('/member', authenticate, async (req: AuthRequest, res: Response) => {
 })
 
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  const game = await HomeGameService.getHomeGameById(req.params.id)
+  const game = await HomeGameService.getHomeGameByIdForUser(req.params.id, req.user!.userId)
   res.json(game)
 })
 

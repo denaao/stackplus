@@ -100,6 +100,11 @@ interface FinancialReport {
   payouts: FinancialReportItem[]
 }
 
+type FeedbackState = {
+  tone: 'error' | 'success'
+  message: string
+} | null
+
 function extractPixOrderId(payload: any): string | null {
   const candidates = [
     payload?.id,
@@ -237,6 +242,10 @@ export default function SessionManagePage() {
   const [approvedPixIds, setApprovedPixIds] = useState<string[]>([])
   const [copiedChargeId, setCopiedChargeId] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [pageFeedback, setPageFeedback] = useState<FeedbackState>(null)
+  const [staffModalError, setStaffModalError] = useState<string | null>(null)
+  const [participantsModalError, setParticipantsModalError] = useState<string | null>(null)
+  const [showFinishConfirmModal, setShowFinishConfirmModal] = useState(false)
 
   function normalizeSession(data: Session): Session {
     const distribution = Array.isArray(data.caixinhaDistribution) ? data.caixinhaDistribution : []
@@ -288,32 +297,40 @@ export default function SessionManagePage() {
     }
   }, [sessionId])
 
+  function getErrorMessage(err: unknown, fallback: string) {
+    return typeof err === 'string' ? err : fallback
+  }
+
   async function startSession() {
+    setPageFeedback(null)
     setActionLoading(true)
     try {
       const { data } = await api.patch(`/sessions/${sessionId}/start`, {})
       setSession(normalizeSession(data))
+      setPageFeedback({ tone: 'success', message: 'Sessao iniciada com sucesso.' })
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível iniciar a sessão')
+      setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel iniciar a sessao.') })
     } finally {
       setActionLoading(false)
     }
   }
 
   async function finishSession() {
-    if (!confirm('Finalizar sessão? Esta ação não pode ser desfeita.')) return
+    setPageFeedback(null)
     setActionLoading(true)
     try {
       await api.patch(`/sessions/${sessionId}/finish`, {})
       router.back()
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível finalizar a sessão')
+      setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel finalizar a sessao.') })
     } finally {
       setActionLoading(false)
+      setShowFinishConfirmModal(false)
     }
   }
 
   async function openStaffModal() {
+    setStaffModalError(null)
     setStaffLoading(true)
     try {
       const [{ data: options }, { data: currentSession }] = await Promise.all([
@@ -332,7 +349,7 @@ export default function SessionManagePage() {
       setActiveRakebackIndex(normalized.rakebackAssignments.length > 0 ? 0 : null)
       setShowStaffModal(true)
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível carregar o staff')
+      setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel carregar o staff.') })
     } finally {
       setStaffLoading(false)
     }
@@ -345,10 +362,12 @@ export default function SessionManagePage() {
     }))
     const totalRakebackPercent = rakebackPayload.reduce((sum, item) => sum + (Number.isFinite(item.percent) ? item.percent : 0), 0)
     if (totalRakebackPercent > 100) {
-      alert('A soma do rakeback do staff não pode passar de 100%')
+      setStaffModalError('A soma do rakeback do staff nao pode passar de 100%.')
       return
     }
 
+    setStaffModalError(null)
+    setPageFeedback(null)
     setStaffLoading(true)
     try {
       await api.put(`/sessions/${sessionId}/staff`, { userIds: selectedStaffIds })
@@ -356,14 +375,16 @@ export default function SessionManagePage() {
       setSession(normalizeSession(data))
       setShowStaffModal(false)
       setActiveRakebackIndex(null)
+      setPageFeedback({ tone: 'success', message: 'Staff da partida salvo com sucesso.' })
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível salvar o staff')
+      setStaffModalError(getErrorMessage(err, 'Nao foi possivel salvar o staff.'))
     } finally {
       setStaffLoading(false)
     }
   }
 
   async function openParticipantsModal() {
+    setParticipantsModalError(null)
     setParticipantsLoading(true)
     try {
       const [{ data: options }, { data: currentSession }] = await Promise.all([
@@ -376,33 +397,38 @@ export default function SessionManagePage() {
       setSelectedParticipantIds(normalized.participantAssignments.map((assignment) => assignment.userId))
       setShowParticipantsModal(true)
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível carregar participantes da partida')
+      setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel carregar participantes da partida.') })
     } finally {
       setParticipantsLoading(false)
     }
   }
 
   async function saveParticipants() {
+    setParticipantsModalError(null)
+    setPageFeedback(null)
     setParticipantsLoading(true)
     try {
       const { data } = await api.put(`/sessions/${sessionId}/participants`, { userIds: selectedParticipantIds })
       setSession(normalizeSession(data))
       setShowParticipantsModal(false)
+      setPageFeedback({ tone: 'success', message: 'Participantes salvos com sucesso.' })
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível salvar participantes')
+      setParticipantsModalError(getErrorMessage(err, 'Nao foi possivel salvar participantes.'))
     } finally {
       setParticipantsLoading(false)
     }
   }
 
   async function generateFinancialReport() {
+    setPageFeedback(null)
     setFinancialLoading(true)
     try {
       const { data } = await api.post(`/banking/annapay/sessions/${sessionId}/financial-report`, {})
       setFinancialReport(data)
       setApprovedPixIds([])
+      setPageFeedback({ tone: 'success', message: 'Relatorio financeiro gerado com sucesso.' })
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível gerar o relatório financeiro')
+      setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel gerar o relatorio financeiro.') })
     } finally {
       setFinancialLoading(false)
     }
@@ -426,12 +452,14 @@ export default function SessionManagePage() {
   }
 
   async function approvePixOrder(orderId: string) {
+    setPageFeedback(null)
     setApprovingPixId(orderId)
     try {
       await api.put(`/banking/annapay/pix/${orderId}`, {})
       setApprovedPixIds((prev) => prev.includes(orderId) ? prev : [...prev, orderId])
+      setPageFeedback({ tone: 'success', message: 'Ordem PIX aprovada com sucesso.' })
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível aprovar a ordem PIX')
+      setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel aprovar a ordem PIX.') })
     } finally {
       setApprovingPixId(null)
     }
@@ -615,7 +643,7 @@ export default function SessionManagePage() {
       const fileName = `liquidacao-${sanitizeFileName(session.homeGame.name)}-${session.id.slice(0, 8)}.pdf`
       doc.save(fileName)
     } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível gerar o PDF da liquidação financeira')
+      setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel gerar o PDF da liquidacao financeira.') })
     } finally {
       setPdfLoading(false)
     }
@@ -706,7 +734,7 @@ export default function SessionManagePage() {
                   📺 TV
                 </button>
               )}
-              <button onClick={finishSession} disabled={actionLoading}
+              <button onClick={() => setShowFinishConfirmModal(true)} disabled={actionLoading}
                 className="bg-red-500 hover:bg-red-400 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50">
                 Finalizar
               </button>
@@ -716,6 +744,12 @@ export default function SessionManagePage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8">
+        {pageFeedback && (
+          <div className={`mb-6 rounded-xl border px-4 py-3 text-sm ${pageFeedback.tone === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+            {pageFeedback.message}
+          </div>
+        )}
+
         {isHost && session.status !== 'FINISHED' && (
           <div className="mb-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -778,6 +812,12 @@ export default function SessionManagePage() {
             <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
               <h3 className="text-lg font-bold">Participantes da Partida</h3>
               <p className="mt-1 text-sm text-zinc-400">Selecione os jogadores que vão participar desta sessão.</p>
+
+              {participantsModalError && (
+                <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {participantsModalError}
+                </div>
+              )}
 
               <div className="mt-4 flex items-center gap-2">
                 <button
@@ -1153,6 +1193,12 @@ export default function SessionManagePage() {
             <h3 className="text-lg font-bold">Staff da Partida</h3>
             <p className="mt-1 text-sm text-zinc-400">Selecione quem faz parte do staff e configure o rakeback.</p>
 
+            {staffModalError && (
+              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {staffModalError}
+              </div>
+            )}
+
             <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Staff (divide caixinha)</p>
             <div className="mt-3 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
@@ -1292,6 +1338,7 @@ export default function SessionManagePage() {
                 onClick={() => {
                   setShowStaffModal(false)
                   setActiveRakebackIndex(null)
+                  setStaffModalError(null)
                 }}
                 className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
               >
@@ -1304,6 +1351,36 @@ export default function SessionManagePage() {
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
               >
                 {staffLoading ? 'Salvando...' : 'Salvar Staff'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFinishConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-zinc-900 p-6">
+            <h3 className="text-lg font-bold text-white">Finalizar sessao</h3>
+            <p className="mt-2 text-sm text-zinc-300">
+              Esta acao encerra a sessao e nao podera ser desfeita.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowFinishConfirmModal(false)}
+                disabled={actionLoading}
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={finishSession}
+                disabled={actionLoading}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                {actionLoading ? 'Finalizando...' : 'Confirmar finalizacao'}
               </button>
             </div>
           </div>

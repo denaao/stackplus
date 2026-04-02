@@ -144,6 +144,14 @@ const sessionInclude = {
   },
 } satisfies Parameters<typeof prisma.session.findUniqueOrThrow>[0]['include']
 
+const publicSessionInclude = {
+  homeGame: { select: { id: true, name: true } },
+  playerStates: {
+    include: { user: { select: { id: true, name: true } } },
+    orderBy: { result: 'desc' as const },
+  },
+} satisfies Parameters<typeof prisma.session.findUniqueOrThrow>[0]['include']
+
 type GameType = 'CASH_GAME' | 'TOURNAMENT'
 
 type CreateSessionInput = {
@@ -162,6 +170,26 @@ type CreateSessionInput = {
   blindsMinutesBeforeBreak?: number
   blindsMinutesAfterBreak?: number
   levelsUntilBreak?: number
+}
+
+async function getSessionAccessContext(sessionId: string) {
+  return prisma.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      status: true,
+      cashierId: true,
+      homeGame: {
+        select: {
+          hostId: true,
+        },
+      },
+    },
+  })
+}
+
+function canAccessPrivateSession(session: Awaited<ReturnType<typeof getSessionAccessContext>>, userId: string) {
+  return session.homeGame.hostId === userId || session.cashierId === userId
 }
 
 export async function createSession(homeGameId: string, hostId: string, input: CreateSessionInput = {}) {
@@ -357,7 +385,48 @@ export async function getSessionById(sessionId: string) {
   return withCaixinhaDistribution(session)
 }
 
-export async function getSessionStaffOptions(sessionId: string) {
+export async function getSessionByIdForOperator(sessionId: string, userId: string) {
+  const session = await prisma.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    include: sessionInclude,
+  })
+
+  if (!canAccessPrivateSession({
+    id: session.id,
+    status: session.status,
+    cashierId: session.cashierId,
+    homeGame: { hostId: session.homeGame.hostId },
+  }, userId)) {
+    throw new Error('Acesso negado')
+  }
+
+  return withCaixinhaDistribution(session)
+}
+
+export async function getPublicSessionById(sessionId: string) {
+  const session = await prisma.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    include: publicSessionInclude,
+  })
+
+  if (session.status === 'WAITING') {
+    throw new Error('Acesso negado')
+  }
+
+  return session
+}
+
+export async function canJoinPrivateSession(sessionId: string, userId: string) {
+  const session = await getSessionAccessContext(sessionId)
+  return canAccessPrivateSession(session, userId)
+}
+
+export async function canJoinPublicSession(sessionId: string) {
+  const session = await getSessionAccessContext(sessionId)
+  return session.status !== 'WAITING'
+}
+
+export async function getSessionStaffOptions(sessionId: string, hostId: string) {
   const session = await prisma.session.findUniqueOrThrow({
     where: { id: sessionId },
     include: {
@@ -370,6 +439,10 @@ export async function getSessionStaffOptions(sessionId: string) {
     },
   })
 
+  if (session.homeGame.hostId !== hostId) {
+    throw new Error('Acesso negado')
+  }
+
   const map = new Map<string, { id: string; name: string; email: string | null; pixType: string | null; pixKey: string | null }>()
   map.set(session.homeGame.host.id, session.homeGame.host)
   for (const member of session.homeGame.members) {
@@ -379,8 +452,8 @@ export async function getSessionStaffOptions(sessionId: string) {
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 }
 
-export async function getSessionParticipantOptions(sessionId: string) {
-  return getSessionStaffOptions(sessionId)
+export async function getSessionParticipantOptions(sessionId: string, hostId: string) {
+  return getSessionStaffOptions(sessionId, hostId)
 }
 
 export async function updateSessionStaff(
@@ -531,6 +604,25 @@ export async function getSessionsByHomeGame(homeGameId: string) {
   })
 }
 
+export async function getSessionsByHomeGameForUser(homeGameId: string, userId: string) {
+  const homeGame = await prisma.homeGame.findUniqueOrThrow({
+    where: { id: homeGameId },
+    select: {
+      hostId: true,
+      members: {
+        where: { userId },
+        select: { id: true },
+      },
+    },
+  })
+
+  if (homeGame.hostId !== userId && homeGame.members.length === 0) {
+    throw new Error('Acesso negado')
+  }
+
+  return getSessionsByHomeGame(homeGameId)
+}
+
 export async function deleteSession(sessionId: string, hostId: string) {
   const session = await prisma.session.findUniqueOrThrow({
     where: { id: sessionId },
@@ -540,6 +632,9 @@ export async function deleteSession(sessionId: string, hostId: string) {
   if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
 
   await prisma.$transaction(async (tx) => {
+    await tx.prepaidChargePending.deleteMany({ where: { sessionId } })
+    await tx.sessionFinancialChargePending.deleteMany({ where: { sessionId } })
+    await tx.sessionFinancialPayoutPending.deleteMany({ where: { sessionId } })
     await tx.transaction.deleteMany({ where: { sessionId } })
     await tx.playerSessionState.deleteMany({ where: { sessionId } })
     await tx.sessionStaff.deleteMany({ where: { sessionId } })

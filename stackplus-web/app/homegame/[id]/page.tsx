@@ -37,6 +37,11 @@ const pokerVariantOptions = [
   { value: 'OMAHA_SIX', label: 'Omaha Six' },
 ] as const
 
+type FeedbackState = {
+  tone: 'error' | 'success'
+  message: string
+} | null
+
 export default function HomeGamePage() {
   const router = useRouter()
   const params = useParams()
@@ -63,6 +68,9 @@ export default function HomeGamePage() {
   const [tourLevelsUntilBreak, setTourLevelsUntilBreak] = useState('4')
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [newSessionFinancialModule, setNewSessionFinancialModule] = useState<'POSTPAID' | 'PREPAID' | 'HYBRID'>('POSTPAID')
+  const [pageFeedback, setPageFeedback] = useState<FeedbackState>(null)
+  const [createFormError, setCreateFormError] = useState<string | null>(null)
+  const [confirmCancelSessionId, setConfirmCancelSessionId] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -77,6 +85,7 @@ export default function HomeGamePage() {
 
   function openCreatePicker() {
     if (!game) return
+    setCreateFormError(null)
     setPokerVariant('HOLDEN')
     setNewSessionType('CASH_GAME')
     setNewSessionFinancialModule(game.financialModule || 'POSTPAID')
@@ -96,6 +105,8 @@ export default function HomeGamePage() {
   }
 
   async function createSession() {
+    setCreateFormError(null)
+    setPageFeedback(null)
     setCreating(true)
     try {
       let payload: Record<string, string | number> = {
@@ -114,15 +125,15 @@ export default function HomeGamePage() {
         const foodFee = parseFloat(cashFoodFee)
 
         if (!(chipValue > 0)) {
-          alert('Informe um valor/ficha valido para o cash game')
+          setCreateFormError('Informe um valor/ficha valido para o cash game.')
           return
         }
         if (!(smallBlind >= 0) || !(bigBlind > 0) || bigBlind < smallBlind) {
-          alert('Informe blinds validos para o cash game')
+          setCreateFormError('Informe blinds validos para o cash game.')
           return
         }
         if (!(minimumBuyIn >= 0) || !(minimumStayMinutes >= 0) || !(foodFee >= 0)) {
-          alert('Minimo de entrada, permanencia e taxa de alimentacao devem ser maiores ou iguais a zero')
+          setCreateFormError('Minimo de entrada, permanencia e taxa de alimentacao devem ser maiores ou iguais a zero.')
           return
         }
 
@@ -144,15 +155,15 @@ export default function HomeGamePage() {
         const levelsUntilBreak = parseInt(tourLevelsUntilBreak, 10)
 
         if (!(buyInAmount > 0)) {
-          alert('Informe um buy-in valido para o torneio')
+          setCreateFormError('Informe um buy-in valido para o torneio.')
           return
         }
         if (!(rebuyAmount >= 0) || !(addOnAmount >= 0)) {
-          alert('Rebuy e add-on devem ser maiores ou iguais a zero')
+          setCreateFormError('Rebuy e add-on devem ser maiores ou iguais a zero.')
           return
         }
         if (!(blindsMinutesBeforeBreak > 0) || !(blindsMinutesAfterBreak > 0) || !(levelsUntilBreak > 0)) {
-          alert('Estrutura do torneio invalida. Verifique os tempos e niveis')
+          setCreateFormError('Estrutura do torneio invalida. Verifique os tempos e niveis.')
           return
         }
 
@@ -170,20 +181,31 @@ export default function HomeGamePage() {
       const { data } = await api.post('/sessions', payload)
       setShowCreatePicker(false)
       router.push(`/session/${data.id}/manage`)
+    } catch (err) {
+      setCreateFormError(typeof err === 'string' ? err : 'Nao foi possivel criar a partida.')
     } finally {
       setCreating(false)
     }
   }
 
   async function cancelSession(sessionId: string) {
-    if (!confirm('Cancelar esta partida e remover todos os dados vinculados? Esta ação não pode ser desfeita.')) return
+    setPageFeedback(null)
+    setConfirmCancelSessionId(sessionId)
+  }
+
+  async function confirmCancelSession() {
+    if (!confirmCancelSessionId) return
+
+    setDeletingSessionId(confirmCancelSessionId)
     setDeletingSessionId(sessionId)
     try {
-      await api.delete(`/sessions/${sessionId}`)
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+      await api.delete(`/sessions/${confirmCancelSessionId}`)
+      setSessions((prev) => prev.filter((s) => s.id !== confirmCancelSessionId))
+      setPageFeedback({ tone: 'success', message: 'Partida cancelada e removida com sucesso.' })
+      setConfirmCancelSessionId(null)
     } catch (err) {
       const message = typeof err === 'string' ? err : 'Nao foi possivel cancelar a partida'
-      alert(message)
+      setPageFeedback({ tone: 'error', message })
     } finally {
       setDeletingSessionId(null)
     }
@@ -218,6 +240,12 @@ export default function HomeGamePage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+        {pageFeedback && (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${pageFeedback.tone === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+            {pageFeedback.message}
+          </div>
+        )}
+
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -283,6 +311,12 @@ export default function HomeGamePage() {
           <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
             <h3 className="text-lg font-bold">Nova Partida</h3>
             <p className="mt-1 text-sm text-zinc-400">Escolha o tipo da partida e preencha a configuracao.</p>
+
+            {createFormError && (
+              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {createFormError}
+              </div>
+            )}
 
             <div className="mt-5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
               <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Módulo financeiro</p>
@@ -426,7 +460,10 @@ export default function HomeGamePage() {
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowCreatePicker(false)}
+                onClick={() => {
+                  setShowCreatePicker(false)
+                  setCreateFormError(null)
+                }}
                 className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
                 Cancelar
@@ -438,6 +475,36 @@ export default function HomeGamePage() {
                 className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
               >
                 {creating ? 'Criando...' : 'Criar Partida'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmCancelSessionId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-zinc-900 p-6">
+            <h3 className="text-lg font-bold text-white">Cancelar partida</h3>
+            <p className="mt-2 text-sm text-zinc-300">
+              Esta acao vai remover a partida e todos os dados vinculados. Nao podera ser desfeita.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmCancelSessionId(null)}
+                disabled={deletingSessionId === confirmCancelSessionId}
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={confirmCancelSession}
+                disabled={deletingSessionId === confirmCancelSessionId}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                {deletingSessionId === confirmCancelSessionId ? 'Cancelando...' : 'Confirmar cancelamento'}
               </button>
             </div>
           </div>

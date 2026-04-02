@@ -2,7 +2,7 @@ import { Router, Response } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
 import * as CashierService from './cashier.service'
 import { z } from 'zod'
-import { getIO } from '../../socket/socket'
+import { emitSessionRankingUpdated, getIO, getPrivateSessionRoom } from '../../socket/socket'
 import { TransactionType } from '@prisma/client'
 
 const router = Router()
@@ -26,11 +26,11 @@ router.post('/transaction', authenticate, async (req: AuthRequest, res: Response
   // Realtime updates are best-effort in development to avoid breaking transaction flow.
   try {
     const io = getIO()
-    io.to(`session:${data.sessionId}`).emit('transaction:new', result)
+    io.to(getPrivateSessionRoom(data.sessionId)).emit('transaction:new', result)
 
     const { getRanking } = await import('../ranking/ranking.service')
     const ranking = await getRanking(data.sessionId)
-    io.to(`session:${data.sessionId}`).emit('ranking:updated', ranking)
+    emitSessionRankingUpdated(data.sessionId, ranking)
   } catch (error) {
     console.warn('[cashier] realtime broadcast failed:', error)
   }
@@ -49,11 +49,11 @@ router.delete('/transaction/:transactionId', authenticate, async (req: AuthReque
 
   try {
     const io = getIO()
-    io.to(`session:${result.sessionId}`).emit('transaction:deleted', { transactionId: req.params.transactionId })
+    io.to(getPrivateSessionRoom(result.sessionId)).emit('transaction:deleted', { transactionId: req.params.transactionId })
 
     const { getRanking } = await import('../ranking/ranking.service')
     const ranking = await getRanking(result.sessionId)
-    io.to(`session:${result.sessionId}`).emit('ranking:updated', ranking)
+    emitSessionRankingUpdated(result.sessionId, ranking)
   } catch (error) {
     console.warn('[cashier] realtime broadcast failed after delete:', error)
   }

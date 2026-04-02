@@ -2,6 +2,7 @@ import { Router, Response } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
 import * as SessionService from './session.service'
 import { z } from 'zod'
+import { emitSessionFinished } from '../../socket/socket'
 
 const router = Router()
 
@@ -63,22 +64,27 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
 })
 
 router.get('/home-game/:homeGameId', authenticate, async (req: AuthRequest, res: Response) => {
-  const sessions = await SessionService.getSessionsByHomeGame(req.params.homeGameId)
+  const sessions = await SessionService.getSessionsByHomeGameForUser(req.params.homeGameId, req.user!.userId)
   res.json(sessions)
 })
 
+router.get('/public/:id', async (req: AuthRequest, res: Response) => {
+  const session = await SessionService.getPublicSessionById(req.params.id)
+  res.json(session)
+})
+
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  const session = await SessionService.getSessionById(req.params.id)
+  const session = await SessionService.getSessionByIdForOperator(req.params.id, req.user!.userId)
   res.json(session)
 })
 
 router.get('/:id/staff', authenticate, async (req: AuthRequest, res: Response) => {
-  const users = await SessionService.getSessionStaffOptions(req.params.id)
+  const users = await SessionService.getSessionStaffOptions(req.params.id, req.user!.userId)
   res.json(users)
 })
 
 router.get('/:id/participants/options', authenticate, async (req: AuthRequest, res: Response) => {
-  const users = await SessionService.getSessionParticipantOptions(req.params.id)
+  const users = await SessionService.getSessionParticipantOptions(req.params.id, req.user!.userId)
   res.json(users)
 })
 
@@ -90,6 +96,7 @@ router.patch('/:id/start', authenticate, async (req: AuthRequest, res: Response)
 
 router.patch('/:id/finish', authenticate, async (req: AuthRequest, res: Response) => {
   const session = await SessionService.finishSession(req.params.id, req.user!.userId)
+  emitSessionFinished(req.params.id)
   res.json(session)
 })
 
@@ -99,6 +106,7 @@ router.patch('/:id/end', authenticate, async (req: AuthRequest, res: Response) =
     caixinha: z.number().nonnegative(),
   }).parse(req.body)
   const session = await SessionService.finishSession(req.params.id, req.user!.userId, { rake, caixinha })
+  emitSessionFinished(req.params.id)
   res.json(session)
 })
 

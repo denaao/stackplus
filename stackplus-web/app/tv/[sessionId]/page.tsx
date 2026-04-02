@@ -20,14 +20,15 @@ export default function TvPage() {
   const [now, setNow] = useState<Date | null>(null)
 
   useEffect(() => {
-    api.get(`/sessions/${sessionId}`).then(({ data }) => {
+    api.get(`/sessions/public/${sessionId}`).then(({ data }) => {
       setGameName(data.homeGame.name)
       setStatus(data.status)
       setPlayers([...data.playerStates].sort((a, b) => parseFloat(b.result) - parseFloat(a.result)))
     }).catch(() => {})
 
-    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', { transports: ['websocket'] })
-    socket.emit('session:join', { sessionId })
+    const socketBaseUrl = (process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/api\/?$/, '')
+    const socket = io(socketBaseUrl, { transports: ['websocket'] })
+    socket.emit('session:join', { sessionId, scope: 'public' })
     socket.on('ranking:updated', (ranking: PlayerState[]) => setPlayers([...ranking]))
     socket.on('session:finished', () => setStatus('FINISHED'))
 

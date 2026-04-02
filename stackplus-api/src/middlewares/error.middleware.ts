@@ -26,6 +26,11 @@ function resolveStatus(err: unknown): number {
   }
 
   if (
+    message.includes('não encontrada') ||
+    message.includes('nao encontrada')
+  ) return 404
+
+  if (
     message.includes('Acesso negado') ||
     message.includes('Apenas o host')
   ) return 403

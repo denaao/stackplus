@@ -70,7 +70,7 @@ function pixErrorMessage(pixType: PixType) {
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user, setAuth } = useAuthStore()
+  const { user, setUser } = useAuthStore()
   const [form, setForm] = useState({ name: '', cpf: '', phone: '', pixType: 'CPF' as PixType, pixKey: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -134,9 +134,7 @@ export default function ProfilePage() {
         pixType: form.pixType,
         pixKey: form.pixKey.trim(),
       })
-      // Update local auth store with new user data (keep existing token)
-      const token = localStorage.getItem('token') || ''
-      setAuth(token, data)
+      setUser(data)
       setSuccess('Perfil atualizado com sucesso!')
       setTimeout(() => setSuccess(''), 3000)
     } catch (err: any) {
