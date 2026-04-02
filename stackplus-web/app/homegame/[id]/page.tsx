@@ -276,22 +276,6 @@ export default function HomeGamePage() {
           )}
         </div>
 
-        <div>
-          <h2 className="text-lg font-bold mb-4">Membros ({game.members.length})</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {game.members.map((m) => (
-              <div key={m.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-yellow-400/20 flex items-center justify-center text-yellow-400 text-sm font-bold">
-                  {m.user.name[0].toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <span className="block text-sm font-medium truncate">{m.user.name}</span>
-                  <span className="text-[11px] text-zinc-500 uppercase">{m.paymentMode || 'POSTPAID'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </main>
 
       {showCreatePicker && isHost && (
@@ -300,10 +284,10 @@ export default function HomeGamePage() {
             <h3 className="text-lg font-bold">Nova Partida</h3>
             <p className="mt-1 text-sm text-zinc-400">Escolha o tipo da partida e preencha a configuracao.</p>
 
-            <div className="mt-5">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">Módulo financeiro</p>
-              <p className="mt-1 text-xs text-zinc-400">Defina se esta partida será pós-paga, pré-paga ou híbrida antes de escolher a estrutura.</p>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="mt-5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Módulo financeiro</p>
+              <p className="mt-1 text-xs text-zinc-500">Define como as cobranças serão tratadas nesta partida.</p>
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 {[
                   { key: 'POSTPAID', label: 'Pós-pago' },
                   { key: 'PREPAID', label: 'Pré-pago' },
@@ -313,10 +297,10 @@ export default function HomeGamePage() {
                     key={option.key}
                     type="button"
                     onClick={() => setNewSessionFinancialModule(option.key as 'POSTPAID' | 'PREPAID' | 'HYBRID')}
-                    className={`rounded-xl border px-4 py-3 text-sm font-bold transition-colors ${
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
                       newSessionFinancialModule === option.key
                         ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                        : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                        : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
                     }`}
                   >
                     {option.label}
