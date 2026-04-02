@@ -20,12 +20,10 @@ interface Session {
   pokerVariant?: 'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'
   gameType?: 'CASH_GAME' | 'TOURNAMENT'
   homeGame: { name: string; chipValue: string; gameType?: 'CASH_GAME' | 'TOURNAMENT'; hostId: string }
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
+  cashier?: { id: string; name: string }
   playerStates: PlayerState[]
   staffAssignments: StaffAssignment[]
   rakebackAssignments: RakebackAssignment[]
-            {/* SEÇÃO 1: STAFF */}
-            <div className="mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
   participantAssignments: ParticipantAssignment[]
 }
 
@@ -48,10 +46,7 @@ interface StaffOption {
   pixKey?: string | null
 }
 
-            </div>
 interface ParticipantAssignment {
-            {/* SEÇÃO 2: RAKEBACK */}
-            <div className="mt-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
   userId: string
   user: { id: string; name: string; email?: string }
 }
@@ -62,7 +57,7 @@ interface ParticipantOption {
   email?: string | null
 }
 
-                      key={`rakeback-${userId}`}
+const pokerVariantLabels: Record<'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX', string> = {
   HOLDEN: 'Holden',
   BUTTON_CHOICE: 'Button Choice',
   PINEAPPLE: 'Pineapple',
@@ -119,7 +114,6 @@ function extractPixOrderId(payload: any): string | null {
     if (typeof value === 'string' && value.trim()) return value.trim()
   }
   return null
-            </div>
 }
 
 function extractPixCopyPaste(payload: any): string | null {
@@ -226,7 +220,6 @@ export default function SessionManagePage() {
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([])
   const [selectedRakebackIds, setSelectedRakebackIds] = useState<string[]>([])
   const [selectedRakebackPercent, setSelectedRakebackPercent] = useState<Record<string, string>>({})
-    const [activeRakebackIndex, setActiveRakebackIndex] = useState<number | null>(null)
   const [staffLoading, setStaffLoading] = useState(false)
   const [participantOptions, setParticipantOptions] = useState<ParticipantOption[]>([])
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
@@ -333,7 +326,6 @@ export default function SessionManagePage() {
         acc[assignment.userId] = String(Number(assignment.percent || 0))
         return acc
       }, {}))
-        setActiveRakebackIndex(normalized.rakebackAssignments.length > 0 ? 0 : null)
       setShowStaffModal(true)
     } catch (err) {
       alert(typeof err === 'string' ? err : 'Não foi possível carregar o staff')
@@ -454,71 +446,44 @@ export default function SessionManagePage() {
 
       const ensureSpace = (needed = 18) => {
         if (y + needed <= pageHeight - margin) return
-            <div className="mt-2 space-y-3">
-              {selectedRakebackIds.length === 0 ? (
-                <p className="text-sm text-zinc-400">Nenhuma pessoa selecionada para rakeback.</p>
-              ) : (
-                selectedRakebackIds.map((userId, index) => {
-                  const person = staffOptions.find(p => p.id === userId)
-                  if (!person) return null
+        doc.addPage()
+        y = 40
+      }
 
-                  <div 
-                    key={`rakeback-${userId}`}
-                    className={`rounded-xl border p-3 transition-all ${
-                      activeRakebackIndex === index
-                        ? 'border-blue-500 bg-blue-500/10'
-                        : 'border-zinc-800 bg-zinc-950/60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="font-medium text-zinc-100">{person.name}</p>
-                        {person.email && <p className="text-xs text-zinc-500">{person.email}</p>}
-                      </div>
-                      {activeRakebackIndex !== index && (
-                        <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-300">
-                          {selectedRakebackPercent[userId] || '0'}%
-                        </span>
-                      )}
-                    </div>
-                    
-                    {activeRakebackIndex === index && (
-                      <div className="mt-3">
-                        <label className="text-xs uppercase tracking-wide text-zinc-500">% de Rakeback</label>
-                        <select
-                          value={selectedRakebackPercent[userId] || '0'}
-                          onChange={(e) => {
-                            const newPercent = e.target.value
-                            setSelectedRakebackPercent((prev) => ({ ...prev, [userId]: newPercent }))
-                            
-                            const rakebackList = selectedRakebackIds
-                            const currentTotal = rakebackList.reduce((sum, id) => {
-                              const percent = parseFloat(selectedRakebackPercent[id] || '0')
-                              return sum + (Number.isFinite(percent) ? percent : 0)
-                            }, 0)
-                            
-                            const totalWithNewPercent = currentTotal - parseFloat(selectedRakebackPercent[userId] || '0') + parseFloat(newPercent)
-                            if (totalWithNewPercent <= 100) {
-                              const nextIndex = index + 1
-                              if (nextIndex < rakebackList.length && totalWithNewPercent < 100) {
-                                setActiveRakebackIndex(nextIndex)
-                              } else if (totalWithNewPercent === 100) {
-                                setActiveRakebackIndex(null)
-                              }
-                            }
-                          }}
-                          className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-                        >
-                          {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100].map(value => (
-                            <option key={value} value={value}>{value}%</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                )
-                })
-              )}
+      const addText = (text: string, options?: { size?: number; color?: [number, number, number]; gap?: number; weight?: PdfFontWeight }) => {
+        const size = options?.size ?? 11
+        const color = options?.color ?? [24, 24, 27]
+        const gap = options?.gap ?? 8
+        const weight = options?.weight ?? 'normal'
+        const lines = doc.splitTextToSize(text, maxWidth)
+        doc.setFont('helvetica', weight)
+        doc.setFontSize(size)
+        doc.setTextColor(color[0], color[1], color[2])
+
+        lines.forEach((line: string) => {
+          ensureSpace(size + 8)
+          doc.text(line, margin, y)
+          y += size + 4
+        })
+
+        y += gap
+      }
+
+      const addSection = (title: string) => {
+        y += 4
+        addText(title, { size: 14, color: [88, 28, 135], gap: 4, weight: 'bold' })
+        ensureSpace(12)
+        doc.setDrawColor(216, 180, 254)
+        doc.line(margin, y - 2, pageWidth - margin, y - 2)
+        y += 10
+      }
+
+      addText('Relatório de Liquidação Financeira', { size: 20, color: [17, 24, 39], gap: 2, weight: 'bold' })
+      addText(`${session.homeGame.name} • Sessão ${session.id}`, { size: 11, color: [82, 82, 91], gap: 10 })
+
+      addSection('Resumo da Sessão')
+      addText(`Home game: ${session.homeGame.name}`)
+      addText(`Sessão: ${session.id}`)
       addText(`Modalidade: ${gameType === 'CASH_GAME' ? 'Cash Game' : 'Torneio'}`)
       addText(`Variante: ${pokerVariantLabels[pokerVariant]}`)
       addText(`Status: ${session.status}`)
