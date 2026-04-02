@@ -720,12 +720,6 @@ export default function SessionManagePage() {
           <p className="text-xs text-zinc-400">Gerenciar Sessão • {pokerVariantLabels[pokerVariant]} • {gameType === 'CASH_GAME' ? 'Cash Game' : 'Torneio'}</p>
         </div>
         <div className="flex gap-2">
-          {session.status === 'WAITING' && (
-            <button onClick={startSession} disabled={actionLoading || !canStartSession}
-              className="bg-green-500 hover:bg-green-400 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50">
-              {!canStartSession ? 'Min. 2 participantes' : 'Iniciar'}
-            </button>
-          )}
           {session.status === 'ACTIVE' && (
             <>
               {gameType === 'TOURNAMENT' && (
@@ -1102,6 +1096,25 @@ export default function SessionManagePage() {
             A modalidade torneio ja esta separada no sistema, mas o fluxo operacional especifico de torneio ainda nao foi implementado. Por isso, o caixa de cash game fica desativado aqui.
           </div>
         )}
+
+        {session.status === 'WAITING' && isHost && (
+          <div className="mb-6 rounded-xl border border-green-500/30 bg-green-500/10 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-green-300">Inicio da partida</p>
+                <p className="mt-1 text-sm text-zinc-300">Inicie a sessao apos finalizar as configuracoes de participantes e staff.</p>
+              </div>
+              <button
+                onClick={startSession}
+                disabled={actionLoading || !canStartSession}
+                className="rounded-lg bg-green-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-green-400 disabled:opacity-50"
+              >
+                {!canStartSession ? 'Min. 2 participantes' : 'Iniciar'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           <h2 className="text-lg font-bold">Ranking em Tempo Real</h2>
           {sortedPlayers.length === 0 ? (
