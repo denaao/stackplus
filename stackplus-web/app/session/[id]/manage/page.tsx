@@ -701,13 +701,6 @@ export default function SessionManagePage() {
           )}
           {session.status === 'ACTIVE' && (
             <>
-              {gameType === 'CASH_GAME' && (
-                <button onClick={() => router.push(`/cashier/${sessionId}`)}
-                  className="bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-4 py-2 rounded-lg text-sm transition-colors">
-                  Caixa
-                </button>
-              )}
-              {gameType === 'TOURNAMENT' && (
                 <button onClick={() => window.open(`/tv/${sessionId}`, '_blank')}
                   className="bg-zinc-700 hover:bg-zinc-600 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors">
                   📺 TV
@@ -810,6 +803,17 @@ export default function SessionManagePage() {
                 <p className="text-sm text-zinc-500">Nenhuma pessoa cadastrada no home game.</p>
               )}
             </div>
+          </div>
+        )}
+
+        {gameType === 'CASH_GAME' && session.status === 'ACTIVE' && (
+          <div className="mb-6">
+            <button
+              onClick={() => router.push(`/cashier/${sessionId}`)}
+              className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-4 py-3 rounded-lg text-base transition-colors"
+            >
+              Ir para o Caixa
+            </button>
           </div>
         )}
 
