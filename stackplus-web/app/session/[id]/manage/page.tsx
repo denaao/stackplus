@@ -707,12 +707,6 @@ export default function SessionManagePage() {
                   Caixa
                 </button>
               )}
-              {isHost && (
-                <button onClick={openStaffModal} disabled={staffLoading}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50">
-                  {staffLoading ? 'Carregando...' : `Staff${session.staffAssignments.length ? ` (${session.staffAssignments.length})` : ''}`}
-                </button>
-              )}
               {gameType === 'TOURNAMENT' && (
                 <button onClick={() => window.open(`/tv/${sessionId}`, '_blank')}
                   className="bg-zinc-700 hover:bg-zinc-600 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors">
@@ -729,6 +723,34 @@ export default function SessionManagePage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8">
+        {isHost && session.status === 'WAITING' && (
+          <div className="mb-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-blue-300">Staff da partida</p>
+                <p className="mt-1 text-sm text-zinc-300">Selecione quem faz parte do staff e configure o rakeback.</p>
+              </div>
+              <button
+                type="button"
+                onClick={openStaffModal}
+                disabled={staffLoading}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                {staffLoading ? 'Carregando...' : `Configurar Staff${session.staffAssignments.length ? ` (${session.staffAssignments.length})` : ''}`}
+              </button>
+            </div>
+            {session.staffAssignments.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {session.staffAssignments.map((assignment) => (
+                  <span key={assignment.userId} className="rounded-full bg-blue-500/20 border border-blue-500/30 px-3 py-1 text-xs font-medium text-blue-200">
+                    {assignment.user.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {gameType === 'CASH_GAME' && isHost && session.status !== 'FINISHED' && (
           <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -1001,18 +1023,6 @@ export default function SessionManagePage() {
             A modalidade torneio ja esta separada no sistema, mas o fluxo operacional especifico de torneio ainda nao foi implementado. Por isso, o caixa de cash game fica desativado aqui.
           </div>
         )}
-        {session.status === 'ACTIVE' && isHost && (
-          <div className="flex justify-end">
-            <button
-              onClick={openStaffModal}
-              disabled={staffLoading}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
-            >
-              {staffLoading ? 'Carregando...' : `Staff${session.staffAssignments.length ? ` (${session.staffAssignments.length})` : ''}`}
-            </button>
-          </div>
-        )}
-
         <div className="space-y-3">
           <h2 className="text-lg font-bold">Ranking em Tempo Real</h2>
           {sortedPlayers.length === 0 ? (
