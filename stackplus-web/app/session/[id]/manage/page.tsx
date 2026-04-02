@@ -1001,6 +1001,18 @@ export default function SessionManagePage() {
             A modalidade torneio ja esta separada no sistema, mas o fluxo operacional especifico de torneio ainda nao foi implementado. Por isso, o caixa de cash game fica desativado aqui.
           </div>
         )}
+        {session.status === 'ACTIVE' && isHost && (
+          <div className="flex justify-end">
+            <button
+              onClick={openStaffModal}
+              disabled={staffLoading}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
+            >
+              {staffLoading ? 'Carregando...' : `Staff${session.staffAssignments.length ? ` (${session.staffAssignments.length})` : ''}`}
+            </button>
+          </div>
+        )}
+
         <div className="space-y-3">
           <h2 className="text-lg font-bold">Ranking em Tempo Real</h2>
           {sortedPlayers.length === 0 ? (
