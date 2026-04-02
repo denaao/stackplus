@@ -62,22 +62,7 @@ export default function HomeGamePage() {
   const [tourBlindsAfterBreak, setTourBlindsAfterBreak] = useState('20')
   const [tourLevelsUntilBreak, setTourLevelsUntilBreak] = useState('4')
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
-  const [financialModule, setFinancialModule] = useState<'POSTPAID' | 'PREPAID' | 'HYBRID'>('POSTPAID')
   const [newSessionFinancialModule, setNewSessionFinancialModule] = useState<'POSTPAID' | 'PREPAID' | 'HYBRID'>('POSTPAID')
-  const [hybridMemberModes, setHybridMemberModes] = useState<Record<string, 'POSTPAID' | 'PREPAID'>>({})
-  const [savingFinancialConfig, setSavingFinancialConfig] = useState(false)
-  const [isEditingFinancialConfig, setIsEditingFinancialConfig] = useState(false)
-
-  function initFinancialConfig(gameData: HomeGame) {
-    const nextModule = gameData.financialModule || 'POSTPAID'
-    setFinancialModule(nextModule)
-
-    const map: Record<string, 'POSTPAID' | 'PREPAID'> = {}
-    for (const member of gameData.members || []) {
-      map[member.user.id] = member.paymentMode === 'PREPAID' ? 'PREPAID' : 'POSTPAID'
-    }
-    setHybridMemberModes(map)
-  }
 
   useEffect(() => {
     Promise.all([
@@ -85,36 +70,10 @@ export default function HomeGamePage() {
       api.get(`/sessions/home-game/${id}`)
     ]).then(([g, s]) => {
       setGame(g.data)
-      initFinancialConfig(g.data)
+      setNewSessionFinancialModule(g.data.financialModule || 'POSTPAID')
       setSessions(s.data)
     }).finally(() => setLoading(false))
   }, [id])
-
-  async function saveFinancialConfig() {
-    if (!game) return
-    setSavingFinancialConfig(true)
-
-    try {
-      const hybridMembers = game.members.map((member) => ({
-        userId: member.user.id,
-        paymentMode: hybridMemberModes[member.user.id] || 'POSTPAID',
-      }))
-
-      const { data } = await api.patch(`/home-games/${game.id}/financial-config`, {
-        financialModule,
-        hybridMembers,
-      })
-
-      setGame(data)
-      initFinancialConfig(data)
-      setIsEditingFinancialConfig(false)
-      alert('Configuração financeira salva com sucesso.')
-    } catch (err) {
-      alert(typeof err === 'string' ? err : 'Não foi possível salvar a configuração financeira')
-    } finally {
-      setSavingFinancialConfig(false)
-    }
-  }
 
   function openCreatePicker() {
     if (!game) return
@@ -259,97 +218,6 @@ export default function HomeGamePage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-8">
-        {isHost && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold">Módulo Financeiro</h2>
-                <p className="mt-1 text-xs text-zinc-500">Defina se o home game opera pós-pago, pré-pago ou híbrido por jogador.</p>
-              </div>
-              <button
-                type="button"
-                onClick={isEditingFinancialConfig ? saveFinancialConfig : () => setIsEditingFinancialConfig(true)}
-                disabled={savingFinancialConfig}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
-              >
-                {savingFinancialConfig ? 'Salvando...' : isEditingFinancialConfig ? 'Salvar configuração' : 'Alterar configuração'}
-              </button>
-            </div>
-
-            {!isEditingFinancialConfig && (
-              <p className="mt-3 text-xs text-zinc-500">Configuração salva. Clique em Alterar configuração para liberar a edição do modo de cobrança.</p>
-            )}
-
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {[
-                { key: 'POSTPAID', label: 'Pós-pago' },
-                { key: 'PREPAID', label: 'Pré-pago' },
-                { key: 'HYBRID', label: 'Híbrido' },
-              ].map((option) => (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => setFinancialModule(option.key as 'POSTPAID' | 'PREPAID' | 'HYBRID')}
-                  disabled={!isEditingFinancialConfig}
-                  className={`rounded-lg border px-3 py-3 text-sm font-bold transition-colors ${
-                    financialModule === option.key
-                      ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                      : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            {financialModule === 'HYBRID' && (
-              <div className="mt-4 space-y-2">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">Configuração por jogador</p>
-                {game.members.length === 0 ? (
-                  <p className="text-sm text-zinc-500">Adicione membros no home game para configurar o modo híbrido.</p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    {game.members.map((member) => {
-                      const memberMode = hybridMemberModes[member.user.id] || 'POSTPAID'
-                      return (
-                        <div key={member.id} className="rounded-lg border border-zinc-700 bg-zinc-950/60 p-3">
-                          <p className="text-sm font-semibold text-zinc-100">{member.user.name}</p>
-                          <div className="mt-2 grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setHybridMemberModes((prev) => ({ ...prev, [member.user.id]: 'POSTPAID' }))}
-                              disabled={!isEditingFinancialConfig}
-                              className={`rounded-md px-2 py-2 text-xs font-bold transition-colors ${
-                                memberMode === 'POSTPAID'
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                              } disabled:cursor-not-allowed disabled:opacity-60`}
-                            >
-                              Pós-pago
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setHybridMemberModes((prev) => ({ ...prev, [member.user.id]: 'PREPAID' }))}
-                              disabled={!isEditingFinancialConfig}
-                              className={`rounded-md px-2 py-2 text-xs font-bold transition-colors ${
-                                memberMode === 'PREPAID'
-                                  ? 'bg-amber-500 text-zinc-900'
-                                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                              } disabled:cursor-not-allowed disabled:opacity-60`}
-                            >
-                              Pré-pago
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
