@@ -633,7 +633,6 @@ export default function SessionManagePage() {
   const gameType = session.gameType || session.homeGame.gameType || 'CASH_GAME'
   const pokerVariant = session.pokerVariant || 'HOLDEN'
   const isHost = user?.id === session.homeGame.hostId
-  const hasSavedStaff = session.staffAssignments.length > 0
   const hasSavedParticipants = session.participantAssignments.length > 0
   const canStartSession = gameType !== 'CASH_GAME' || session.participantAssignments.length >= 2
   const sessionCaixinha = Number(session.caixinha || 0)
@@ -759,16 +758,12 @@ export default function SessionManagePage() {
                     await loadParticipantOptions()
                   }
                 }}
-                disabled={participantsLoading || !hasSavedStaff}
+                disabled={participantsLoading}
                 className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
               >
                 {showParticipantsPicker ? 'Ocultar participantes' : 'Escolher participantes'}
               </button>
             </div>
-
-            {!hasSavedStaff && (
-              <p className="mt-3 text-xs text-amber-300">Salve o staff da partida para habilitar a escolha de participantes.</p>
-            )}
 
             {hasSavedParticipants && (
               <p className="mt-3 text-xs text-emerald-300">Participantes salvos: {session.participantAssignments.map((item) => item.user.name).join(', ')}</p>
