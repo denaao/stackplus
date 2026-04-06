@@ -1,10 +1,12 @@
 import { prisma } from '../../lib/prisma'
 import { TransactionType } from '@prisma/client'
 
+type CashierTransactionType = TransactionType | 'JACKPOT'
+
 interface TransactionInput {
   sessionId: string
   userId: string
-  type: TransactionType
+  type: CashierTransactionType
   amount: number
   chips: number
   note?: string
@@ -20,6 +22,10 @@ export async function registerTransaction(input: TransactionInput) {
   if (session.status !== 'ACTIVE') throw new Error('Sessão não está ativa')
 
   const chipValue = Number(session.chipValue ?? session.homeGame.chipValue)
+  const isJackpot = input.type === 'JACKPOT'
+  if (isJackpot && session.jackpotEnabled === false) {
+    throw new Error('Jackpot está desabilitado para esta partida')
+  }
   const chips = Number(input.chips)
   if (Number.isNaN(chips)) throw new Error('Informe uma quantidade de fichas válida')
   if (input.type === TransactionType.CASHOUT) {
@@ -28,11 +34,11 @@ export async function registerTransaction(input: TransactionInput) {
     throw new Error('Quantidade de fichas deve ser maior que zero')
   }
 
-  // Always derive money amount from the session chip value to keep each match consistent.
   const amount = Number((chips * chipValue).toFixed(2))
 
   let state = await prisma.playerSessionState.findUnique({
     where: { sessionId_userId: { sessionId: input.sessionId, userId: input.userId } },
+    include: { user: { select: { id: true, name: true, avatarUrl: true } } },
   })
 
   if (!state && input.type !== TransactionType.BUYIN) {
@@ -46,14 +52,9 @@ export async function registerTransaction(input: TransactionInput) {
   if (state?.hasCashedOut) throw new Error('Jogador já realizou cashout nesta sessão')
 
   if (input.type === TransactionType.CASHOUT) {
-    const allStates = await prisma.playerSessionState.findMany({ where: { sessionId: input.sessionId } })
-    const remainingChipsInPlay = allStates.reduce((sum, s) => {
-      const chipsIn = Number(s.chipsIn)
-      const chipsOut = Number(s.chipsOut)
-      return sum + (chipsIn - chipsOut)
-    }, 0) / chipValue
-    if (chips > remainingChipsInPlay) {
-      throw new Error('Cashout não pode exceder o total de fichas em jogo')
+    const playerCurrentStack = Number(state?.currentStack || 0)
+    if (chips > playerCurrentStack) {
+      throw new Error(`Cashout não pode exceder o stack atual do jogador (${playerCurrentStack.toLocaleString('pt-BR')} fichas)`)
     }
   }
 
@@ -62,9 +63,9 @@ export async function registerTransaction(input: TransactionInput) {
       data: {
         sessionId: input.sessionId,
         userId: input.userId,
-        type: input.type,
+        type: input.type as TransactionType,
         amount,
-        chips,
+        chips: isJackpot ? 0 : chips,
         note: input.note,
         registeredBy: input.registeredBy,
       },
@@ -88,6 +89,8 @@ export async function registerTransaction(input: TransactionInput) {
 
       if (input.type === TransactionType.BUYIN || input.type === TransactionType.REBUY || input.type === TransactionType.ADDON) {
         chipsIn += amount
+        currentStack += chips
+      } else if (isJackpot) {
         currentStack += chips
       } else if (input.type === TransactionType.CASHOUT) {
         chipsOut += amount
@@ -178,6 +181,11 @@ export async function deleteTransaction(transactionId: string) {
         transaction.type === TransactionType.ADDON
       ) {
         chipsInAmount += amount
+        currentStackChips += chips
+        continue
+      }
+
+      if (transaction.type === TransactionType.JACKPOT) {
         currentStackChips += chips
         continue
       }

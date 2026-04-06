@@ -102,6 +102,18 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
+const sangeurLoginSchema = z.object({
+  homeGameId: z.string().uuid(),
+  username: z.string().trim().min(3).max(40),
+  password: z.string().min(1),
+})
+
+const sangeurChangePasswordSchema = z.object({
+  homeGameId: z.string().uuid(),
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6).max(120),
+})
+
 export async function register(req: Request, res: Response): Promise<void> {
   const data = registerSchema.parse(req.body)
   const result = await AuthService.register(data)
@@ -111,6 +123,12 @@ export async function register(req: Request, res: Response): Promise<void> {
 export async function login(req: Request, res: Response): Promise<void> {
   const { email, password } = loginSchema.parse(req.body)
   const result = await AuthService.login(email, password)
+  res.json(result)
+}
+
+export async function loginSangeur(req: Request, res: Response): Promise<void> {
+  const { homeGameId, username, password } = sangeurLoginSchema.parse(req.body)
+  const result = await AuthService.loginSangeur(homeGameId, username, password)
   res.json(result)
 }
 
@@ -172,4 +190,15 @@ export async function updateMe(req: AuthRequest, res: Response): Promise<void> {
   const data = updateMeSchema.parse(req.body)
   const user = await AuthService.updateMe(req.user!.userId, data)
   res.json(user)
+}
+
+export async function changeSangeurPassword(req: AuthRequest, res: Response): Promise<void> {
+  const data = sangeurChangePasswordSchema.parse(req.body)
+  const result = await AuthService.changeSangeurPassword({
+    userId: req.user!.userId,
+    homeGameId: data.homeGameId,
+    currentPassword: data.currentPassword,
+    newPassword: data.newPassword,
+  })
+  res.json(result)
 }

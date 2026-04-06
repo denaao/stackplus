@@ -51,6 +51,22 @@ interface SessionStore {
   clearSession: () => void
 }
 
+interface SangeurContext {
+  homeGameId: string
+  homeGameName: string
+  username: string
+  mustChangePassword: boolean
+}
+
+interface SangeurAuthStore {
+  token: string | null
+  user: User | null
+  sangeur: SangeurContext | null
+  setSangeurAuth: (token: string, user: User, sangeur: SangeurContext) => void
+  setMustChangePassword: (mustChangePassword: boolean) => void
+  logoutSangeur: () => void
+}
+
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set) => ({
@@ -77,3 +93,22 @@ export const useSessionStore = create<SessionStore>((set) => ({
     })),
   clearSession: () => set({ session: null, playerStates: [] }),
 }))
+
+export const useSangeurAuthStore = create<SangeurAuthStore>()(
+  persist(
+    (set) => ({
+      token: null,
+      user: null,
+      sangeur: null,
+      setSangeurAuth: (token, user, sangeur) => set({ token, user, sangeur }),
+      setMustChangePassword: (mustChangePassword) =>
+        set((state) => ({
+          token: state.token,
+          user: state.user,
+          sangeur: state.sangeur ? { ...state.sangeur, mustChangePassword } : null,
+        })),
+      logoutSangeur: () => set({ token: null, user: null, sangeur: null }),
+    }),
+    { name: 'stackplus-sangeur-auth' }
+  )
+)

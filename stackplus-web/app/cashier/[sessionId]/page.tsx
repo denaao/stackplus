@@ -15,7 +15,7 @@ interface PlayerState {
 interface CashierTransaction {
   id: string
   userId: string
-  type: 'BUYIN' | 'REBUY' | 'ADDON' | 'CASHOUT'
+  type: 'BUYIN' | 'REBUY' | 'ADDON' | 'CASHOUT' | 'JACKPOT'
   amount: string | number
   chips: string | number
   note?: string | null
@@ -61,6 +61,7 @@ const transactionTypeLabel: Record<CashierTransaction['type'], string> = {
   REBUY: 'Rebuy',
   ADDON: 'Addon',
   CASHOUT: 'Cashout',
+  JACKPOT: 'JACKPOT',
 }
 
 function formatCurrency(value: string | number) {
@@ -242,12 +243,12 @@ export default function CashierPage() {
   const [playerStates, setPlayerStates] = useState<PlayerState[]>([])
   const [transactions, setTransactions] = useState<CashierTransaction[]>([])
   const [form, setForm] = useState({ userId: '', amount: '', chips: '', note: '' })
-  const [transactionType, setTransactionType] = useState<'BUYIN' | 'REBUY' | 'CASHOUT'>('BUYIN')
+  const [transactionType, setTransactionType] = useState<'BUYIN' | 'REBUY' | 'CASHOUT' | 'JACKPOT'>('BUYIN')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [showEndModal, setShowEndModal] = useState(false)
-  const [endForm, setEndForm] = useState({ rake: '', caixinha: '' })
+  const [endForm, setEndForm] = useState({ rake: '', caixinha: '', jackpotArrecadado: '' })
   const [showPrepaidModal, setShowPrepaidModal] = useState(false)
   const [prepaidChargeResult, setPrepaidChargeResult] = useState<PrepaidChargeResult | null>(null)
   const [pendingPrepaidTransaction, setPendingPrepaidTransaction] = useState<PendingPrepaidTransaction | null>(null)
@@ -368,8 +369,8 @@ export default function CashierPage() {
       return
     }
     if (transactionType === 'CASHOUT') {
-      if (parsedChips > totalChipsInPlay) {
-        setError(`Cashout n\u00e3o pode exceder o total de fichas em jogo (${totalChipsInPlay.toLocaleString()} fichas)`)
+      if (parsedChips > selectedPlayerCurrentStack) {
+        setError(`Cashout não pode exceder o stack atual do jogador (${selectedPlayerCurrentStack.toLocaleString('pt-BR')} fichas)`)
         setLoading(false)
         return
       }
@@ -380,8 +381,9 @@ export default function CashierPage() {
       const selectedMember = members.find((member) => member.id === form.userId)
       const playerMode = resolvePlayerPaymentMode(session?.financialModule || session?.homeGame?.financialModule, selectedMember?.paymentMode)
 
-      if (transactionType !== 'CASHOUT' && playerMode === 'PREPAID') {
-        const purchaseType = transactionType as 'BUYIN' | 'REBUY' | 'ADDON'
+      const isPrepaidPurchase = transactionType === 'BUYIN' || transactionType === 'REBUY'
+      if (isPrepaidPurchase && playerMode === 'PREPAID') {
+        const purchaseType = transactionType as 'BUYIN' | 'REBUY'
         const { data } = await api.post('/banking/annapay/prepaid/purchase-charge', {
           sessionId,
           userId: form.userId,
@@ -655,25 +657,30 @@ export default function CashierPage() {
   }, [showPrepaidModal, prepaidChargeResult?.charge?.id, autoProcessingPaidCharge, registeringPendingPrepaid])
 
   const chipValue = session ? parseFloat(session.chipValue || session.homeGame.chipValue) : 1
+  const isJackpotEnabled = session?.jackpotEnabled !== false
   const selectedPlayerState = playerStates.find((p) => p.userId === form.userId)
+  const selectedPlayerCurrentStack = Number(selectedPlayerState?.currentStack || 0)
   const hasExistingBuyIn = Boolean(selectedPlayerState)
-  const totalChipsInPlay = playerStates.reduce((sum, p) => {
-    const chipsIn = Number(p.chipsIn)
-    const chipsOut = Number(p.chipsOut)
-    return sum + (chipsIn - chipsOut)
-  }, 0) / chipValue
+  const selectableMembers = members.filter((member) => {
+    const state = playerStates.find((player) => player.userId === member.id)
+    return !state?.hasCashedOut
+  })
+  const totalChipsInPlay = playerStates.reduce((sum, p) => sum + Number(p.currentStack || 0), 0)
   const currentType = transactionType
 
   const allPlayersHaveCashedOut = playerStates.length > 0 && playerStates.every((p) => p.hasCashedOut)
-  const pendingChips = playerStates.reduce((sum, p) => {
-    const chipsIn = Number(p.chipsIn)
-    const chipsOut = Number(p.chipsOut)
-    return sum + (chipsIn - chipsOut)
-  }, 0) / chipValue
+  const activePlayers = playerStates.filter((p) => !p.hasCashedOut)
+  const pendingChips = playerStates.reduce((sum, p) => sum + Number(p.currentStack || 0), 0)
+  const jackpotDistributed = transactions
+    .filter((transaction) => transaction.type === 'JACKPOT')
+    .reduce((sum, transaction) => sum + Number(transaction.amount), 0)
+  const jackpotAtual = Number(session?.homeGame?.jackpotAccumulated || 0)
   const staffAssignments: StaffAssignment[] = Array.isArray(session?.staffAssignments) ? session.staffAssignments : []
   const rakebackAssignments: RakebackAssignment[] = Array.isArray(session?.rakebackAssignments) ? session.rakebackAssignments : []
   const parsedRake = parseFloat(endForm.rake || '0') || 0
   const parsedCaixinha = parseFloat(endForm.caixinha || '0') || 0
+  const parsedJackpotArrecadado = parseFloat(endForm.jackpotArrecadado || '0') || 0
+  const jackpotProjetado = Math.max(0, Number((jackpotAtual + parsedJackpotArrecadado - jackpotDistributed).toFixed(2)))
   const totalRakebackPercent = rakebackAssignments.reduce((sum, assignment) => {
     const value = Number(assignment.percent || 0)
     if (!Number.isFinite(value) || value <= 0) return sum
@@ -730,6 +737,7 @@ export default function CashierPage() {
       await api.patch(`/sessions/${sessionId}/end`, {
         rake: parseFloat(endForm.rake),
         caixinha: parseFloat(endForm.caixinha),
+        jackpotArrecadado: parsedJackpotArrecadado,
       })
       setSuccess('Sessão encerrada!')
       setTimeout(() => router.back(), 2000)
@@ -824,26 +832,35 @@ export default function CashierPage() {
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-yellow-400"
                   >
                     <option value="">Selecione...</option>
-                    {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    {selectableMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo</label>
                   <div className="flex flex-col gap-2">
-                    {(['BUYIN', 'REBUY', 'CASHOUT'] as const).map((t) => {
+                    {(isJackpotEnabled
+                      ? (['BUYIN', 'REBUY', 'CASHOUT', 'JACKPOT'] as const)
+                      : (['BUYIN', 'REBUY', 'CASHOUT'] as const)).map((t) => {
                       const isDisabled =
                         (t === 'BUYIN' && hasExistingBuyIn) ||
                         (t === 'CASHOUT' && Boolean(selectedPlayerState?.hasCashedOut)) ||
-                        (t === 'REBUY' && Boolean(selectedPlayerState?.hasCashedOut))
+                        (t === 'REBUY' && Boolean(selectedPlayerState?.hasCashedOut)) ||
+                        (t === 'JACKPOT' && (!isJackpotEnabled || !hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut)))
 
                       const activeClass = t === 'CASHOUT'
                         ? 'bg-red-500 text-white border-2 border-red-300'
+                        : t === 'JACKPOT'
+                          ? 'bg-emerald-500 text-white border-2 border-emerald-300'
                         : 'bg-yellow-400 text-zinc-900 border-2 border-yellow-200'
 
                       const idleClass = t === 'CASHOUT'
                         ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-transparent'
+                        : t === 'JACKPOT'
+                          ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-transparent'
                         : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-transparent'
+
+                      const label = t === 'JACKPOT' ? 'Receber JACKPOT' : t
 
                       return (
                         <button
@@ -859,13 +876,16 @@ export default function CashierPage() {
                                 : idleClass
                           }`}
                         >
-                          {t}
+                          {label}
                         </button>
                       )
                     })}
                   </div>
-                  {hasExistingBuyIn && !selectedPlayerState?.hasCashedOut && (
-                    <p className="text-xs text-zinc-500">Buy-in já realizado — disponível: REBUY e CASHOUT.</p>
+                  {hasExistingBuyIn && !selectedPlayerState?.hasCashedOut && isJackpotEnabled && (
+                    <p className="text-xs text-zinc-500">Buy-in já realizado — disponível: REBUY, CASHOUT e Receber JACKPOT.</p>
+                  )}
+                  {!hasExistingBuyIn && form.userId && isJackpotEnabled && (
+                    <p className="text-xs text-zinc-500">JACKPOT fica disponível após o buy-in do jogador.</p>
                   )}
                   {selectedPlayerState?.hasCashedOut && (
                     <p className="text-xs text-zinc-500">Jogador já realizou cashout nesta sessão.</p>
@@ -873,11 +893,13 @@ export default function CashierPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Fichas</label>
+                  <label className="text-xs text-zinc-400 uppercase tracking-wide">
+                    {currentType === 'JACKPOT' ? 'Fichas de prêmio JACKPOT' : 'Fichas'}
+                  </label>
                   <input type="number" min="0" value={form.chips} onChange={(e) => setForm((prev) => ({ ...prev, chips: e.target.value }))}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400" placeholder="0" />
+                    className={`w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none ${currentType === 'JACKPOT' ? 'focus:border-emerald-400' : 'focus:border-yellow-400'}`} placeholder="0" />
                   {currentType === 'CASHOUT' && playerStates.length > 0 && (
-                    <p className="text-xs text-zinc-500">Máximo disponível: {formatChips(totalChipsInPlay)} fichas na mesa</p>
+                    <p className="text-xs text-zinc-500">Máximo disponível para este jogador: {formatChips(selectedPlayerCurrentStack)} fichas</p>
                   )}
                   {form.chips && chipValue && (
                     <p className="text-xs text-zinc-400">≈ {formatCurrency(parseFloat(form.chips) * chipValue)}</p>
@@ -899,10 +921,10 @@ export default function CashierPage() {
         <div>
           <h2 className="text-lg font-bold mb-4">Jogadores</h2>
           <div className="space-y-3">
-            {playerStates.length === 0 ? (
+            {activePlayers.length === 0 ? (
               <p className="text-zinc-500 text-sm">Nenhum jogador ainda</p>
             ) : (
-              [...playerStates].sort((a, b) => parseFloat(b.result) - parseFloat(a.result)).map((p) => {
+              [...activePlayers].sort((a, b) => parseFloat(b.result) - parseFloat(a.result)).map((p) => {
                 const playerTransactions = transactions
                   .filter((transaction) => transaction.userId === p.userId)
                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -966,7 +988,9 @@ export default function CashierPage() {
                               </div>
                               <div className="text-right">
                                 <p className="font-semibold text-zinc-100">{formatCurrency(transaction.amount)}</p>
-                                <p className="text-zinc-500">{formatChips(transaction.chips)} fichas</p>
+                                <p className="text-zinc-500">
+                                  {formatChips(transaction.chips)} fichas{transaction.type === 'JACKPOT' ? ' (prêmio)' : ''}
+                                </p>
                               </div>
                             </div>
                             <div className="mt-2 flex justify-end">
@@ -1003,6 +1027,22 @@ export default function CashierPage() {
               <p className="text-lg font-bold text-yellow-400">{formatChips(pendingChips)} fichas</p>
               <p className="text-xs text-zinc-500 mt-2">≈ {formatCurrency(pendingChips * chipValue)}</p>
             </div>
+
+            {isJackpotEnabled && (
+              <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
+                <p className="text-zinc-400">JACKPOT distribuído:</p>
+                <p className="text-lg font-bold text-emerald-400">{formatCurrency(jackpotDistributed)}</p>
+                <p className="text-xs text-zinc-500 mt-2">Total distribuído nas transações do tipo JACKPOT nesta sessão.</p>
+              </div>
+            )}
+
+            {isJackpotEnabled && (
+              <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
+                <p className="text-zinc-400">JACKPOT atual do Home Game:</p>
+                <p className="text-lg font-bold text-zinc-100">{formatCurrency(jackpotAtual)}</p>
+                <p className="text-xs text-zinc-500 mt-2">Novo JACKPOT projetado: <span className="font-semibold text-emerald-300">{formatCurrency(jackpotProjetado)}</span></p>
+              </div>
+            )}
 
             <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
               <p className="text-zinc-400">Staff da partida:</p>
@@ -1078,6 +1118,22 @@ export default function CashierPage() {
                   placeholder="0.00"
                 />
               </div>
+
+              {isJackpotEnabled && (
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Arrecadado JACKPOT (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={endForm.jackpotArrecadado}
+                    onChange={(e) => setEndForm((prev) => ({ ...prev, jackpotArrecadado: e.target.value }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-emerald-400"
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-zinc-500">Valor informado manualmente para arrecadação do JACKPOT na partida. {formatCurrency(parsedJackpotArrecadado)}</p>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button

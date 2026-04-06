@@ -3,14 +3,13 @@ import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
 import * as CashierService from './cashier.service'
 import { z } from 'zod'
 import { emitSessionRankingUpdated, getIO, getPrivateSessionRoom } from '../../socket/socket'
-import { TransactionType } from '@prisma/client'
 
 const router = Router()
 
 const txSchema = z.object({
   sessionId: z.string().uuid(),
   userId: z.string().uuid(),
-  type: z.nativeEnum(TransactionType),
+  type: z.enum(['BUYIN', 'REBUY', 'ADDON', 'CASHOUT', 'JACKPOT']),
   amount: z.number().min(0),
   chips: z.number().min(0),
   note: z.string().optional(),

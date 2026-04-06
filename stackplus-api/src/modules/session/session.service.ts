@@ -158,6 +158,7 @@ type CreateSessionInput = {
   pokerVariant?: 'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'
   gameType?: GameType
   financialModule?: FinancialModule
+  jackpotEnabled?: boolean
   chipValue?: number
   smallBlind?: number
   bigBlind?: number
@@ -206,6 +207,7 @@ export async function createSession(homeGameId: string, hostId: string, input: C
       pokerVariant: input.pokerVariant ?? null,
       gameType: finalGameType,
       financialModule: finalFinancialModule,
+        jackpotEnabled: input.jackpotEnabled ?? false,
       chipValue: finalGameType === 'CASH_GAME'
         ? (input.chipValue ?? Number(game.chipValue))
         : null,
@@ -270,7 +272,11 @@ export async function startSession(sessionId: string, hostId: string, cashierId?
   return withCaixinhaDistribution(updatedSession)
 }
 
-export async function finishSession(sessionId: string, hostId: string, options?: { rake?: number; caixinha?: number }) {
+export async function finishSession(
+  sessionId: string,
+  hostId: string,
+  options?: { rake?: number; caixinha?: number; jackpotArrecadado?: number },
+) {
   const session = await prisma.session.findUniqueOrThrow({
     where: { id: sessionId },
     include: {
@@ -293,6 +299,12 @@ export async function finishSession(sessionId: string, hostId: string, options?:
           result: true,
         },
       },
+      transactions: {
+        select: {
+          type: true,
+          amount: true,
+        },
+      },
     },
   })
   if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
@@ -300,6 +312,12 @@ export async function finishSession(sessionId: string, hostId: string, options?:
 
   const caixinha = Number(options?.caixinha || 0)
   const rake = Number(options?.rake || 0)
+  const jackpotArrecadado = Number(options?.jackpotArrecadado || 0)
+  const jackpotDistribuido = session.transactions
+    .filter((transaction) => transaction.type === 'JACKPOT')
+    .reduce((sum, transaction) => sum + Number(transaction.amount), 0)
+  const jackpotAtual = Number(session.homeGame.jackpotAccumulated || 0)
+  const jackpotNovo = amountToFixed(Math.max(0, jackpotAtual + jackpotArrecadado - jackpotDistribuido))
 
   const rakebackPercentTotal = session.rakebackAssignments.reduce((sum, assignment) => {
     return sum + Number(assignment.percent || 0)
@@ -339,6 +357,11 @@ export async function finishSession(sessionId: string, hostId: string, options?:
         })
       }
     }
+
+    await tx.homeGame.update({
+      where: { id: session.homeGameId },
+      data: { jackpotAccumulated: jackpotNovo },
+    })
 
     return tx.session.update({
       where: { id: sessionId },
@@ -635,6 +658,9 @@ export async function deleteSession(sessionId: string, hostId: string) {
     await tx.prepaidChargePending.deleteMany({ where: { sessionId } })
     await tx.sessionFinancialChargePending.deleteMany({ where: { sessionId } })
     await tx.sessionFinancialPayoutPending.deleteMany({ where: { sessionId } })
+    await tx.sangeurSale.deleteMany({ where: { shift: { sessionId } } })
+    await tx.sangeurShiftMovement.deleteMany({ where: { shift: { sessionId } } })
+    await tx.sangeurShift.deleteMany({ where: { sessionId } })
     await tx.transaction.deleteMany({ where: { sessionId } })
     await tx.playerSessionState.deleteMany({ where: { sessionId } })
     await tx.sessionStaff.deleteMany({ where: { sessionId } })

@@ -86,3 +86,98 @@ export async function updateMe(userId: string, data: {
   })
   return user
 }
+
+export async function loginSangeur(homeGameId: string, username: string, password: string) {
+  const normalizedUsername = username.trim().toLowerCase()
+
+  const access = await prisma.homeGameSangeurAccess.findUnique({
+    where: {
+      homeGameId_username: {
+        homeGameId,
+        username: normalizedUsername,
+      },
+    },
+    include: {
+      user: true,
+      homeGame: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  })
+
+  if (!access || !access.isActive) throw new Error('Credenciais inválidas')
+
+  const valid = await comparePassword(password, access.passwordHash)
+  if (!valid) throw new Error('Credenciais inválidas')
+
+  await prisma.homeGameSangeurAccess.update({
+    where: {
+      homeGameId_userId: {
+        homeGameId: access.homeGameId,
+        userId: access.userId,
+      },
+    },
+    data: {
+      lastLoginAt: new Date(),
+    },
+  })
+
+  const token = signToken({
+    userId: access.user.id,
+    email: access.user.email,
+    role: access.user.role,
+  })
+
+  const { passwordHash, ...safeUser } = access.user
+
+  return {
+    token,
+    user: safeUser,
+    sangeur: {
+      homeGameId: access.homeGame.id,
+      homeGameName: access.homeGame.name,
+      username: access.username,
+      mustChangePassword: access.mustChangePassword,
+    },
+  }
+}
+
+export async function changeSangeurPassword(input: {
+  userId: string
+  homeGameId: string
+  currentPassword: string
+  newPassword: string
+}) {
+  const access = await prisma.homeGameSangeurAccess.findUnique({
+    where: {
+      homeGameId_userId: {
+        homeGameId: input.homeGameId,
+        userId: input.userId,
+      },
+    },
+  })
+
+  if (!access || !access.isActive) throw new Error('Acesso SANGEUR não encontrado')
+
+  const valid = await comparePassword(input.currentPassword, access.passwordHash)
+  if (!valid) throw new Error('Senha atual inválida')
+
+  const newPasswordHash = await hashPassword(input.newPassword)
+  await prisma.homeGameSangeurAccess.update({
+    where: {
+      homeGameId_userId: {
+        homeGameId: input.homeGameId,
+        userId: input.userId,
+      },
+    },
+    data: {
+      passwordHash: newPasswordHash,
+      mustChangePassword: false,
+    },
+  })
+
+  return { success: true }
+}

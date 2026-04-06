@@ -8,6 +8,7 @@ import rankingRoutes from '../modules/ranking/ranking.routes'
 import groupsRoutes from '../modules/groups/groups.routes'
 import evolutionRoutes from '../modules/whatsapp/evolution.routes'
 import annapayRoutes from '../modules/banking/annapay.routes'
+import sangeurRoutes from '../modules/sangeur/sangeur.routes'
 
 const router = Router()
 
@@ -20,5 +21,6 @@ router.use('/ranking', rankingRoutes)
 router.use('/groups', groupsRoutes)
 router.use('/whatsapp/evolution', evolutionRoutes)
 router.use('/banking/annapay', annapayRoutes)
+router.use('/sangeur', sangeurRoutes)
 
 export default router

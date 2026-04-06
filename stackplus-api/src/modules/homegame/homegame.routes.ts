@@ -19,6 +19,16 @@ const financialConfigSchema = z.object({
   })).optional(),
 })
 
+const enableSangeurSchema = z.object({
+  userId: z.string().uuid(),
+  username: z.string().trim().min(3).max(40),
+  password: z.string().trim().min(6).max(120).optional(),
+})
+
+const resetSangeurPasswordSchema = z.object({
+  password: z.string().trim().min(6).max(120).optional(),
+})
+
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   const parsed = createSchema.parse(req.body)
   const data = {
@@ -58,6 +68,39 @@ router.patch('/:id/financial-config', authenticate, async (req: AuthRequest, res
   const data = financialConfigSchema.parse(req.body)
   const game = await HomeGameService.updateFinancialConfig(req.params.id, req.user!.userId, data)
   res.json(game)
+})
+
+router.get('/:id/sangeurs', authenticate, async (req: AuthRequest, res: Response) => {
+  const accesses = await HomeGameService.listSangeurAccesses(req.params.id, req.user!.userId)
+  res.json(accesses)
+})
+
+router.post('/:id/sangeurs', authenticate, async (req: AuthRequest, res: Response) => {
+  const data = enableSangeurSchema.parse(req.body)
+  const result = await HomeGameService.enableSangeurAccess({
+    homeGameId: req.params.id,
+    hostId: req.user!.userId,
+    memberUserId: data.userId,
+    username: data.username,
+    password: data.password,
+  })
+  res.status(201).json(result)
+})
+
+router.patch('/:id/sangeurs/:userId/disable', authenticate, async (req: AuthRequest, res: Response) => {
+  const access = await HomeGameService.disableSangeurAccess(req.params.id, req.user!.userId, req.params.userId)
+  res.json(access)
+})
+
+router.patch('/:id/sangeurs/:userId/reset-password', authenticate, async (req: AuthRequest, res: Response) => {
+  const data = resetSangeurPasswordSchema.parse(req.body)
+  const result = await HomeGameService.resetSangeurPassword({
+    homeGameId: req.params.id,
+    hostId: req.user!.userId,
+    memberUserId: req.params.userId,
+    password: data.password,
+  })
+  res.json(result)
 })
 
 router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {

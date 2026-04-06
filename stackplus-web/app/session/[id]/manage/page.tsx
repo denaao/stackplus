@@ -19,7 +19,8 @@ interface Session {
   rakebackDistribution?: Array<{ userId: string; name: string; percent: number; amount: number; pixType?: string | null; pixKey?: string | null }>
   pokerVariant?: 'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'
   gameType?: 'CASH_GAME' | 'TOURNAMENT'
-  homeGame: { name: string; chipValue: string; gameType?: 'CASH_GAME' | 'TOURNAMENT'; hostId: string }
+  jackpotEnabled?: boolean
+  homeGame: { name: string; chipValue: string; gameType?: 'CASH_GAME' | 'TOURNAMENT'; hostId: string; jackpotAccumulated?: string | number }
   cashier?: { id: string; name: string }
   playerStates: PlayerState[]
   staffAssignments: StaffAssignment[]
@@ -698,6 +699,7 @@ export default function SessionManagePage() {
       pixType: assignment.user.pixType || null,
       pixKey: assignment.user.pixKey || null,
     }))
+  const homeGameJackpotValue = Number(session.homeGame.jackpotAccumulated || 0)
   const sortedPlayers = [...(session.playerStates || [])].sort((a, b) => parseFloat(b.result) - parseFloat(a.result))
   const financialHasSkippedItems = financialReport
     ? [...financialReport.charges, ...financialReport.payouts].some((item) => Boolean(item.skippedReason))
@@ -1112,6 +1114,14 @@ export default function SessionManagePage() {
                 {!canStartSession ? 'Min. 2 participantes' : 'Iniciar'}
               </button>
             </div>
+          </div>
+        )}
+
+        {session.jackpotEnabled !== false && (
+          <div className="mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <p className="text-xs uppercase tracking-wide text-emerald-200">Novo valor do JACKPOT do Home Game</p>
+            <p className="mt-1 text-2xl font-black text-emerald-300">{formatCurrency(homeGameJackpotValue)}</p>
+            <p className="mt-1 text-xs text-emerald-100/80">Este valor será usado como JACKPOT atual para as próximas partidas deste Home Game.</p>
           </div>
         )}
 

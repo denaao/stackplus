@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StackPlus - Relatorio de Erros e Melhorias</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-soft: #131a2e;
+      --card: #121a31;
+      --line: #2a355f;
+      --text: #e8ecff;
+      --muted: #9ca7d1;
+      --ok: #21c07a;
+      --warn: #f5b73a;
+      --high: #ff6a63;
+      --accent: #66d9ff;
+      --accent-2: #8dffcc;
+      --shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Segoe UI", "IBM Plex Sans", "Trebuchet MS", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 90% -10%, rgba(102, 217, 255, 0.16), transparent 60%),
+        radial-gradient(1000px 500px at -10% 0%, rgba(141, 255, 204, 0.12), transparent 55%),
+        linear-gradient(160deg, #090e1b 0%, #0b1020 45%, #0a1328 100%);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+
+    .hero {
+      border: 1px solid var(--line);
+      background: linear-gradient(140deg, rgba(102, 217, 255, 0.12), rgba(141, 255, 204, 0.08));
+      border-radius: 22px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 320px;
+      height: 320px;
+      right: -120px;
+      top: -140px;
+      background: radial-gradient(circle, rgba(255,255,255,0.24), transparent 70%);
+      pointer-events: none;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border: 1px solid rgba(232, 236, 255, 0.22);
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #d7efff;
+      background: rgba(10, 18, 36, 0.4);
+    }
+
+    h1 {
+      margin: 14px 0 10px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.06;
+      letter-spacing: -0.02em;
+    }
+
+    .lead {
+      margin: 0;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .meta {
+      margin-top: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      background: rgba(8, 14, 28, 0.55);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      color: #d3defd;
+    }
+
+    .stats {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(6, 12, 24, 0.5);
+    }
+
+    .stat .n {
+      display: block;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .stat .l {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .section-title {
+      margin: 34px 0 14px;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(165deg, rgba(18, 26, 49, 0.94), rgba(15, 22, 43, 0.96));
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.35;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 5px 10px;
+      margin-bottom: 10px;
+      border: 1px solid transparent;
+      font-weight: 700;
+    }
+
+    .sev-critical { color: #ffd7d5; background: rgba(255, 106, 99, 0.18); border-color: rgba(255, 106, 99, 0.4); }
+    .sev-high { color: #ffe8bf; background: rgba(245, 183, 58, 0.2); border-color: rgba(245, 183, 58, 0.45); }
+    .sev-medium { color: #d8f9ff; background: rgba(102, 217, 255, 0.18); border-color: rgba(102, 217, 255, 0.4); }
+
+    .kv {
+      margin-top: 10px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .row {
+      border-top: 1px dashed rgba(156, 167, 209, 0.3);
+      padding-top: 10px;
+    }
+
+    .label {
+      display: block;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .value {
+      margin: 0;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .files {
+      margin: 6px 0 0;
+      padding-left: 18px;
+      color: #cdd7fb;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .files li { margin-bottom: 2px; }
+
+    .checks {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .check {
+      border: 1px solid rgba(33, 192, 122, 0.35);
+      background: rgba(33, 192, 122, 0.08);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .check h4 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #b9f4d8;
+    }
+
+    .check p {
+      margin: 0;
+      font-size: 13px;
+      color: #dbffe9;
+    }
+
+    .foot {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 960px) {
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid { grid-template-columns: 1fr; }
+      .checks { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <span class="kicker">StackPlus • Auditoria Tecnica</span>
+      <h1>Relatorio Consolidado<br/>Erros Apontados e Melhorias</h1>
+      <p class="lead">
+        Consolidado das correcoes aplicadas em seguranca, autorizacao, integridade de dados,
+        realtime e experiencia de uso, com referencia direta dos arquivos impactados.
+      </p>
+
+      <div class="meta">
+        <span class="chip">Data: 02/04/2026</span>
+        <span class="chip">Status: Bloco executado e publicado</span>
+        <span class="chip">Commit: e90c51d</span>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><span class="n">10</span><span class="l">Erros tratados</span></div>
+        <div class="stat"><span class="n">23</span><span class="l">Arquivos alterados</span></div>
+        <div class="stat"><span class="n">4/4</span><span class="l">Testes criticos</span></div>
+        <div class="stat"><span class="n">2</span><span class="l">Builds validados</span></div>
+      </div>
+    </section>
+
+    <h2 class="section-title">Itens Criticos e Melhorias</h2>
+    <section class="grid">
+      <article class="card">
+        <span class="tag sev-critical">Critico</span>
+        <h3>Escalada de privilegio no cadastro publico</h3>
+        <div class="kv">
+          <div class="row">
+            <span class="label">Erro apontado</span>
+            <p class="value">Cadastro permitia vetor para elevacao de permissao.</p>
+          </div>
+          <div class="row">
+            <span class="label">Melhoria aplicada</span>
+            <p class="value">Registro publico passou a forcar role PLAYER no backend.</p>
+          </div>
+          <div class="row">
+            <span class="label">Arquivos</span>
+            <ul class="files">
+              <li>stackplus-api/src/modules/auth/auth.controller.ts</li>
+              <li>stackplus-api/src/modules/auth/auth.service.ts</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag sev-critical">Critico</span>
+        <h3>Leitura de dados sensiveis sem escopo correto</h3>
+        <div class="kv">
+          <div class="row">
+            <span class="label">Erro apontado</span>
+            <p class="value">Rotas de stats/history e detalhes de entidades com autorizacao ampla.</p>
+          </div>
+          <div class="row">
+            <span class="label">Melhoria aplicada</span>
+            <p class="value">Restricao para self/admin e validacoes por ownership/membership.</p>
+          </div>
+          <div class="row">
+            <span class="label">Arquivos</span>
+            <ul class="files">
+              <li>stackplus-api/src/modules/users/users.routes.ts</li>
+              <li>stackplus-api/src/modules/homegame/homegame.routes.ts</li>
+              <li>stackplus-api/src/modules/homegame/homegame.service.ts</li>
+              <li>stackplus-api/src/modules/session/session.routes.ts</li>
+              <li>stackplus-api/src/modules/session/session.service.ts</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag sev-critical">Critico</span>
+        <h3>Exclusao incompleta com pendencias financeiras orfas</h3>
+        <div class="kv">
+          <div class="row">
+            <span class="label">Erro apontado</span>
+            <p class="value">Delete de sessao/home game nao removia todas as dependencias financeiras.</p>
+          </div>
+          <div class="row">
+            <span class="label">Melhoria aplicada</span>
+            <p class="value">Limpeza completa de tabelas pendentes e relacoes derivadas.</p>
+          </div>
+          <div class="row">
+            <span class="label">Arquivos</span>
+            <ul class="files">
+              <li>stackplus-api/src/modules/session/session.service.ts</li>
+              <li>stackplus-api/src/modules/homegame/homegame.service.ts</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag sev-high">Alto</span>
+        <h3>Realtime com join permissivo e sem separacao de contexto</h3>
+        <div class="kv">
+          <div class="row">
+            <span class="label">Erro apontado</span>
+            <p class="value">Acesso de socket nao diferenciava claramente canal publico e privado.</p>
+          </div>
+          <div class="row">
+            <span class="label">Melhoria aplicada</span>
+            <p class="value">Salas privadas/publicas separadas, validacao de join e emissao segmentada.</p>
+          </div>
+          <div class="row">
+            <span class="label">Arquivos</span>
+            <ul class="files">
+              <li>stackplus-api/src/socket/socket.ts</li>
+              <li>stackplus-api/src/modules/cashier/cashier.routes.ts</li>
+              <li>stackplus-api/src/modules/banking/annapay.controller.ts</li>
+              <li>stackplus-web/app/tv/[sessionId]/page.tsx</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag sev-high">Alto</span>
+        <h3>Gestao de membros com controle insuficiente</h3>
+        <div class="kv">
+          <div class="row">
+            <span class="label">Erro apontado</span>
+            <p class="value">Operacoes de membro sem todas as travas de autoridade e integridade.</p>
+          </div>
+          <div class="row">
+            <span class="label">Melhoria aplicada</span>
+            <p class="value">Checks de host/admin e bloqueio de remocao indevida do host.</p>
+          </div>
+          <div class="row">
+            <span class="label">Arquivos</span>
+            <ul class="files">
+              <li>stackplus-api/src/modules/groups/groups.routes.ts</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag sev-medium">Medio</span>
+        <h3>Fluxo de perfil no frontend inconsistente com estado auth</h3>
+        <div class="kv">
+          <div class="row">
+            <span class="label">Erro apontado</span>
+            <p class="value">Atualizacao de perfil dependia de leitura de token inconsistente.</p>
+          </div>
+          <div class="row">
+            <span class="label">Melhoria aplicada</span>
+            <p class="value">Atualizacao de usuario desacoplada via store central.</p>
+          </div>
+          <div class="row">
+            <span class="label">Arquivos</span>
+            <ul class="files">
+              <li>stackplus-web/store/useStore.ts</li>
+              <li>stackplus-web/app/profile/page.tsx</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag sev-medium">Medio</span>
+        <h3>UX fragil por uso de alert/confirm/prompt nativos</h3>
+        <div class="kv">
+          <div class="row">
+            <span class="label">Erro apontado</span>
+            <p class="value">Interacoes criticas com popup nativo e baixo contexto visual.</p>
+          </div>
+          <div class="row">
+            <span class="label">Melhoria aplicada</span>
+            <p class="value">Feedback inline e modais controlados nos fluxos centrais.</p>
+          </div>
+          <div class="row">
+            <span class="label">Arquivos</span>
+            <ul class="files">
+              <li>stackplus-web/app/homegame/[id]/page.tsx</li>
+              <li>stackplus-web/app/session/[id]/manage/page.tsx</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag sev-medium">Medio</span>
+        <h3>Falta de cobertura automatizada para regras criticas</h3>
+        <div class="kv">
+          <div class="row">
+            <span class="label">Erro apontado</span>
+            <p class="value">Sem base de testes para proteger regressao dos ajustes de seguranca.</p>
+          </div>
+          <div class="row">
+            <span class="label">Melhoria aplicada</span>
+            <p class="value">Infra Vitest + suites focadas em auth, sessao e exclusao financeira.</p>
+          </div>
+          <div class="row">
+            <span class="label">Arquivos</span>
+            <ul class="files">
+              <li>stackplus-api/vitest.config.ts</li>
+              <li>stackplus-api/tests/modules/auth.service.test.ts</li>
+              <li>stackplus-api/tests/modules/session.service.test.ts</li>
+              <li>stackplus-api/tests/modules/homegame.service.test.ts</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <h2 class="section-title">Validacoes Realizadas</h2>
+    <section class="checks">
+      <article class="check">
+        <h4>Build API</h4>
+        <p>Compilacao TypeScript concluida sem erros (tsc).</p>
+      </article>
+      <article class="check">
+        <h4>Build Web</h4>
+        <p>Compilacao Next.js concluida sem erros de tipo.</p>
+      </article>
+      <article class="check">
+        <h4>Testes Criticos</h4>
+        <p>4/4 testes unitarios passando.</p>
+      </article>
+    </section>
+
+    <p class="foot">Relatorio gerado automaticamente no workspace StackPlus.</p>
+  </div>
+</body>
+</html>

@@ -7,14 +7,19 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('stackplus-auth')
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        const token = parsed?.state?.token
-        if (token) config.headers.Authorization = `Bearer ${token}`
-      } catch {}
-    }
+    try {
+      const path = window.location.pathname || ''
+      const authStored = localStorage.getItem('stackplus-auth')
+      const sangeurStored = localStorage.getItem('stackplus-sangeur-auth')
+      const authToken = authStored ? JSON.parse(authStored)?.state?.token : null
+      const sangeurToken = sangeurStored ? JSON.parse(sangeurStored)?.state?.token : null
+
+      const token = path.startsWith('/sangeur')
+        ? (sangeurToken || authToken)
+        : (authToken || sangeurToken)
+
+      if (token) config.headers.Authorization = `Bearer ${token}`
+    } catch {}
   }
   return config
 })
@@ -23,8 +28,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('stackplus-auth')
-      window.location.href = '/'
+      const path = window.location.pathname || ''
+      if (path.startsWith('/sangeur')) {
+        localStorage.removeItem('stackplus-sangeur-auth')
+        window.location.href = '/sangeur/login'
+      } else {
+        localStorage.removeItem('stackplus-auth')
+        window.location.href = '/'
+      }
     }
 
     const data = error.response?.data

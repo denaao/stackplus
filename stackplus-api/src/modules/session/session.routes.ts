@@ -18,6 +18,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     minimumBuyIn,
     minimumStayMinutes,
     foodFee,
+    jackpotEnabled,
     buyInAmount,
     rebuyAmount,
     addOnAmount,
@@ -35,6 +36,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     minimumBuyIn: z.number().nonnegative().optional(),
     minimumStayMinutes: z.number().int().nonnegative().optional(),
     foodFee: z.number().nonnegative().optional(),
+    jackpotEnabled: z.boolean().optional(),
     buyInAmount: z.number().nonnegative().optional(),
     rebuyAmount: z.number().nonnegative().optional(),
     addOnAmount: z.number().nonnegative().optional(),
@@ -53,6 +55,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     minimumBuyIn,
     minimumStayMinutes,
     foodFee,
+    jackpotEnabled,
     buyInAmount,
     rebuyAmount,
     addOnAmount,
@@ -101,11 +104,12 @@ router.patch('/:id/finish', authenticate, async (req: AuthRequest, res: Response
 })
 
 router.patch('/:id/end', authenticate, async (req: AuthRequest, res: Response) => {
-  const { rake, caixinha } = z.object({
+  const { rake, caixinha, jackpotArrecadado } = z.object({
     rake: z.number().nonnegative(),
     caixinha: z.number().nonnegative(),
+    jackpotArrecadado: z.number().nonnegative().optional(),
   }).parse(req.body)
-  const session = await SessionService.finishSession(req.params.id, req.user!.userId, { rake, caixinha })
+  const session = await SessionService.finishSession(req.params.id, req.user!.userId, { rake, caixinha, jackpotArrecadado })
   emitSessionFinished(req.params.id)
   res.json(session)
 })

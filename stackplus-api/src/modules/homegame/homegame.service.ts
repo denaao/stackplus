@@ -1,6 +1,12 @@
 import { prisma } from '../../lib/prisma'
 import { generateJoinCode } from '../../utils/codeGenerator'
+import { hashPassword } from '../../utils/hash'
 import { FinancialModule, MemberPaymentMode } from '@prisma/client'
+import { randomBytes } from 'crypto'
+
+function generateTempPassword() {
+  return randomBytes(6).toString('base64url')
+}
 
 export async function createHomeGame(hostId: string, data: {
   name: string
@@ -10,6 +16,7 @@ export async function createHomeGame(hostId: string, data: {
   dayOfWeek: string
   startTime: string
   chipValue: number
+  jackpotAccumulated?: number
   rules?: string
   buyInAmount?: number
   rebuyAmount?: number
@@ -54,6 +61,21 @@ export async function getHomeGameById(id: string) {
         include: {
           user: { select: { id: true, name: true, email: true } },
         },
+      },
+      sangeurAccesses: {
+        select: {
+          id: true,
+          homeGameId: true,
+          userId: true,
+          username: true,
+          isActive: true,
+          mustChangePassword: true,
+          lastLoginAt: true,
+          createdAt: true,
+          updatedAt: true,
+          user: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
       },
       _count: { select: { sessions: true } },
     },
@@ -167,6 +189,10 @@ export async function deleteHomeGame(homeGameId: string, hostId: string) {
     await tx.prepaidChargePending.deleteMany({ where: { session: { homeGameId } } })
     await tx.sessionFinancialChargePending.deleteMany({ where: { session: { homeGameId } } })
     await tx.sessionFinancialPayoutPending.deleteMany({ where: { session: { homeGameId } } })
+    await tx.sangeurSale.deleteMany({ where: { shift: { homeGameId } } })
+    await tx.sangeurShiftMovement.deleteMany({ where: { shift: { homeGameId } } })
+    await tx.sangeurShift.deleteMany({ where: { homeGameId } })
+    await tx.homeGameSangeurAccess.deleteMany({ where: { homeGameId } })
     await tx.transaction.deleteMany({ where: { session: { homeGameId } } })
     await tx.playerSessionState.deleteMany({ where: { session: { homeGameId } } })
     await tx.sessionStaff.deleteMany({ where: { session: { homeGameId } } })
@@ -176,4 +202,176 @@ export async function deleteHomeGame(homeGameId: string, hostId: string) {
     await tx.homeGameMember.deleteMany({ where: { homeGameId } })
     await tx.homeGame.delete({ where: { id: homeGameId } })
   })
+}
+
+async function ensureHostAndMember(homeGameId: string, hostId: string, memberUserId: string) {
+  const game = await prisma.homeGame.findUniqueOrThrow({ where: { id: homeGameId } })
+  if (game.hostId !== hostId) throw new Error('Acesso negado')
+
+  const member = await prisma.homeGameMember.findUnique({
+    where: {
+      homeGameId_userId: {
+        homeGameId,
+        userId: memberUserId,
+      },
+    },
+  })
+
+  if (!member) throw new Error('Usuário precisa ser participante do Home Game para virar SANGEUR')
+}
+
+export async function listSangeurAccesses(homeGameId: string, hostId: string) {
+  const game = await prisma.homeGame.findUniqueOrThrow({ where: { id: homeGameId } })
+  if (game.hostId !== hostId) throw new Error('Acesso negado')
+
+  return prisma.homeGameSangeurAccess.findMany({
+    where: { homeGameId },
+    select: {
+      id: true,
+      homeGameId: true,
+      userId: true,
+      username: true,
+      isActive: true,
+      mustChangePassword: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+export async function enableSangeurAccess(input: {
+  homeGameId: string
+  hostId: string
+  memberUserId: string
+  username: string
+  password?: string
+}) {
+  await ensureHostAndMember(input.homeGameId, input.hostId, input.memberUserId)
+
+  const normalizedUsername = input.username.trim().toLowerCase()
+  if (!normalizedUsername) throw new Error('Username é obrigatório')
+
+  const plainPassword = (input.password?.trim() || generateTempPassword())
+  if (plainPassword.length < 6) throw new Error('Senha deve ter no mínimo 6 caracteres')
+
+  const passwordHash = await hashPassword(plainPassword)
+
+  const access = await prisma.homeGameSangeurAccess.upsert({
+    where: {
+      homeGameId_userId: {
+        homeGameId: input.homeGameId,
+        userId: input.memberUserId,
+      },
+    },
+    update: {
+      username: normalizedUsername,
+      passwordHash,
+      isActive: true,
+      mustChangePassword: true,
+      lastLoginAt: null,
+    },
+    create: {
+      homeGameId: input.homeGameId,
+      userId: input.memberUserId,
+      username: normalizedUsername,
+      passwordHash,
+      isActive: true,
+      mustChangePassword: true,
+    },
+    select: {
+      id: true,
+      homeGameId: true,
+      userId: true,
+      username: true,
+      isActive: true,
+      mustChangePassword: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
+  })
+
+  return {
+    access,
+    temporaryPassword: plainPassword,
+  }
+}
+
+export async function disableSangeurAccess(homeGameId: string, hostId: string, memberUserId: string) {
+  await ensureHostAndMember(homeGameId, hostId, memberUserId)
+
+  const access = await prisma.homeGameSangeurAccess.update({
+    where: {
+      homeGameId_userId: {
+        homeGameId,
+        userId: memberUserId,
+      },
+    },
+    data: {
+      isActive: false,
+    },
+    select: {
+      id: true,
+      homeGameId: true,
+      userId: true,
+      username: true,
+      isActive: true,
+      mustChangePassword: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
+  })
+
+  return access
+}
+
+export async function resetSangeurPassword(input: {
+  homeGameId: string
+  hostId: string
+  memberUserId: string
+  password?: string
+}) {
+  await ensureHostAndMember(input.homeGameId, input.hostId, input.memberUserId)
+
+  const plainPassword = (input.password?.trim() || generateTempPassword())
+  if (plainPassword.length < 6) throw new Error('Senha deve ter no mínimo 6 caracteres')
+  const passwordHash = await hashPassword(plainPassword)
+
+  const access = await prisma.homeGameSangeurAccess.update({
+    where: {
+      homeGameId_userId: {
+        homeGameId: input.homeGameId,
+        userId: input.memberUserId,
+      },
+    },
+    data: {
+      passwordHash,
+      mustChangePassword: true,
+      isActive: true,
+      lastLoginAt: null,
+    },
+    select: {
+      id: true,
+      homeGameId: true,
+      userId: true,
+      username: true,
+      isActive: true,
+      mustChangePassword: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
+  })
+
+  return {
+    access,
+    temporaryPassword: plainPassword,
+  }
 }

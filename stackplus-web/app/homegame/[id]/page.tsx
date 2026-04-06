@@ -9,6 +9,7 @@ interface HomeGame {
   id: string; name: string; address: string; dayOfWeek: string
   gameType?: 'CASH_GAME' | 'TOURNAMENT'
   financialModule?: 'POSTPAID' | 'PREPAID' | 'HYBRID'
+  jackpotAccumulated?: string
   startTime: string; chipValue: string; joinCode: string; rules?: string
   buyInAmount?: string
   rebuyAmount?: string
@@ -17,7 +18,21 @@ interface HomeGame {
   blindsMinutesAfterBreak?: number
   levelsUntilBreak?: number
   host: { id: string; name: string }
-  members: { id: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null; user: { id: string; name: string } }[]
+  members: { id: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null; user: { id: string; name: string; email?: string } }[]
+  sangeurAccesses?: SangeurAccess[]
+}
+
+interface SangeurAccess {
+  id: string
+  homeGameId: string
+  userId: string
+  username: string
+  isActive: boolean
+  mustChangePassword: boolean
+  lastLoginAt?: string | null
+  createdAt: string
+  updatedAt: string
+  user: { id: string; name: string; email?: string }
 }
 
 interface Session {
@@ -66,22 +81,121 @@ export default function HomeGamePage() {
   const [tourBlindsBeforeBreak, setTourBlindsBeforeBreak] = useState('15')
   const [tourBlindsAfterBreak, setTourBlindsAfterBreak] = useState('20')
   const [tourLevelsUntilBreak, setTourLevelsUntilBreak] = useState('4')
+  const [jackpotAccumulated, setJackpotAccumulated] = useState('0')
+  const [newSessionJackpotEnabled, setNewSessionJackpotEnabled] = useState(false)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [newSessionFinancialModule, setNewSessionFinancialModule] = useState<'POSTPAID' | 'PREPAID' | 'HYBRID'>('POSTPAID')
   const [pageFeedback, setPageFeedback] = useState<FeedbackState>(null)
   const [createFormError, setCreateFormError] = useState<string | null>(null)
   const [confirmCancelSessionId, setConfirmCancelSessionId] = useState<string | null>(null)
+  const [sangeurAccesses, setSangeurAccesses] = useState<SangeurAccess[]>([])
+  const [sangeurUserId, setSangeurUserId] = useState('')
+  const [sangeurUsername, setSangeurUsername] = useState('')
+  const [sangeurPassword, setSangeurPassword] = useState('')
+  const [sangeurLoading, setSangeurLoading] = useState(false)
+  const [sangeurActionUserId, setSangeurActionUserId] = useState<string | null>(null)
+  const [sangeurError, setSangeurError] = useState<string | null>(null)
+  const [issuedCredential, setIssuedCredential] = useState<{ userName: string; username: string; temporaryPassword: string } | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      api.get(`/home-games/${id}`),
-      api.get(`/sessions/home-game/${id}`)
-    ]).then(([g, s]) => {
-      setGame(g.data)
-      setNewSessionFinancialModule(g.data.financialModule || 'POSTPAID')
-      setSessions(s.data)
-    }).finally(() => setLoading(false))
+    async function loadPage() {
+      try {
+        const [g, s] = await Promise.all([
+          api.get(`/home-games/${id}`),
+          api.get(`/sessions/home-game/${id}`)
+        ])
+
+        setGame(g.data)
+        setSangeurAccesses(g.data.sangeurAccesses || [])
+        setNewSessionFinancialModule(g.data.financialModule || 'POSTPAID')
+        setSessions(s.data)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadPage()
   }, [id])
+
+  function applySangeurAccess(access: SangeurAccess) {
+    setSangeurAccesses((prev) => {
+      const existingIndex = prev.findIndex((item) => item.userId === access.userId)
+      if (existingIndex === -1) return [access, ...prev]
+
+      const clone = [...prev]
+      clone[existingIndex] = access
+      return clone
+    })
+  }
+
+  async function handleEnableSangeur() {
+    if (!sangeurUserId) {
+      setSangeurError('Selecione um participante para habilitar como SANGEUR.')
+      return
+    }
+    if (!sangeurUsername.trim()) {
+      setSangeurError('Informe o usuario da SANGEUR para POS.')
+      return
+    }
+
+    setSangeurError(null)
+    setSangeurLoading(true)
+    try {
+      const payload: Record<string, string> = {
+        userId: sangeurUserId,
+        username: sangeurUsername.trim(),
+      }
+      if (sangeurPassword.trim()) payload.password = sangeurPassword.trim()
+
+      const { data } = await api.post(`/home-games/${id}/sangeurs`, payload)
+      applySangeurAccess(data.access)
+
+      setIssuedCredential({
+        userName: data.access.user.name,
+        username: data.access.username,
+        temporaryPassword: data.temporaryPassword,
+      })
+      setSangeurPassword('')
+      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada com sucesso.' })
+    } catch (err) {
+      setSangeurError(typeof err === 'string' ? err : 'Nao foi possivel habilitar a SANGEUR.')
+    } finally {
+      setSangeurLoading(false)
+    }
+  }
+
+  async function handleDisableSangeur(userId: string) {
+    setSangeurActionUserId(userId)
+    setSangeurError(null)
+    try {
+      const { data } = await api.patch(`/home-games/${id}/sangeurs/${userId}/disable`)
+      applySangeurAccess(data)
+      setPageFeedback({ tone: 'success', message: 'Acesso de SANGEUR desabilitado.' })
+    } catch (err) {
+      setSangeurError(typeof err === 'string' ? err : 'Nao foi possivel desabilitar a SANGEUR.')
+    } finally {
+      setSangeurActionUserId(null)
+    }
+  }
+
+  async function handleResetSangeurPassword(userId: string) {
+    setSangeurActionUserId(userId)
+    setSangeurError(null)
+    try {
+      const { data } = await api.patch(`/home-games/${id}/sangeurs/${userId}/reset-password`, {})
+      applySangeurAccess(data.access)
+      setIssuedCredential({
+        userName: data.access.user.name,
+        username: data.access.username,
+        temporaryPassword: data.temporaryPassword,
+      })
+      setPageFeedback({ tone: 'success', message: 'Senha temporaria da SANGEUR redefinida.' })
+    } catch (err) {
+      setSangeurError(typeof err === 'string' ? err : 'Nao foi possivel redefinir a senha da SANGEUR.')
+    } finally {
+      setSangeurActionUserId(null)
+    }
+  }
 
   function openCreatePicker() {
     if (!game) return
@@ -101,6 +215,8 @@ export default function HomeGamePage() {
     setTourBlindsBeforeBreak(String(game.blindsMinutesBeforeBreak ?? '15'))
     setTourBlindsAfterBreak(String(game.blindsMinutesAfterBreak ?? '20'))
     setTourLevelsUntilBreak(String(game.levelsUntilBreak ?? '4'))
+    setJackpotAccumulated(String(game.jackpotAccumulated ?? '0'))
+    setNewSessionJackpotEnabled(false)
     setShowCreatePicker(true)
   }
 
@@ -109,11 +225,12 @@ export default function HomeGamePage() {
     setPageFeedback(null)
     setCreating(true)
     try {
-      let payload: Record<string, string | number> = {
+      let payload: Record<string, string | number | boolean> = {
         homeGameId: id,
         pokerVariant,
         gameType: newSessionType,
         financialModule: newSessionFinancialModule,
+        jackpotEnabled: newSessionJackpotEnabled,
       }
 
       if (newSessionType === 'CASH_GAME') {
@@ -214,6 +331,7 @@ export default function HomeGamePage() {
   if (!game) return null
   const gameType = game.gameType || 'CASH_GAME'
   const isHost = user?.id === game.host.id
+  const selectedSangeurAccess = sangeurAccesses.find((item) => item.userId === sangeurUserId)
 
   const statusColors: Record<string, string> = {
     WAITING: 'text-yellow-400 bg-yellow-400/10',
@@ -242,6 +360,132 @@ export default function HomeGamePage() {
         {pageFeedback && (
           <div className={`rounded-xl border px-4 py-3 text-sm ${pageFeedback.tone === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
             {pageFeedback.message}
+          </div>
+        )}
+
+        {isHost && (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold">SANGEUR POS</h2>
+                <p className="mt-1 text-xs text-zinc-500">Somente o host habilita participantes para acesso POS com usuario e senha.</p>
+              </div>
+              <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-zinc-300">Host</span>
+            </div>
+
+            {sangeurError && (
+              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {sangeurError}
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-400 uppercase tracking-wide">Participante</label>
+                <select
+                  value={sangeurUserId}
+                  onChange={(e) => {
+                    const nextUserId = e.target.value
+                    setSangeurUserId(nextUserId)
+                    const existing = sangeurAccesses.find((item) => item.userId === nextUserId)
+                    if (existing) setSangeurUsername(existing.username)
+                  }}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                >
+                  <option value="">Selecione...</option>
+                  {game.members.map((member) => (
+                    <option key={member.user.id} value={member.user.id}>{member.user.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-400 uppercase tracking-wide">Usuario POS</label>
+                <input
+                  type="text"
+                  value={sangeurUsername}
+                  onChange={(e) => setSangeurUsername(e.target.value)}
+                  placeholder="ex: mesa-sangeur"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-400 uppercase tracking-wide">Senha temporaria (opcional)</label>
+                <input
+                  type="text"
+                  value={sangeurPassword}
+                  onChange={(e) => setSangeurPassword(e.target.value)}
+                  placeholder="gerada automaticamente"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <p className="text-xs text-zinc-500">
+                {selectedSangeurAccess
+                  ? `Participante ja possui acesso (${selectedSangeurAccess.isActive ? 'ativo' : 'desativado'}). Ao salvar, as credenciais serao atualizadas.`
+                  : 'A senha temporaria sera exibida uma unica vez apos habilitar.'}
+              </p>
+              <button
+                type="button"
+                onClick={handleEnableSangeur}
+                disabled={sangeurLoading}
+                className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+              >
+                {sangeurLoading ? 'Salvando...' : 'Habilitar / Atualizar SANGEUR'}
+              </button>
+            </div>
+
+            {issuedCredential && (
+              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-200">Credencial gerada</p>
+                <p className="mt-1 text-sm text-zinc-100">Participante: {issuedCredential.userName}</p>
+                <p className="text-sm text-zinc-100">Usuario: <span className="font-semibold text-emerald-300">{issuedCredential.username}</span></p>
+                <p className="text-sm text-zinc-100">Senha temporaria: <span className="font-semibold text-emerald-300">{issuedCredential.temporaryPassword}</span></p>
+                <p className="mt-2 text-xs text-emerald-100/80">Guarde esta senha agora. No primeiro login POS, a SANGEUR deve trocar a senha.</p>
+              </div>
+            )}
+
+            <div className="mt-5 space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">SANGEURs habilitadas</p>
+              {sangeurAccesses.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-zinc-700 px-4 py-6 text-center text-sm text-zinc-500">
+                  Nenhuma SANGEUR configurada para este Home Game.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {sangeurAccesses.map((access) => (
+                    <div key={access.id} className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-100">{access.user.name}</p>
+                        <p className="text-xs text-zinc-500">@{access.username} • ultimo login: {access.lastLoginAt ? new Date(access.lastLoginAt).toLocaleString('pt-BR') : 'nunca'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide ${access.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-700 text-zinc-300'}`}>
+                          {access.isActive ? 'Ativa' : 'Desativada'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleResetSangeurPassword(access.userId)}
+                          disabled={sangeurActionUserId === access.userId}
+                          className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-bold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+                        >
+                          Resetar senha
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDisableSangeur(access.userId)}
+                          disabled={sangeurActionUserId === access.userId || !access.isActive}
+                          className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                        >
+                          Desabilitar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -339,6 +583,36 @@ export default function HomeGamePage() {
                     {option.label}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">JACKPOT</p>
+              <p className="mt-1 text-xs text-zinc-500">Informe o valor do JACKPOT acumulado para esta partida.</p>
+              <div className="mt-3 space-y-1">
+                <label className={`text-xs uppercase tracking-wide ${newSessionJackpotEnabled ? 'text-zinc-400' : 'text-zinc-600'}`}>JACKPOT acumulado (R$)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={jackpotAccumulated}
+                  onChange={(e) => setJackpotAccumulated(e.target.value)}
+                  disabled={!newSessionJackpotEnabled}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none ${newSessionJackpotEnabled ? 'border-zinc-700 bg-zinc-900 focus:border-yellow-400' : 'cursor-not-allowed border-zinc-800 bg-zinc-900/50 text-zinc-600'}`}
+                />
+              </div>
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setNewSessionJackpotEnabled((prev) => !prev)}
+                  className={`w-full rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                    newSessionJackpotEnabled
+                      ? 'border-emerald-400 bg-emerald-400/15 text-emerald-300'
+                      : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                  }`}
+                >
+                  {newSessionJackpotEnabled ? 'Desabilitar JACKPOT na partida' : 'Habilitar JACKPOT na partida'}
+                </button>
               </div>
             </div>
 
