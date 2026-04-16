@@ -31,7 +31,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
     req.user = {
       userId: dbUser.id,
-      email: dbUser.email,
+      email: dbUser.email ?? '',
       role: dbUser.role,
     }
 

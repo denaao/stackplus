@@ -1887,7 +1887,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
 // ─── Conciliação Bancária ──────────────────────────────────────────────────────
 
-interface ReconciliationItem {
+export interface ReconciliationItem {
   chargeId: string
   flow: 'PREPAID_PURCHASE' | 'SESSION_SETTLEMENT'
   userId: string
