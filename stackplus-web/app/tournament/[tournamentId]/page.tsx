@@ -186,13 +186,13 @@ export default function TournamentPage() {
     })
 
   if (loading) return (
-    <div className="min-h-screen bg-[#2a3150] flex items-center justify-center">
-      <div className="text-[#B7D9BF]/50">Carregando...</div>
+    <div className="min-h-screen bg-sx-bg flex items-center justify-center">
+      <div className="text-white/40">Carregando...</div>
     </div>
   )
 
   if (!tournament) return (
-    <div className="min-h-screen bg-[#2a3150] flex items-center justify-center">
+    <div className="min-h-screen bg-sx-bg flex items-center justify-center">
       <div className="text-red-400">{error}</div>
     </div>
   )
@@ -218,7 +218,7 @@ export default function TournamentPage() {
     REGISTRATION: 'bg-blue-900/40 text-blue-300 border border-blue-700',
     RUNNING: 'bg-green-900/40 text-green-300 border border-green-700',
     ON_BREAK: 'bg-yellow-900/40 text-yellow-300 border border-yellow-700',
-    FINISHED: 'bg-[#434c6b] text-[#B7D9BF]/80 border border-[#4a5475]',
+    FINISHED: 'bg-sx-input text-sx-muted border border-sx-border2',
     CANCELED: 'bg-red-900/40 text-red-400 border border-red-700',
   }
 
@@ -231,26 +231,26 @@ export default function TournamentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#2a3150] text-white pb-8">
+    <div className="min-h-screen bg-sx-bg text-white pb-8">
 
       {/* Header */}
-      <div className="bg-[#39415C] border-b border-[#39415C] px-4 py-3">
+      <div className="bg-sx-card border-b border-sx-border px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <button onClick={() => router.back()} className="text-[#B7D9BF]/80 hover:text-white">←</button>
+          <button onClick={() => router.back()} className="text-sx-muted hover:text-white">←</button>
           <div className="flex-1">
             <h1 className="font-bold text-lg">{tournament.name}</h1>
             <div className="flex items-center gap-2 mt-0.5">
               <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge[tournament.status]}`}>
                 {statusLabel[tournament.status]}
               </span>
-              <span className="text-xs text-[#B7D9BF]/50">{tournament.players.length} inscritos</span>
+              <span className="text-xs text-white/40">{tournament.players.length} inscritos</span>
             </div>
           </div>
           <a
             href={`/tournament/${tournamentId}/clock`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-[#B7D9BF]/80 hover:text-white px-3 py-1.5 bg-[#434c6b] hover:bg-[#4f5878] rounded-lg border border-[#4a5475] whitespace-nowrap"
+            className="text-xs text-sx-muted hover:text-white px-3 py-1.5 bg-sx-input hover:bg-sx-card2 rounded-lg border border-sx-border2 whitespace-nowrap"
           >
             📺 Clock
           </a>
@@ -278,17 +278,17 @@ export default function TournamentPage() {
         )}
 
         {/* Prize pool */}
-        <div className="bg-[#39415C] rounded-xl p-4 flex items-center justify-between">
+        <div className="bg-sx-card rounded-xl p-4 flex items-center justify-between">
           <div>
-            <div className="text-xs text-[#B7D9BF]/50 mb-1">Prize Pool</div>
+            <div className="text-xs text-white/40 mb-1">Prize Pool</div>
             <div className="text-2xl font-bold text-green-400">{fmt(tournament.prizePool)}</div>
             {Number(tournament.totalRake) > 0 && (
-              <div className="text-xs text-[#B7D9BF]/50 mt-0.5">Rake: {fmt(tournament.totalRake)}</div>
+              <div className="text-xs text-white/40 mt-0.5">Rake: {fmt(tournament.totalRake)}</div>
             )}
           </div>
           <button
             onClick={() => action(loadPayout, 'payout')}
-            className="text-sm text-[#B7D9BF] hover:text-white border border-[#B7D9BF]/30 rounded-lg px-3 py-2"
+            className="text-sm text-sx-cyan hover:text-white border border-sx-cyan/20 rounded-lg px-3 py-2"
           >
             Ver distribuição
           </button>
@@ -316,7 +316,7 @@ export default function TournamentPage() {
           {tournament.status === 'RUNNING' && (
             <button
               onClick={() => setShowPayout(true)}
-              className="px-4 py-2 bg-[#4f5878] hover:bg-[#5b6488] rounded-lg text-sm font-medium"
+              className="px-4 py-2 bg-sx-card2 hover:bg-sx-card2 rounded-lg text-sm font-medium"
             >
               Pagar Prêmio
             </button>
@@ -334,23 +334,23 @@ export default function TournamentPage() {
 
         {/* Search */}
         <input
-          className="w-full bg-[#434c6b] border border-[#4a5475] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#B7D9BF]"
+          className="w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sx-cyan"
           placeholder="Buscar jogador..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
 
         {/* Tabs */}
-        <div className="flex border-b border-[#39415C]">
+        <div className="flex border-b border-sx-border">
           <button
             onClick={() => setSelectedTab('playing')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${selectedTab === 'playing' ? 'border-[#B7D9BF] text-white' : 'border-transparent text-[#B7D9BF]/50 hover:text-[#B7D9BF]'}`}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${selectedTab === 'playing' ? 'border-sx-cyan text-white' : 'border-transparent text-white/40 hover:text-sx-cyan'}`}
           >
             Jogando ({activePlayers.length})
           </button>
           <button
             onClick={() => setSelectedTab('eliminated')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${selectedTab === 'eliminated' ? 'border-[#B7D9BF] text-white' : 'border-transparent text-[#B7D9BF]/50 hover:text-[#B7D9BF]'}`}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${selectedTab === 'eliminated' ? 'border-sx-cyan text-white' : 'border-transparent text-white/40 hover:text-sx-cyan'}`}
           >
             Eliminados ({eliminatedPlayers.length})
           </button>
@@ -374,7 +374,7 @@ export default function TournamentPage() {
             />
           ))}
           {filtered(selectedTab === 'playing' ? activePlayers : eliminatedPlayers).length === 0 && (
-            <div className="text-center text-[#B7D9BF]/40 py-8 text-sm">
+            <div className="text-center text-white/30 py-8 text-sm">
               {selectedTab === 'playing' ? 'Nenhum jogador inscrito' : 'Nenhum eliminado ainda'}
             </div>
           )}
@@ -388,7 +388,7 @@ export default function TournamentPage() {
           const breakMap = new Map(parsedBreaks.map((b) => [b.afterLevel, b.durationMinutes]))
           const mins = (tournament as any).minutesPerLevelPreLateReg ?? (tournament as any).minutesPerLevelPreBreak ?? 15
           return (
-          <details className="bg-[#39415C] rounded-xl" open={editingBlinds || undefined}>
+          <details className="bg-sx-card rounded-xl" open={editingBlinds || undefined}>
             <summary className="px-4 py-3 text-sm font-medium cursor-pointer flex items-center justify-between">
               <span>Estrutura de Blinds</span>
               {!editingBlinds && (
@@ -400,7 +400,7 @@ export default function TournamentPage() {
                     setEditBreaks(parsedBreaks.map((b, i) => ({ id: String(i), afterLevel: String(b.afterLevel), durationMinutes: String(b.durationMinutes) })))
                     setEditingBlinds(true)
                   }}
-                  className="text-xs text-[#B7D9BF] hover:text-white px-2 py-0.5 rounded"
+                  className="text-xs text-sx-cyan hover:text-white px-2 py-0.5 rounded"
                 >
                   Editar
                 </span>
@@ -412,7 +412,7 @@ export default function TournamentPage() {
                   {/* Levels table */}
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="text-[#B7D9BF]/50 border-b border-[#39415C]">
+                      <tr className="text-white/40 border-b border-sx-border">
                         <th className="text-left py-1">Nível</th>
                         <th className="text-right py-1 px-1">SB</th>
                         <th className="text-right py-1 px-1">BB</th>
@@ -422,49 +422,49 @@ export default function TournamentPage() {
                     </thead>
                     <tbody>
                       {editLevels.map((l, i) => (
-                        <tr key={i} className="border-b border-[#39415C]/50">
-                          <td className="py-1 text-[#B7D9BF]/80 pr-2">{l.level}</td>
+                        <tr key={i} className="border-b border-sx-border/50">
+                          <td className="py-1 text-sx-muted pr-2">{l.level}</td>
                           <td className="py-1 px-1">
-                            <input type="number" className="w-full bg-[#434c6b] border border-[#4a5475] rounded px-1.5 py-1 text-right focus:outline-none focus:border-[#B7D9BF] text-xs" value={l.smallBlind} onChange={(e) => setEditLevels((ls) => ls.map((x, idx) => idx === i ? { ...x, smallBlind: parseInt(e.target.value) || 0 } : x))} />
+                            <input type="number" className="w-full bg-sx-input border border-sx-border2 rounded px-1.5 py-1 text-right focus:outline-none focus:border-sx-cyan text-xs" value={l.smallBlind} onChange={(e) => setEditLevels((ls) => ls.map((x, idx) => idx === i ? { ...x, smallBlind: parseInt(e.target.value) || 0 } : x))} />
                           </td>
                           <td className="py-1 px-1">
-                            <input type="number" className="w-full bg-[#434c6b] border border-[#4a5475] rounded px-1.5 py-1 text-right focus:outline-none focus:border-[#B7D9BF] text-xs" value={l.bigBlind} onChange={(e) => setEditLevels((ls) => ls.map((x, idx) => idx === i ? { ...x, bigBlind: parseInt(e.target.value) || 0 } : x))} />
+                            <input type="number" className="w-full bg-sx-input border border-sx-border2 rounded px-1.5 py-1 text-right focus:outline-none focus:border-sx-cyan text-xs" value={l.bigBlind} onChange={(e) => setEditLevels((ls) => ls.map((x, idx) => idx === i ? { ...x, bigBlind: parseInt(e.target.value) || 0 } : x))} />
                           </td>
                           <td className="py-1 px-1">
-                            <input type="number" className="w-full bg-[#434c6b] border border-[#4a5475] rounded px-1.5 py-1 text-right focus:outline-none focus:border-[#B7D9BF] text-xs" value={l.ante} onChange={(e) => setEditLevels((ls) => ls.map((x, idx) => idx === i ? { ...x, ante: parseInt(e.target.value) || 0 } : x))} />
+                            <input type="number" className="w-full bg-sx-input border border-sx-border2 rounded px-1.5 py-1 text-right focus:outline-none focus:border-sx-cyan text-xs" value={l.ante} onChange={(e) => setEditLevels((ls) => ls.map((x, idx) => idx === i ? { ...x, ante: parseInt(e.target.value) || 0 } : x))} />
                           </td>
                           <td className="py-1 pl-1">
-                            <button type="button" onClick={() => setEditLevels((ls) => ls.filter((_, idx) => idx !== i))} className="text-[#B7D9BF]/40 hover:text-red-400">✕</button>
+                            <button type="button" onClick={() => setEditLevels((ls) => ls.filter((_, idx) => idx !== i))} className="text-white/30 hover:text-red-400">✕</button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <button type="button" onClick={() => { const last = editLevels[editLevels.length - 1]; setEditLevels((ls) => [...ls, { level: last.level + 1, smallBlind: last.bigBlind, bigBlind: last.bigBlind * 2, ante: last.ante }]) }} className="text-xs text-[#B7D9BF] hover:text-white">
+                  <button type="button" onClick={() => { const last = editLevels[editLevels.length - 1]; setEditLevels((ls) => [...ls, { level: last.level + 1, smallBlind: last.bigBlind, bigBlind: last.bigBlind * 2, ante: last.ante }]) }} className="text-xs text-sx-cyan hover:text-white">
                     + Nível
                   </button>
 
                   {/* Breaks editor */}
-                  <div className="border-t border-[#39415C] pt-3">
+                  <div className="border-t border-sx-border pt-3">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-medium text-[#B7D9BF]/80">Intervalos</p>
-                      <button type="button" onClick={() => setEditBreaks((bs) => [...bs, { id: Date.now().toString(), afterLevel: '', durationMinutes: '15' }])} className="text-xs text-[#B7D9BF] hover:text-white">
+                      <p className="text-xs font-medium text-sx-muted">Intervalos</p>
+                      <button type="button" onClick={() => setEditBreaks((bs) => [...bs, { id: Date.now().toString(), afterLevel: '', durationMinutes: '15' }])} className="text-xs text-sx-cyan hover:text-white">
                         + Intervalo
                       </button>
                     </div>
-                    {editBreaks.length === 0 && <p className="text-xs text-[#B7D9BF]/40">Nenhum intervalo configurado</p>}
+                    {editBreaks.length === 0 && <p className="text-xs text-white/30">Nenhum intervalo configurado</p>}
                     <div className="space-y-2">
                       {editBreaks.map((b, i) => (
                         <div key={b.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
                           <div>
-                            <label className="block text-xs text-[#B7D9BF]/50 mb-1">Após nível</label>
-                            <input type="number" className="w-full bg-[#434c6b] border border-[#4a5475] rounded px-2 py-1 text-xs focus:outline-none focus:border-[#B7D9BF]" value={b.afterLevel} onChange={(e) => setEditBreaks((bs) => bs.map((x, idx) => idx === i ? { ...x, afterLevel: e.target.value } : x))} placeholder="Nível" />
+                            <label className="block text-xs text-white/40 mb-1">Após nível</label>
+                            <input type="number" className="w-full bg-sx-input border border-sx-border2 rounded px-2 py-1 text-xs focus:outline-none focus:border-sx-cyan" value={b.afterLevel} onChange={(e) => setEditBreaks((bs) => bs.map((x, idx) => idx === i ? { ...x, afterLevel: e.target.value } : x))} placeholder="Nível" />
                           </div>
                           <div>
-                            <label className="block text-xs text-[#B7D9BF]/50 mb-1">Duração (min)</label>
-                            <input type="number" className="w-full bg-[#434c6b] border border-[#4a5475] rounded px-2 py-1 text-xs focus:outline-none focus:border-[#B7D9BF]" value={b.durationMinutes} onChange={(e) => setEditBreaks((bs) => bs.map((x, idx) => idx === i ? { ...x, durationMinutes: e.target.value } : x))} placeholder="15" />
+                            <label className="block text-xs text-white/40 mb-1">Duração (min)</label>
+                            <input type="number" className="w-full bg-sx-input border border-sx-border2 rounded px-2 py-1 text-xs focus:outline-none focus:border-sx-cyan" value={b.durationMinutes} onChange={(e) => setEditBreaks((bs) => bs.map((x, idx) => idx === i ? { ...x, durationMinutes: e.target.value } : x))} placeholder="15" />
                           </div>
-                          <button type="button" onClick={() => setEditBreaks((bs) => bs.filter((_, idx) => idx !== i))} className="pb-1 text-[#B7D9BF]/40 hover:text-red-400">✕</button>
+                          <button type="button" onClick={() => setEditBreaks((bs) => bs.filter((_, idx) => idx !== i))} className="pb-1 text-white/30 hover:text-red-400">✕</button>
                         </div>
                       ))}
                     </div>
@@ -482,13 +482,13 @@ export default function TournamentPage() {
                     >
                       {actionLoading === 'blinds' ? 'Salvando...' : 'Salvar'}
                     </button>
-                    <button onClick={() => setEditingBlinds(false)} className="px-4 py-2 bg-[#434c6b] hover:bg-[#4f5878] rounded-lg text-xs">Cancelar</button>
+                    <button onClick={() => setEditingBlinds(false)} className="px-4 py-2 bg-sx-input hover:bg-sx-card2 rounded-lg text-xs">Cancelar</button>
                   </div>
                 </div>
               ) : (
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-[#B7D9BF]/50 border-b border-[#39415C]">
+                    <tr className="text-white/40 border-b border-sx-border">
                       <th className="text-left py-1">Nível</th>
                       <th className="text-right py-1">SB</th>
                       <th className="text-right py-1">BB</th>
@@ -502,15 +502,15 @@ export default function TournamentPage() {
                       const breakAfterThis = breakMap.get(l.level)
                       return (
                         <Fragment key={l.level}>
-                          <tr className={`border-b border-[#39415C]/50 ${isCurrent ? 'text-white font-semibold' : 'text-[#B7D9BF]/80'}`}>
+                          <tr className={`border-b border-sx-border/50 ${isCurrent ? 'text-white font-semibold' : 'text-sx-muted'}`}>
                             <td className="py-1.5">{l.level}</td>
                             <td className="py-1.5 text-right">{l.smallBlind.toLocaleString()}</td>
                             <td className="py-1.5 text-right">{l.bigBlind.toLocaleString()}</td>
                             <td className="py-1.5 text-right">{l.ante > 0 ? l.ante.toLocaleString() : '—'}</td>
-                            <td className="py-1.5 text-right text-[#B7D9BF]/50">{mins}min</td>
+                            <td className="py-1.5 text-right text-white/40">{mins}min</td>
                           </tr>
                           {breakAfterThis !== undefined && (
-                            <tr className="bg-yellow-900/20 border-b border-[#39415C]/50">
+                            <tr className="bg-yellow-900/20 border-b border-sx-border/50">
                               <td colSpan={5} className="py-1.5 text-center text-yellow-400 text-xs">
                                 🕐 Intervalo — {breakAfterThis} minutos
                               </td>
@@ -531,13 +531,13 @@ export default function TournamentPage() {
       {/* Register modal */}
       {showRegister && (
         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 p-4">
-          <div className="bg-[#39415C] rounded-2xl w-full max-w-md p-4 space-y-4">
+          <div className="bg-sx-card rounded-2xl w-full max-w-md p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">Inscrever Jogador</h3>
-              <button onClick={() => { setShowRegister(false); setPlayerSearch('') }} className="text-[#B7D9BF]/50">✕</button>
+              <button onClick={() => { setShowRegister(false); setPlayerSearch('') }} className="text-white/40">✕</button>
             </div>
             <input
-              className="w-full bg-[#434c6b] border border-[#4a5475] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#B7D9BF]"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sx-cyan"
               placeholder="Filtrar por nome..."
               value={playerSearch}
               onChange={(e) => setPlayerSearch(e.target.value)}
@@ -545,7 +545,7 @@ export default function TournamentPage() {
             />
             <div className="space-y-1 max-h-72 overflow-y-auto">
               {filteredMembers.length === 0 ? (
-                <div className="text-center text-[#B7D9BF]/40 py-6 text-sm">
+                <div className="text-center text-white/30 py-6 text-sm">
                   {homeGameMembers.length === 0 ? 'Carregando membros...' : 'Todos os membros já estão inscritos'}
                 </div>
               ) : filteredMembers.map((m: any) => {
@@ -556,18 +556,18 @@ export default function TournamentPage() {
                     key={u.id}
                     onClick={() => registerPlayer(u.id)}
                     disabled={!!actionLoading}
-                    className="w-full text-left px-3 py-2 bg-[#434c6b] hover:bg-[#4f5878] rounded-lg text-sm flex items-center justify-between disabled:opacity-60"
+                    className="w-full text-left px-3 py-2 bg-sx-input hover:bg-sx-card2 rounded-lg text-sm flex items-center justify-between disabled:opacity-60"
                   >
                     <span className="flex items-center gap-2">
                       {isRegistering && (
-                        <svg className="animate-spin h-3.5 w-3.5 text-[#B7D9BF] shrink-0" viewBox="0 0 24 24" fill="none">
+                        <svg className="animate-spin h-3.5 w-3.5 text-sx-cyan shrink-0" viewBox="0 0 24 24" fill="none">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                         </svg>
                       )}
                       {u.name}
                     </span>
-                    <span className="text-[#B7D9BF]/50 text-xs">{u.cpf?.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}</span>
+                    <span className="text-white/40 text-xs">{u.cpf?.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}</span>
                   </button>
                 )
               })}
@@ -579,16 +579,16 @@ export default function TournamentPage() {
       {/* Eliminate modal */}
       {eliminateModal && (
         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 p-4">
-          <div className="bg-[#39415C] rounded-2xl w-full max-w-md p-4 space-y-4">
+          <div className="bg-sx-card rounded-2xl w-full max-w-md p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">Eliminar {eliminateModal.player.name}</h3>
-              <button onClick={() => setEliminateModal(null)} className="text-[#B7D9BF]/50">✕</button>
+              <button onClick={() => setEliminateModal(null)} className="text-white/40">✕</button>
             </div>
             {tournament.bountyAmount && (
               <div>
-                <label className="block text-xs text-[#B7D9BF]/80 mb-1">Quem eliminou? (bounty)</label>
+                <label className="block text-xs text-sx-muted mb-1">Quem eliminou? (bounty)</label>
                 <select
-                  className="w-full bg-[#434c6b] border border-[#4a5475] rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  className="w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm focus:outline-none"
                   value={eliminatorId}
                   onChange={(e) => setEliminatorId(e.target.value)}
                 >
@@ -686,7 +686,7 @@ function TimerCard({ tournament, currentBlind, onAdvance, onBreak, onEndBreak, a
   }
 
   return (
-    <div className={`rounded-xl p-4 ${tournament.isOnBreak ? 'bg-yellow-900/30 border border-yellow-700' : 'bg-[#39415C]'}`}>
+    <div className={`rounded-xl p-4 ${tournament.isOnBreak ? 'bg-yellow-900/30 border border-yellow-700' : 'bg-sx-card'}`}>
       <div className="flex items-center justify-between mb-3">
         <div>
           {tournament.isOnBreak ? (
@@ -696,9 +696,9 @@ function TimerCard({ tournament, currentBlind, onAdvance, onBreak, onEndBreak, a
             </>
           ) : (
             <>
-              <div className="text-sm text-[#B7D9BF]/80">Nível {tournament.currentLevel}</div>
+              <div className="text-sm text-sx-muted">Nível {tournament.currentLevel}</div>
               {currentBlind && (
-                <div className="text-xs text-[#B7D9BF]/50 mt-0.5">
+                <div className="text-xs text-white/40 mt-0.5">
                   SB {currentBlind.smallBlind.toLocaleString()} / BB {currentBlind.bigBlind.toLocaleString()}
                   {currentBlind.ante > 0 && ` / Ante ${currentBlind.ante.toLocaleString()}`}
                 </div>
@@ -716,7 +716,7 @@ function TimerCard({ tournament, currentBlind, onAdvance, onBreak, onEndBreak, a
           <>
             <button
               onClick={breakPaused ? handleResumeBreak : handlePauseBreak}
-              className={`px-4 py-2 rounded-lg text-sm font-medium border ${breakPaused ? 'bg-yellow-700/50 hover:bg-yellow-700 border-yellow-600 text-yellow-300' : 'bg-[#434c6b] hover:bg-[#4f5878] border-[#4a5475] text-[#B7D9BF]'}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border ${breakPaused ? 'bg-yellow-700/50 hover:bg-yellow-700 border-yellow-600 text-yellow-300' : 'bg-sx-input hover:bg-sx-card2 border-sx-border2 text-sx-cyan'}`}
             >
               {breakPaused ? '▶ Retomar' : '⏸ Pausar'}
             </button>
@@ -773,14 +773,14 @@ function PlayerRow({ player, tournament, actionLoading, onRebuy, onAddon, onElim
   const canPrize = isActive && tournament.status === 'RUNNING'
 
   return (
-    <div className={`bg-[#39415C] rounded-xl p-3 ${player.status === 'WINNER' ? 'border border-yellow-600' : ''}`}>
+    <div className={`bg-sx-card rounded-xl p-3 ${player.status === 'WINNER' ? 'border border-yellow-600' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             {player.status === 'WINNER' && <span className="text-yellow-400">🏆</span>}
             <span className="font-medium text-sm truncate">{player.player.name}</span>
           </div>
-          <div className="flex flex-wrap gap-3 mt-1 text-xs text-[#B7D9BF]/50">
+          <div className="flex flex-wrap gap-3 mt-1 text-xs text-white/40">
             {player.rebuysCount > 0 && <span>{player.rebuysCount}× rebuy</span>}
             {player.hasAddon && <span>add-on ✓</span>}
             {Number(player.bountyCollected) > 0 && (
@@ -799,7 +799,7 @@ function PlayerRow({ player, tournament, actionLoading, onRebuy, onAddon, onElim
             <button
               onClick={onRebuy}
               disabled={!!actionLoading}
-              className="px-2 py-1 bg-[#4f5878] hover:bg-blue-700 rounded text-xs disabled:opacity-50"
+              className="px-2 py-1 bg-sx-card2 hover:bg-blue-700 rounded text-xs disabled:opacity-50"
             >
               Rebuy
             </button>
@@ -808,7 +808,7 @@ function PlayerRow({ player, tournament, actionLoading, onRebuy, onAddon, onElim
             <button
               onClick={onAddon}
               disabled={!!actionLoading}
-              className="px-2 py-1 bg-[#4f5878] hover:bg-purple-700 rounded text-xs disabled:opacity-50"
+              className="px-2 py-1 bg-sx-card2 hover:bg-purple-700 rounded text-xs disabled:opacity-50"
             >
               Add-on
             </button>
@@ -817,7 +817,7 @@ function PlayerRow({ player, tournament, actionLoading, onRebuy, onAddon, onElim
             <button
               onClick={onEliminate}
               disabled={!!actionLoading}
-              className="px-2 py-1 bg-[#4f5878] hover:bg-red-700 rounded text-xs disabled:opacity-50"
+              className="px-2 py-1 bg-sx-card2 hover:bg-red-700 rounded text-xs disabled:opacity-50"
             >
               Eliminar
             </button>
@@ -826,7 +826,7 @@ function PlayerRow({ player, tournament, actionLoading, onRebuy, onAddon, onElim
             <button
               onClick={onPrize}
               disabled={!!actionLoading}
-              className="px-2 py-1 bg-[#4f5878] hover:bg-green-700 rounded text-xs disabled:opacity-50"
+              className="px-2 py-1 bg-sx-card2 hover:bg-green-700 rounded text-xs disabled:opacity-50"
             >
               Prêmio
             </button>
@@ -871,14 +871,14 @@ function PayoutModal({ payout, players, actionLoading, onClose, onPay }: {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 p-4">
-      <div className="bg-[#39415C] rounded-2xl w-full max-w-md p-4 space-y-4">
+      <div className="bg-sx-card rounded-2xl w-full max-w-md p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold">Distribuição de Prêmios</h3>
-          <button onClick={onClose} className="text-[#B7D9BF]/50">✕</button>
+          <button onClick={onClose} className="text-white/40">✕</button>
         </div>
 
         <div className="text-center">
-          <div className="text-xs text-[#B7D9BF]/50">Prize Pool Total</div>
+          <div className="text-xs text-white/40">Prize Pool Total</div>
           <div className="text-2xl font-bold text-green-400">{fmt(payout.prizePool)}</div>
         </div>
 
@@ -893,13 +893,13 @@ function PayoutModal({ payout, players, actionLoading, onClose, onPay }: {
             const medal = s.position === 1 ? '🥇' : s.position === 2 ? '🥈' : s.position === 3 ? '🥉' : `#${s.position}`
             const isLoading = actionLoading === `prize-${assignments[s.position]}`
             return (
-              <div key={s.position} className="bg-[#434c6b] rounded-xl p-3 space-y-2">
+              <div key={s.position} className="bg-sx-input rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-base">{medal} {s.percent}%</span>
                   <span className="font-bold text-green-400">{fmt(s.amount)}</span>
                 </div>
                 <select
-                  className="w-full bg-[#4f5878] border border-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#B7D9BF]"
+                  className="w-full bg-sx-card2 border border-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sx-cyan"
                   value={assignments[s.position] ?? ''}
                   onChange={(e) => setAssignments((a) => ({ ...a, [s.position]: e.target.value }))}
                 >

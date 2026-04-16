@@ -185,13 +185,13 @@ export default function CreateTournamentPage() {
     }
   }
 
-  const input = 'w-full bg-[#434c6b] border border-[#4a5475] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#B7D9BF]'
-  const label = 'block text-xs text-[#B7D9BF]/80 mb-1'
+  const input = 'w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan'
+  const label = 'block text-xs text-sx-muted mb-1'
 
   return (
-    <div className="min-h-screen bg-[#2a3150] text-white p-4 max-w-2xl mx-auto">
+    <div className="min-h-screen bg-sx-bg text-white p-4 max-w-2xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-[#B7D9BF]/80 hover:text-white">←</button>
+        <button onClick={() => router.back()} className="text-sx-muted hover:text-white">←</button>
         <h1 className="text-xl font-bold">Criar Torneio</h1>
       </div>
 
@@ -200,23 +200,23 @@ export default function CreateTournamentPage() {
       {/* Modelos salvos */}
       {presets.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-xs font-semibold text-[#B7D9BF]/80 uppercase tracking-wider mb-2">Modelos salvos</h2>
+          <h2 className="text-xs font-semibold text-sx-muted uppercase tracking-wider mb-2">Modelos salvos</h2>
           <div className="flex flex-col gap-2">
             {presets.map((p) => (
-              <div key={p.id} className="flex items-center justify-between bg-[#39415C] border border-[#39415C] rounded-lg px-3 py-2">
+              <div key={p.id} className="flex items-center justify-between bg-sx-card border border-sx-border rounded-lg px-3 py-2">
                 <span className="text-sm text-white">{p.presetName}</span>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => handleLoadPreset(p)}
-                    className="text-xs text-[#B7D9BF] hover:text-white px-2 py-1 rounded hover:bg-[#434c6b]"
+                    className="text-xs text-sx-cyan hover:text-white px-2 py-1 rounded hover:bg-sx-input"
                   >
                     Carregar
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDeletePreset(p.id)}
-                    className="text-xs text-[#B7D9BF]/50 hover:text-red-400 px-2 py-1 rounded hover:bg-[#434c6b]"
+                    className="text-xs text-white/40 hover:text-red-400 px-2 py-1 rounded hover:bg-sx-input"
                   >
                     ✕
                   </button>
@@ -230,8 +230,8 @@ export default function CreateTournamentPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* Básico */}
-        <section className="bg-[#39415C] rounded-xl p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-[#B7D9BF]">Informações Básicas</h2>
+        <section className="bg-sx-card rounded-xl p-4 space-y-4">
+          <h2 className="text-sm font-semibold text-sx-cyan">Informações Básicas</h2>
           <div>
             <label className={label}>Nome do torneio *</label>
             <input className={input} value={form.name} onChange={(e) => set('name', e.target.value)} required placeholder="Ex: Torneio Semanal" />
@@ -239,7 +239,7 @@ export default function CreateTournamentPage() {
 
           {/* Buy-in */}
           <div>
-            <p className="text-xs font-medium text-[#B7D9BF]/80 mb-2">Buy-in</p>
+            <p className="text-xs font-medium text-sx-muted mb-2">Buy-in</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className={label}>Valor (R$) *</label>
@@ -269,7 +269,7 @@ export default function CreateTournamentPage() {
 
           {/* Rebuy */}
           <div>
-            <p className="text-xs font-medium text-[#B7D9BF]/80 mb-2">Rebuy <span className="text-[#B7D9BF]/40 font-normal">(opcional)</span></p>
+            <p className="text-xs font-medium text-sx-muted mb-2">Rebuy <span className="text-white/30 font-normal">(opcional)</span></p>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className={label}>Valor (R$)</label>
@@ -299,7 +299,7 @@ export default function CreateTournamentPage() {
 
           {/* Add-on */}
           <div>
-            <p className="text-xs font-medium text-[#B7D9BF]/80 mb-2">Add-on <span className="text-[#B7D9BF]/40 font-normal">(opcional)</span></p>
+            <p className="text-xs font-medium text-sx-muted mb-2">Add-on <span className="text-white/30 font-normal">(opcional)</span></p>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className={label}>Valor (R$)</label>
@@ -335,8 +335,8 @@ export default function CreateTournamentPage() {
         </section>
 
         {/* Regras */}
-        <section className="bg-[#39415C] rounded-xl p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-[#B7D9BF]">Regras</h2>
+        <section className="bg-sx-card rounded-xl p-4 space-y-4">
+          <h2 className="text-sm font-semibold text-sx-cyan">Regras</h2>
           <div>
             <label className={label}>Late registration até nível</label>
             <input className={input} type="number" value={form.lateRegistrationLevel} onChange={(e) => set('lateRegistrationLevel', e.target.value)} placeholder="Sem limite" />
@@ -344,8 +344,8 @@ export default function CreateTournamentPage() {
         </section>
 
         {/* Timer */}
-        <section className="bg-[#39415C] rounded-xl p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-[#B7D9BF]">Tempo dos Níveis</h2>
+        <section className="bg-sx-card rounded-xl p-4 space-y-4">
+          <h2 className="text-sm font-semibold text-sx-cyan">Tempo dos Níveis</h2>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Tempo de blinds antes do late register (min) *</label>
@@ -359,11 +359,11 @@ export default function CreateTournamentPage() {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-[#B7D9BF]/80">Intervalos</p>
+              <p className="text-xs font-medium text-sx-muted">Intervalos</p>
               <button
                 type="button"
                 onClick={() => setBreaks((bs) => [...bs, { id: Date.now().toString(), afterLevel: '', durationMinutes: '15' }])}
-                className="text-xs text-[#B7D9BF] hover:text-white"
+                className="text-xs text-sx-cyan hover:text-white"
               >
                 + Intervalo
               </button>
@@ -382,7 +382,7 @@ export default function CreateTournamentPage() {
                   <button
                     type="button"
                     onClick={() => setBreaks((bs) => bs.filter((_, idx) => idx !== i))}
-                    className="pb-2 text-[#B7D9BF]/40 hover:text-red-400"
+                    className="pb-2 text-white/30 hover:text-red-400"
                   >
                     ✕
                   </button>
@@ -393,10 +393,10 @@ export default function CreateTournamentPage() {
         </section>
 
         {/* Blinds */}
-        <section className="bg-[#39415C] rounded-xl p-4 space-y-4">
+        <section className="bg-sx-card rounded-xl p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-[#B7D9BF]">Estrutura de Blinds</h2>
-            <button type="button" onClick={addLevel} className="text-xs text-[#B7D9BF] hover:text-white">+ Nível</button>
+            <h2 className="text-sm font-semibold text-sx-cyan">Estrutura de Blinds</h2>
+            <button type="button" onClick={addLevel} className="text-xs text-sx-cyan hover:text-white">+ Nível</button>
           </div>
 
           <div>
@@ -411,7 +411,7 @@ export default function CreateTournamentPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-[#B7D9BF]/50 border-b border-[#39415C]">
+                  <tr className="text-white/40 border-b border-sx-border">
                     <th className="text-left py-1 pr-2">Nível</th>
                     <th className="text-right py-1 px-2">SB</th>
                     <th className="text-right py-1 px-2">BB</th>
@@ -421,19 +421,19 @@ export default function CreateTournamentPage() {
                 </thead>
                 <tbody>
                   {customLevels.map((l, i) => (
-                    <tr key={i} className="border-b border-[#39415C]/50">
-                      <td className="py-1 pr-2 text-[#B7D9BF]/80">{l.level}</td>
+                    <tr key={i} className="border-b border-sx-border/50">
+                      <td className="py-1 pr-2 text-sx-muted">{l.level}</td>
                       <td className="py-1 px-2">
-                        <input type="number" className="w-20 bg-[#434c6b] border border-[#4a5475] rounded px-2 py-1 text-right focus:outline-none focus:border-[#B7D9BF]" value={l.smallBlind} onChange={(e) => updateLevel(i, 'smallBlind', e.target.value)} />
+                        <input type="number" className="w-20 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.smallBlind} onChange={(e) => updateLevel(i, 'smallBlind', e.target.value)} />
                       </td>
                       <td className="py-1 px-2">
-                        <input type="number" className="w-20 bg-[#434c6b] border border-[#4a5475] rounded px-2 py-1 text-right focus:outline-none focus:border-[#B7D9BF]" value={l.bigBlind} onChange={(e) => updateLevel(i, 'bigBlind', e.target.value)} />
+                        <input type="number" className="w-20 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.bigBlind} onChange={(e) => updateLevel(i, 'bigBlind', e.target.value)} />
                       </td>
                       <td className="py-1 px-2">
-                        <input type="number" className="w-16 bg-[#434c6b] border border-[#4a5475] rounded px-2 py-1 text-right focus:outline-none focus:border-[#B7D9BF]" value={l.ante} onChange={(e) => updateLevel(i, 'ante', e.target.value)} />
+                        <input type="number" className="w-16 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.ante} onChange={(e) => updateLevel(i, 'ante', e.target.value)} />
                       </td>
                       <td className="py-1 pl-2">
-                        <button type="button" onClick={() => removeLevel(i)} className="text-[#B7D9BF]/40 hover:text-red-400">✕</button>
+                        <button type="button" onClick={() => removeLevel(i)} className="text-white/30 hover:text-red-400">✕</button>
                       </td>
                     </tr>
                   ))}
@@ -446,7 +446,7 @@ export default function CreateTournamentPage() {
         <button
           type="button"
           onClick={handleSavePreset}
-          className="w-full py-2 bg-[#434c6b] hover:bg-[#4f5878] border border-[#4a5475] rounded-xl text-sm text-[#B7D9BF]"
+          className="w-full py-2 bg-sx-input hover:bg-sx-card2 border border-sx-border2 rounded-xl text-sm text-sx-cyan"
         >
           Salvar como modelo
         </button>

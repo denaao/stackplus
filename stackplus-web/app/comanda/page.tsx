@@ -47,31 +47,31 @@ export default function ComandasPage() {
     return v < 0 ? `- R$ ${abs}` : `R$ ${abs}`
   }
 
-  const input = 'w-full bg-[#155578] border border-[#1a6080] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#DFE5E0]'
+  const input = 'w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan'
 
   return (
-    <div className="min-h-screen bg-[#081c2e] text-white p-4 max-w-2xl mx-auto">
+    <div className="min-h-screen bg-sx-bg text-white p-4 max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-[#DFE5E0]/80 hover:text-white">←</button>
+        <button onClick={() => router.back()} className="text-sx-muted hover:text-white">←</button>
         <h1 className="text-xl font-bold flex-1">Comandas</h1>
       </div>
 
       {/* Resumo */}
       {filtered.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-[#104564] rounded-xl p-3 text-center">
-            <div className="text-xs text-[#DFE5E0]/60 mb-1">Total</div>
+          <div className="bg-sx-card rounded-xl p-3 text-center">
+            <div className="text-xs text-white/40 mb-1">Total</div>
             <div className="font-bold text-sm">{filtered.length}</div>
           </div>
-          <div className="bg-[#104564] rounded-xl p-3 text-center">
-            <div className="text-xs text-[#DFE5E0]/60 mb-1">Saldo total</div>
+          <div className="bg-sx-card rounded-xl p-3 text-center">
+            <div className="text-xs text-white/40 mb-1">Saldo total</div>
             <div className={`font-bold text-sm ${totalBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {fmtBalance(totalBalance)}
             </div>
           </div>
-          <div className="bg-[#104564] rounded-xl p-3 text-center">
-            <div className="text-xs text-[#DFE5E0]/60 mb-1">A receber</div>
+          <div className="bg-sx-card rounded-xl p-3 text-center">
+            <div className="text-xs text-white/40 mb-1">A receber</div>
             <div className="font-bold text-sm text-red-400">{fmtBalance(Math.abs(totalDebt))}</div>
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function ComandasPage() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === f ? 'bg-blue-600 text-white' : 'bg-[#155578] text-[#DFE5E0]/80 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === f ? 'bg-blue-600 text-white' : 'bg-sx-input text-sx-muted hover:text-white'}`}
           >
             {f === 'OPEN' ? 'Abertas' : f === 'CLOSED' ? 'Fechadas' : 'Todas'}
           </button>
@@ -104,31 +104,31 @@ export default function ComandasPage() {
           <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center text-[#DFE5E0]/40 py-12 text-sm">Nenhuma comanda encontrada</div>
+        <div className="text-center text-white/30 py-12 text-sm">Nenhuma comanda encontrada</div>
       ) : (
         <div className="space-y-2">
           {filtered.map(c => {
             const balance = parseFloat(c.balance)
-            const balanceColor = balance > 0 ? 'text-green-400' : balance < 0 ? 'text-red-400' : 'text-[#DFE5E0]/80'
+            const balanceColor = balance > 0 ? 'text-green-400' : balance < 0 ? 'text-red-400' : 'text-sx-muted'
             return (
               <button
                 key={c.id}
                 onClick={() => router.push(`/comanda/${c.id}`)}
-                className="w-full bg-[#104564] hover:bg-[#155578] rounded-xl p-4 flex items-center justify-between transition-colors"
+                className="w-full bg-sx-card hover:bg-sx-input rounded-xl p-4 flex items-center justify-between transition-colors"
               >
                 <div className="text-left">
                   <div className="font-semibold text-sm">{c.player.name}</div>
-                  <div className="text-xs text-[#DFE5E0]/60 mt-0.5">
+                  <div className="text-xs text-white/40 mt-0.5">
                     {modeLabel[c.mode]} · {c.status === 'OPEN' ? (
                       <span className="text-green-500">Aberta</span>
                     ) : (
-                      <span className="text-[#DFE5E0]/60">Fechada</span>
+                      <span className="text-white/40">Fechada</span>
                     )}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className={`font-bold text-sm tabular-nums ${balanceColor}`}>{fmtBalance(c.balance)}</div>
-                  <div className="text-xs text-[#DFE5E0]/40 mt-0.5">
+                  <div className="text-xs text-white/30 mt-0.5">
                     {new Date(c.openedAt).toLocaleDateString('pt-BR')}
                   </div>
                 </div>

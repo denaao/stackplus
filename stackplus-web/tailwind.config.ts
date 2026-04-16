@@ -9,13 +9,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#fefce8',
-          100: '#fef9c3',
-          400: '#facc15',
-          500: '#eab308',
-          600: '#ca8a04',
-          900: '#713f12',
+        sx: {
+          bg:      '#050D15',
+          card:    '#071828',
+          card2:   '#0C2238',
+          input:   '#0A1F30',
+          border:  '#132A40',
+          border2: '#1A3550',
+          cyan:    '#00C8E0',
+          'cyan-dim': '#009CB0',
+          muted:   '#4A7A90',
         },
       },
     },

@@ -124,8 +124,8 @@ export default function TournamentClockPage() {
   }, [tournamentId])
 
   if (!t) return (
-    <div style={{ background: '#130008', width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 40, height: 40, border: '4px solid #eab308', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+    <div style={{ background: '#050D15', width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 40, height: 40, border: '4px solid #00C8E0', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
     </div>
   )
 
@@ -145,10 +145,10 @@ export default function TournamentClockPage() {
   const avgStack = active > 0 ? Math.floor(totalChips / active) : 0
   const prize = parseFloat(t.prizePool)
 
-  const timerColor = isOnBreak ? '#eab308' : '#D5DCEE'
-  const glowColor = isOnBreak ? '#eab30830' : '#D5DCEE15'
-  const bgColor = isOnBreak ? 'linear-gradient(160deg, #0d0800 0%, #1a1000 100%)' : 'linear-gradient(160deg, #130008 0%, #1f000d 100%)'
-  const borderAccent = isOnBreak ? '#92400e' : '#7B0A40'
+  const timerColor = isOnBreak ? '#eab308' : '#ffffff'
+  const glowColor = isOnBreak ? '#eab30830' : '#00C8E015'
+  const bgColor = isOnBreak ? 'linear-gradient(160deg, #0d0800 0%, #1a1000 100%)' : 'linear-gradient(160deg, #050D15 0%, #071828 100%)'
+  const borderAccent = isOnBreak ? '#92400e' : '#00C8E040'
 
   return (
     <div style={{
@@ -158,18 +158,18 @@ export default function TournamentClockPage() {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 32px 12px', flexShrink: 0 }}>
-        <div style={{ color: '#7B0A40', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+        <div style={{ color: '#00C8E040', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
           Stack+
         </div>
-        <h1 style={{ color: '#D5DCEE', fontSize: 'clamp(1.2rem, 3vw, 2rem)', fontWeight: 900, letterSpacing: '0.15em', textTransform: 'uppercase', margin: 0 }}>
+        <h1 style={{ color: '#ffffff', fontSize: 'clamp(1.2rem, 3vw, 2rem)', fontWeight: 900, letterSpacing: '0.15em', textTransform: 'uppercase', margin: 0 }}>
           {t.name}
         </h1>
-        <div style={{ color: '#7B0A40', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+        <div style={{ color: '#00C8E040', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
           {isOnBreak ? '☕ intervalo' : t.status === 'REGISTRATION' ? 'inscrições' : t.status === 'RUNNING' ? 'em andamento' : t.status === 'FINISHED' ? 'encerrado' : ''}
         </div>
       </div>
 
-      <div style={{ height: 1, margin: '0 32px', background: `linear-gradient(90deg, transparent, ${isOnBreak ? '#92400e' : '#7B0A40'}, transparent)`, flexShrink: 0 }} />
+      <div style={{ height: 1, margin: '0 32px', background: `linear-gradient(90deg, transparent, ${isOnBreak ? '#92400e' : '#00C8E040'}, transparent)`, flexShrink: 0 }} />
 
       {/* Body */}
       <div style={{ flex: 1, display: 'flex', gap: 0, minHeight: 0, padding: '10px 20px 10px' }}>
@@ -223,11 +223,11 @@ export default function TournamentClockPage() {
               },
             ].map(({ label, value, gold, mono }) => (
               <div key={label} style={{
-                background: '#1a000e', border: `1px solid ${borderAccent}`,
+                background: '#071828', border: `1px solid ${borderAccent}`,
                 borderRadius: 12, display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center', padding: '14px 8px',
               }}>
-                <div style={{ color: '#9080A0', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 6 }}>
+                <div style={{ color: '#4A7A90', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 6 }}>
                   {label}
                 </div>
                 <div style={{
@@ -259,16 +259,16 @@ export default function TournamentClockPage() {
               },
             ].map(({ label, value, highlight }) => (
               <div key={label} style={{
-                background: '#0f0009', border: `1px solid ${borderAccent}`,
+                background: '#060f1a', border: `1px solid ${borderAccent}`,
                 borderRadius: 12, display: 'flex', alignItems: 'center',
                 gap: 12, padding: '12px 20px',
               }}>
-                <span style={{ color: '#6a2040', fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                <span style={{ color: '#2a5a7a', fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                   {label}
                 </span>
                 <span style={{
                   fontSize: 'clamp(1rem, 2vw, 1.5rem)',
-                  fontWeight: 700, color: highlight ? '#eab308' : '#B7A0C0',
+                  fontWeight: 700, color: highlight ? '#eab308' : '#5A8AA0',
                   fontVariantNumeric: 'tabular-nums',
                 }}>
                   {value}
@@ -282,31 +282,31 @@ export default function TournamentClockPage() {
         <div style={{ width: 200, marginLeft: 12, display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
 
           {/* Status */}
-          <div style={{ background: '#1a000e', border: `1px solid ${borderAccent}`, borderRadius: 12, padding: '14px 16px' }}>
-            <div style={{ color: '#D5DCEE', fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', textAlign: 'center', marginBottom: 10 }}>
+          <div style={{ background: '#071828', border: `1px solid ${borderAccent}`, borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ color: '#ffffff', fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', textAlign: 'center', marginBottom: 10 }}>
               Status
             </div>
             {[['Jogadores', `${active} / ${total}`], ['Rebuys', rebuys], ['Add-ons', addons]].map(([k, v], i, arr) => (
-              <div key={String(k)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < arr.length - 1 ? '1px solid #2a0018' : 'none' }}>
-                <span style={{ color: '#9080A0', fontSize: 13 }}>{k}</span>
+              <div key={String(k)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < arr.length - 1 ? '1px solid #132A40' : 'none' }}>
+                <span style={{ color: '#4A7A90', fontSize: 13 }}>{k}</span>
                 <span style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</span>
               </div>
             ))}
           </div>
 
           {/* Estatísticas */}
-          <div style={{ background: '#1a000e', border: `1px solid ${borderAccent}`, borderRadius: 12, padding: '14px 16px' }}>
-            <div style={{ color: '#D5DCEE', fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', textAlign: 'center', marginBottom: 10 }}>
+          <div style={{ background: '#071828', border: `1px solid ${borderAccent}`, borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ color: '#ffffff', fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', textAlign: 'center', marginBottom: 10 }}>
               Estatísticas
             </div>
             {[['Stack médio', fmt(avgStack)], ['Total fichas', fmt(totalChips)]].map(([k, v], i) => (
-              <div key={String(k)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i === 0 ? '1px solid #2a0018' : 'none' }}>
-                <span style={{ color: '#9080A0', fontSize: 13 }}>{k}</span>
+              <div key={String(k)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i === 0 ? '1px solid #132A40' : 'none' }}>
+                <span style={{ color: '#4A7A90', fontSize: 13 }}>{k}</span>
                 <span style={{ color: '#ffffff', fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</span>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0 0' }}>
-              <span style={{ color: '#9080A0', fontSize: 13 }}>Prêmio</span>
+              <span style={{ color: '#4A7A90', fontSize: 13 }}>Prêmio</span>
               <span style={{ color: '#4ade80', fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                 R$ {prize.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
@@ -315,8 +315,8 @@ export default function TournamentClockPage() {
 
           {/* Premiação */}
           {prize > 0 && (
-            <div style={{ background: '#1a000e', border: `1px solid ${borderAccent}`, borderRadius: 12, padding: '14px 16px', flex: 1 }}>
-              <div style={{ color: '#D5DCEE', fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', textAlign: 'center', marginBottom: 10 }}>
+            <div style={{ background: '#071828', border: `1px solid ${borderAccent}`, borderRadius: 12, padding: '14px 16px', flex: 1 }}>
+              <div style={{ color: '#ffffff', fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', textAlign: 'center', marginBottom: 10 }}>
                 Premiação
               </div>
               {[
@@ -324,7 +324,7 @@ export default function TournamentClockPage() {
                 { pos: '2º', pct: 30, color: '#9ca3af' },
                 { pos: '3º', pct: 20, color: '#b45309' },
               ].map(({ pos, pct, color }, i, arr) => (
-                <div key={pos} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < arr.length - 1 ? '1px solid #2a0018' : 'none' }}>
+                <div key={pos} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < arr.length - 1 ? '1px solid #132A40' : 'none' }}>
                   <span style={{ color, fontSize: 14, fontWeight: 800 }}>{pos}</span>
                   <span style={{ color: '#ffffff', fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                     {(prize * pct / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -337,14 +337,14 @@ export default function TournamentClockPage() {
       </div>
 
       {/* Footer */}
-      <div style={{ height: 1, margin: '0 32px', background: `linear-gradient(90deg, transparent, ${isOnBreak ? '#92400e' : '#7B0A40'}, transparent)`, flexShrink: 0 }} />
+      <div style={{ height: 1, margin: '0 32px', background: `linear-gradient(90deg, transparent, ${isOnBreak ? '#92400e' : '#00C8E040'}, transparent)`, flexShrink: 0 }} />
       <div style={{ display: 'flex', justifyContent: 'center', gap: 32, padding: '8px 0 10px', flexShrink: 0 }}>
         {[
           `Nível ${level}`,
           `${levelMins} min/nível`,
           t.lateRegistrationLevel ? `Late reg. até nível ${t.lateRegistrationLevel}` : null,
         ].filter(Boolean).map(s => (
-          <span key={s!} style={{ color: '#7B0A40', fontSize: 12, fontWeight: 600, letterSpacing: '0.1em' }}>{s}</span>
+          <span key={s!} style={{ color: '#00C8E040', fontSize: 12, fontWeight: 600, letterSpacing: '0.1em' }}>{s}</span>
         ))}
       </div>
     </div>

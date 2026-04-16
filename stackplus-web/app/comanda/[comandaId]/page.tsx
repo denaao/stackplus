@@ -133,16 +133,16 @@ export default function ComandaDetailPage() {
     }
   }
 
-  const input = 'w-full bg-[#155578] border border-[#1a6080] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#DFE5E0]'
+  const input = 'w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan'
 
   if (loading) return (
-    <div className="min-h-screen bg-[#081c2e] flex items-center justify-center">
+    <div className="min-h-screen bg-sx-bg flex items-center justify-center">
       <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
   if (!comanda) return (
-    <div className="min-h-screen bg-[#081c2e] text-white flex items-center justify-center text-[#DFE5E0]/60">
+    <div className="min-h-screen bg-sx-bg text-white flex items-center justify-center text-white/40">
       Comanda não encontrada
     </div>
   )
@@ -154,15 +154,15 @@ export default function ComandaDetailPage() {
   const totalCredits = comanda.items.filter(i => typeIsCredit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
 
   return (
-    <div className="min-h-screen bg-[#081c2e] text-white p-4 max-w-2xl mx-auto">
+    <div className="min-h-screen bg-sx-bg text-white p-4 max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-[#DFE5E0]/80 hover:text-white">←</button>
+        <button onClick={() => router.back()} className="text-sx-muted hover:text-white">←</button>
         <div className="flex-1">
           <h1 className="text-xl font-bold">{comanda.player.name}</h1>
-          <div className="text-xs text-[#DFE5E0]/60 mt-0.5">
+          <div className="text-xs text-white/40 mt-0.5">
             {comanda.mode === 'PREPAID' ? 'Pré-pago' : 'Pós-pago'} ·{' '}
-            {comanda.status === 'OPEN' ? <span className="text-green-500">Aberta</span> : <span className="text-[#DFE5E0]/80">Fechada</span>}
+            {comanda.status === 'OPEN' ? <span className="text-green-500">Aberta</span> : <span className="text-sx-muted">Fechada</span>}
           </div>
         </div>
         {comanda.status === 'OPEN' && (
@@ -176,7 +176,7 @@ export default function ComandaDetailPage() {
             <button
               onClick={handleClose}
               disabled={closing}
-              className="px-3 py-1.5 bg-[#155578] hover:bg-[#1d6888] rounded-lg text-xs font-medium text-[#DFE5E0] disabled:opacity-50"
+              className="px-3 py-1.5 bg-sx-input hover:bg-sx-card2 rounded-lg text-xs font-medium text-[#DFE5E0] disabled:opacity-50"
             >
               Fechar
             </button>
@@ -187,18 +187,18 @@ export default function ComandaDetailPage() {
       {error && <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">{error}</div>}
 
       {/* Saldo */}
-      <div className="bg-[#104564] rounded-2xl p-5 mb-4">
-        <div className="text-xs text-[#DFE5E0]/60 uppercase tracking-wider mb-1">Saldo</div>
+      <div className="bg-sx-card rounded-2xl p-5 mb-4">
+        <div className="text-xs text-white/40 uppercase tracking-wider mb-1">Saldo</div>
         <div className={`text-4xl font-black tabular-nums ${balanceColor}`}>
           {balance < 0 ? '- ' : ''}{fmtMoney(comanda.balance)}
         </div>
-        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-[#104564]">
+        <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-sx-border">
           <div>
-            <div className="text-xs text-[#DFE5E0]/60 mb-0.5">Débitos</div>
+            <div className="text-xs text-white/40 mb-0.5">Débitos</div>
             <div className="text-sm font-semibold text-red-400">- {fmtMoney(totalDebits)}</div>
           </div>
           <div>
-            <div className="text-xs text-[#DFE5E0]/60 mb-0.5">Créditos</div>
+            <div className="text-xs text-white/40 mb-0.5">Créditos</div>
             <div className="text-sm font-semibold text-green-400">+ {fmtMoney(totalCredits)}</div>
           </div>
         </div>
@@ -207,13 +207,13 @@ export default function ComandaDetailPage() {
       {/* Add payment modal */}
       {showAddPayment && (
         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 p-4">
-          <div className="bg-[#104564] rounded-2xl w-full max-w-md p-4 space-y-4">
+          <div className="bg-sx-card rounded-2xl w-full max-w-md p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">Registrar Pagamento</h3>
-              <button onClick={() => setShowAddPayment(false)} className="text-[#DFE5E0]/60">✕</button>
+              <button onClick={() => setShowAddPayment(false)} className="text-white/40">✕</button>
             </div>
             <div>
-              <label className="block text-xs text-[#DFE5E0]/80 mb-1">Forma de pagamento</label>
+              <label className="block text-xs text-sx-muted mb-1">Forma de pagamento</label>
               <select className={input} value={paymentType} onChange={e => setPaymentType(e.target.value)}>
                 <option value="PAYMENT_CASH">Dinheiro</option>
                 <option value="PAYMENT_CARD">Cartão</option>
@@ -222,11 +222,11 @@ export default function ComandaDetailPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-[#DFE5E0]/80 mb-1">Valor (R$)</label>
+              <label className="block text-xs text-sx-muted mb-1">Valor (R$)</label>
               <input className={input} type="number" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder="0.00" />
             </div>
             <div>
-              <label className="block text-xs text-[#DFE5E0]/80 mb-1">Observação</label>
+              <label className="block text-xs text-sx-muted mb-1">Observação</label>
               <input className={input} value={paymentDesc} onChange={e => setPaymentDesc(e.target.value)} placeholder="Opcional" />
             </div>
             {error && <div className="text-red-400 text-sm">{error}</div>}
@@ -244,11 +244,11 @@ export default function ComandaDetailPage() {
       {/* Extrato */}
       <div className="space-y-4">
         {comanda.items.length === 0 ? (
-          <div className="text-center text-[#DFE5E0]/40 py-8 text-sm">Nenhuma movimentação</div>
+          <div className="text-center text-white/30 py-8 text-sm">Nenhuma movimentação</div>
         ) : (
           Object.entries(grouped).map(([date, items]) => (
             <div key={date}>
-              <div className="text-xs text-[#DFE5E0]/40 uppercase tracking-widest mb-2 px-1">{date}</div>
+              <div className="text-xs text-white/30 uppercase tracking-widest mb-2 px-1">{date}</div>
               <div className="space-y-1">
                 {items.map(item => {
                   const isCredit = typeIsCredit(item.type)
@@ -256,15 +256,15 @@ export default function ComandaDetailPage() {
                   const amountColor = isCredit ? 'text-green-400' : isDebit ? 'text-red-400' : 'text-zinc-300'
                   const sign = isCredit ? '+' : isDebit ? '-' : ''
                   return (
-                    <div key={item.id} className="bg-[#104564] rounded-xl px-4 py-3 flex items-center justify-between">
+                    <div key={item.id} className="bg-sx-card rounded-xl px-4 py-3 flex items-center justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium">{typeLabel[item.type] ?? item.type}</div>
-                        <div className="text-xs text-[#DFE5E0]/60 mt-0.5 truncate">
-                          {item.tournament && <span className="text-[#DFE5E0]/80">{item.tournament.name} · </span>}
+                        <div className="text-xs text-white/40 mt-0.5 truncate">
+                          {item.tournament && <span className="text-sx-muted">{item.tournament.name} · </span>}
                           {item.description && <span>{item.description} · </span>}
                           {new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           {item.paymentStatus && (
-                            <span className={` · ${item.paymentStatus === 'PAID' ? 'text-green-500' : item.paymentStatus === 'PENDING' ? 'text-yellow-500' : 'text-[#DFE5E0]/60'}`}>
+                            <span className={` · ${item.paymentStatus === 'PAID' ? 'text-green-500' : item.paymentStatus === 'PENDING' ? 'text-yellow-500' : 'text-white/40'}`}>
                               {paymentStatusLabel[item.paymentStatus]}
                             </span>
                           )}
@@ -283,7 +283,7 @@ export default function ComandaDetailPage() {
       </div>
 
       {/* Info rodapé */}
-      <div className="mt-6 pt-4 border-t border-[#104564] text-xs text-[#DFE5E0]/40 space-y-1">
+      <div className="mt-6 pt-4 border-t border-sx-border text-xs text-white/30 space-y-1">
         <div>Aberta em {new Date(comanda.openedAt).toLocaleString('pt-BR')} por {comanda.openedBy.name}</div>
         {comanda.closedAt && comanda.closedBy && (
           <div>Fechada em {new Date(comanda.closedAt).toLocaleString('pt-BR')} por {comanda.closedBy.name}</div>

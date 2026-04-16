@@ -3,5 +3,6 @@
 @tailwind utilities;
 
 body {
-  @apply bg-zinc-950 text-zinc-100;
+  background-color: #050D15;
+  color: #ffffff;
 }
