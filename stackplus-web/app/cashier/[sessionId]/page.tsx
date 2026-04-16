@@ -20,6 +20,7 @@ interface CashierTransaction {
   chips: string | number
   note?: string | null
   createdAt: string
+  registeredBy?: string | null
 }
 
 interface StaffAssignment {
@@ -249,6 +250,7 @@ export default function CashierPage() {
   const [success, setSuccess] = useState('')
   const [showEndModal, setShowEndModal] = useState(false)
   const [endForm, setEndForm] = useState({ rake: '', caixinha: '', jackpotArrecadado: '' })
+  const [caixinhaByStaff, setCaixinhaByStaff] = useState<Record<string, string>>({})
   const [showPrepaidModal, setShowPrepaidModal] = useState(false)
   const [prepaidChargeResult, setPrepaidChargeResult] = useState<PrepaidChargeResult | null>(null)
   const [pendingPrepaidTransaction, setPendingPrepaidTransaction] = useState<PendingPrepaidTransaction | null>(null)
@@ -300,12 +302,30 @@ export default function CashierPage() {
         }
       }
 
+      // Qualquer jogador com playerState (ou seja, já recebeu fichas via caixa OU sangeur)
+      // precisa aparecer no dropdown, mesmo que o SessionParticipant não tenha sido criado
+      // (ex: vendas feitas antes do fix de upsert).
+      for (const state of Array.isArray(data.playerStates) ? data.playerStates : []) {
+        if (!state?.user?.id || !state?.user?.name) continue
+        if (!memberMap.has(state.user.id)) {
+          memberMap.set(state.user.id, {
+            id: state.user.id,
+            name: state.user.name,
+            paymentMode: null,
+          })
+        }
+      }
+
       const allMembers: Member[] = Array.from(memberMap.values())
       const participantIds: string[] = Array.isArray(data.participantAssignments)
         ? data.participantAssignments.map((assignment: any) => assignment.userId)
         : []
-      const filteredMembers = participantIds.length > 0
-        ? allMembers.filter((member) => participantIds.includes(member.id))
+      const playerStateIds: string[] = Array.isArray(data.playerStates)
+        ? data.playerStates.map((s: any) => s?.user?.id).filter(Boolean)
+        : []
+      const allowedIds = new Set<string>([...participantIds, ...playerStateIds])
+      const filteredMembers = allowedIds.size > 0
+        ? allMembers.filter((member) => allowedIds.has(member.id))
         : allMembers
       setMembers(filteredMembers)
       setTransactions(transactionsResponse.data)
@@ -313,11 +333,31 @@ export default function CashierPage() {
 
     joinSession(sessionId)
     const socket = getSocket()
+    const onConnect = () => {
+      console.log('[cashier] socket connected, (re)joining session', sessionId)
+      joinSession(sessionId)
+    }
+    socket.on('connect', onConnect)
+    if (socket.connected) {
+      // Already connected when effect ran — ensure we've joined the room.
+      joinSession(sessionId)
+    }
+    socket.on('session:join:error', (payload: any) => {
+      console.warn('[cashier] session:join:error', payload)
+    })
     socket.on('transaction:new', ({ transaction, playerState }: { transaction: CashierTransaction; playerState: PlayerState }) => {
       setPlayerStates((prev) => {
         const exists = prev.find((p) => p.userId === playerState.userId)
         return exists ? prev.map((p) => p.userId === playerState.userId ? playerState : p) : [...prev, playerState]
       })
+      // Se um jogador novo entrou via sangeur (ad-hoc), ele precisa aparecer na
+      // lista do caixa pra poder receber fichas e fazer cashout direto por aqui.
+      if (playerState?.user?.id && playerState?.user?.name) {
+        setMembers((prev) => {
+          if (prev.some((m) => m.id === playerState.user.id)) return prev
+          return [...prev, { id: playerState.user.id, name: playerState.user.name, paymentMode: null }]
+        })
+      }
       setTransactions((prev) => {
         if (prev.some((item) => item.id === transaction.id)) return prev
         return [transaction, ...prev]
@@ -348,7 +388,13 @@ export default function CashierPage() {
     })
     socket.on('ranking:updated', (ranking: PlayerState[]) => setPlayerStates(ranking))
 
-    return () => { leaveSession(sessionId); socket.off('transaction:new'); socket.off('ranking:updated') }
+    return () => {
+      leaveSession(sessionId)
+      socket.off('connect', onConnect)
+      socket.off('session:join:error')
+      socket.off('transaction:new')
+      socket.off('ranking:updated')
+    }
   }, [sessionId])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -367,13 +413,6 @@ export default function CashierPage() {
     if (transactionType === 'CASHOUT' && parsedChips < 0) {
       setError('Cashout não pode ter quantidade negativa')
       return
-    }
-    if (transactionType === 'CASHOUT') {
-      if (parsedChips > selectedPlayerCurrentStack) {
-        setError(`Cashout não pode exceder o stack atual do jogador (${selectedPlayerCurrentStack.toLocaleString('pt-BR')} fichas)`)
-        setLoading(false)
-        return
-      }
     }
     setLoading(true)
     try {
@@ -670,15 +709,50 @@ export default function CashierPage() {
 
   const allPlayersHaveCashedOut = playerStates.length > 0 && playerStates.every((p) => p.hasCashedOut)
   const activePlayers = playerStates.filter((p) => !p.hasCashedOut)
-  const pendingChips = playerStates.reduce((sum, p) => sum + Number(p.currentStack || 0), 0)
+  // Fichas não casheadas calculado a partir das transações (fonte de verdade),
+  // não do PlayerSessionState.currentStack — o currentStack pode estar
+  // corrompido em sessões antigas (bug do cashout zerando stack em cashout parcial).
+  const pendingChipsByPlayer = (() => {
+    const map = new Map<string, { in: number; out: number; userId: string; name: string }>()
+    for (const t of transactions) {
+      const userId = t.userId
+      if (!userId) continue
+      const chips = Number(t.chips || 0)
+      const entry = map.get(userId) || {
+        in: 0,
+        out: 0,
+        userId,
+        name: playerStates.find((p) => p.userId === userId)?.user.name
+          || members.find((m) => m.id === userId)?.name
+          || 'Jogador',
+      }
+      if (t.type === 'BUYIN' || t.type === 'REBUY' || t.type === 'ADDON' || t.type === 'JACKPOT') {
+        entry.in += chips
+      } else if (t.type === 'CASHOUT') {
+        entry.out += chips
+      }
+      map.set(userId, entry)
+    }
+    return Array.from(map.values())
+      .map((p) => ({ ...p, remaining: p.in - p.out, result: p.out - p.in }))
+      .filter((p) => p.in > 0 || p.out > 0)
+      .sort((a, b) => b.result - a.result)
+  })()
+  const pendingChips = pendingChipsByPlayer.reduce((sum, p) => sum + p.remaining, 0)
   const jackpotDistributed = transactions
     .filter((transaction) => transaction.type === 'JACKPOT')
     .reduce((sum, transaction) => sum + Number(transaction.amount), 0)
   const jackpotAtual = Number(session?.homeGame?.jackpotAccumulated || 0)
   const staffAssignments: StaffAssignment[] = Array.isArray(session?.staffAssignments) ? session.staffAssignments : []
   const rakebackAssignments: RakebackAssignment[] = Array.isArray(session?.rakebackAssignments) ? session.rakebackAssignments : []
+  const caixinhaMode: 'SPLIT' | 'INDIVIDUAL' = session?.caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
   const parsedRake = parseFloat(endForm.rake || '0') || 0
-  const parsedCaixinha = parseFloat(endForm.caixinha || '0') || 0
+  const parsedCaixinhaSingle = parseFloat(endForm.caixinha || '0') || 0
+  const parsedCaixinhaIndividualTotal = staffAssignments.reduce((sum, a) => {
+    const value = parseFloat(caixinhaByStaff[a.userId] || '0') || 0
+    return sum + (value > 0 ? value : 0)
+  }, 0)
+  const parsedCaixinha = caixinhaMode === 'INDIVIDUAL' ? parsedCaixinhaIndividualTotal : parsedCaixinhaSingle
   const parsedJackpotArrecadado = parseFloat(endForm.jackpotArrecadado || '0') || 0
   const jackpotProjetado = Math.max(0, Number((jackpotAtual + parsedJackpotArrecadado - jackpotDistributed).toFixed(2)))
   const totalRakebackPercent = rakebackAssignments.reduce((sum, assignment) => {
@@ -687,19 +761,25 @@ export default function CashierPage() {
     return sum + value
   }, 0)
   const hasInvalidRakebackSplit = totalRakebackPercent > 100
-  const hasInvalidCaixinhaSplit = parsedCaixinha > 0 && staffAssignments.length > 0
-    ? Math.round(parsedCaixinha * 100) % staffAssignments.length !== 0
+  const hasInvalidCaixinhaSplit = caixinhaMode === 'SPLIT' && parsedCaixinhaSingle > 0 && staffAssignments.length > 0
+    ? Math.round(parsedCaixinhaSingle * 100) % staffAssignments.length !== 0
     : false
   const caixinhaPerStaff = staffAssignments.length > 0
-    ? Number((parsedCaixinha / staffAssignments.length).toFixed(2))
+    ? Number((parsedCaixinhaSingle / staffAssignments.length).toFixed(2))
     : 0
-  const caixinhaDistributionPreview = !hasInvalidCaixinhaSplit && parsedCaixinha > 0 && staffAssignments.length > 0
-    ? staffAssignments.map((assignment) => ({
-      userId: assignment.userId,
-      name: assignment.user.name,
-      amount: caixinhaPerStaff,
-    }))
-    : []
+  const caixinhaDistributionPreview = caixinhaMode === 'SPLIT'
+    ? (!hasInvalidCaixinhaSplit && parsedCaixinhaSingle > 0 && staffAssignments.length > 0
+        ? staffAssignments.map((assignment) => ({
+          userId: assignment.userId,
+          name: assignment.user.name,
+          amount: caixinhaPerStaff,
+        }))
+        : [])
+    : staffAssignments.map((assignment) => ({
+        userId: assignment.userId,
+        name: assignment.user.name,
+        amount: parseFloat(caixinhaByStaff[assignment.userId] || '0') || 0,
+      })).filter((item) => item.amount > 0)
   const rakebackDistributionPreview = parsedRake > 0 && rakebackAssignments.length > 0
     ? rakebackAssignments
       .filter((assignment) => Number(assignment.percent || 0) > 0)
@@ -716,8 +796,12 @@ export default function CashierPage() {
 
   async function handleEndSession(e: React.FormEvent) {
     e.preventDefault()
-    if (!endForm.rake || !endForm.caixinha) {
-      setError('Preencha Rake e Caixinha')
+    if (!endForm.rake) {
+      setError('Preencha o Rake')
+      return
+    }
+    if (caixinhaMode === 'SPLIT' && !endForm.caixinha) {
+      setError('Preencha a Caixinha')
       return
     }
     if (parsedCaixinha > 0 && staffAssignments.length === 0) {
@@ -734,11 +818,19 @@ export default function CashierPage() {
     }
     setLoading(true)
     try {
-      await api.patch(`/sessions/${sessionId}/end`, {
+      const payload: Record<string, unknown> = {
         rake: parseFloat(endForm.rake),
-        caixinha: parseFloat(endForm.caixinha),
         jackpotArrecadado: parsedJackpotArrecadado,
-      })
+      }
+      if (caixinhaMode === 'INDIVIDUAL') {
+        payload.caixinhaByStaff = staffAssignments.map((a) => ({
+          userId: a.userId,
+          amount: parseFloat(caixinhaByStaff[a.userId] || '0') || 0,
+        }))
+      } else {
+        payload.caixinha = parseFloat(endForm.caixinha)
+      }
+      await api.patch(`/sessions/${sessionId}/end`, payload)
       setSuccess('Sessão encerrada!')
       setTimeout(() => router.back(), 2000)
     } catch (err: any) {
@@ -899,7 +991,7 @@ export default function CashierPage() {
                   <input type="number" min="0" value={form.chips} onChange={(e) => setForm((prev) => ({ ...prev, chips: e.target.value }))}
                     className={`w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none ${currentType === 'JACKPOT' ? 'focus:border-emerald-400' : 'focus:border-yellow-400'}`} placeholder="0" />
                   {currentType === 'CASHOUT' && playerStates.length > 0 && (
-                    <p className="text-xs text-zinc-500">Máximo disponível para este jogador: {formatChips(selectedPlayerCurrentStack)} fichas</p>
+                    <p className="text-xs text-zinc-500">Stack atual: {formatChips(selectedPlayerCurrentStack)} fichas. Informe o valor final com que o jogador está saindo.</p>
                   )}
                   {form.chips && chipValue && (
                     <p className="text-xs text-zinc-400">≈ {formatCurrency(parseFloat(form.chips) * chipValue)}</p>
@@ -979,12 +1071,23 @@ export default function CashierPage() {
                       <p className="text-xs text-zinc-500">Sem transações registradas.</p>
                     ) : (
                       <div className="space-y-2">
-                        {playerTransactions.map((transaction) => (
+                        {playerTransactions.map((transaction) => {
+                          const isSangeur = typeof transaction.registeredBy === 'string' && transaction.registeredBy.startsWith('sangeur:')
+                          return (
                           <div key={transaction.id} className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs">
                             <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="font-semibold text-zinc-100">{transactionTypeLabel[transaction.type]}</p>
-                                <p className="text-zinc-500">{formatDateTime(transaction.createdAt)}</p>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[10px] font-bold uppercase tracking-wide rounded border px-1.5 py-0.5 ${
+                                  isSangeur
+                                    ? 'border-purple-500/40 bg-purple-500/10 text-purple-300'
+                                    : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'
+                                }`}>
+                                  {isSangeur ? 'Sangeur' : 'Caixa'}
+                                </span>
+                                <div>
+                                  <p className="font-semibold text-zinc-100">{transactionTypeLabel[transaction.type]}</p>
+                                  <p className="text-zinc-500">{formatDateTime(transaction.createdAt)}</p>
+                                </div>
                               </div>
                               <div className="text-right">
                                 <p className="font-semibold text-zinc-100">{formatCurrency(transaction.amount)}</p>
@@ -1005,7 +1108,7 @@ export default function CashierPage() {
                             </div>
                             {transaction.note && <p className="mt-2 text-zinc-400">{transaction.note}</p>}
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
                   </div>
@@ -1025,7 +1128,20 @@ export default function CashierPage() {
             <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
               <p className="text-zinc-400">Fichas não casheadas:</p>
               <p className="text-lg font-bold text-yellow-400">{formatChips(pendingChips)} fichas</p>
-              <p className="text-xs text-zinc-500 mt-2">≈ {formatCurrency(pendingChips * chipValue)}</p>
+              <p className="text-xs text-zinc-500 mt-1">≈ {formatCurrency(pendingChips * chipValue)}</p>
+              {pendingChipsByPlayer.length > 0 && (
+                <div className="mt-3 space-y-1 border-t border-zinc-700 pt-2">
+                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Detalhe por jogador</p>
+                  {pendingChipsByPlayer.map((p) => (
+                    <div key={p.userId} className="flex items-center justify-between text-xs text-zinc-300">
+                      <span className="truncate">{p.name}</span>
+                      <span className="font-mono text-zinc-400">
+                        {formatChips(p.in)} − {formatChips(p.out)} = <span className={p.result > 0 ? 'text-green-400' : p.result < 0 ? 'text-red-400' : 'text-zinc-500'}>{p.result > 0 ? '+' : ''}{formatChips(p.result)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {isJackpotEnabled && (
@@ -1106,18 +1222,48 @@ export default function CashierPage() {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs text-zinc-400 uppercase tracking-wide">Caixinha (R$)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={endForm.caixinha}
-                  onChange={(e) => setEndForm((prev) => ({ ...prev, caixinha: e.target.value }))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
-                  placeholder="0.00"
-                />
-              </div>
+              {caixinhaMode === 'INDIVIDUAL' ? (
+                <div className="space-y-2">
+                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Caixinha por staff (R$)</label>
+                  {staffAssignments.length === 0 ? (
+                    <p className="text-xs text-zinc-500">Nenhum staff selecionado para essa partida.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {staffAssignments.map((assignment) => (
+                        <div key={assignment.userId} className="flex items-center gap-3">
+                          <span className="flex-1 text-sm text-zinc-200 truncate">{assignment.user.name}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={caixinhaByStaff[assignment.userId] ?? ''}
+                            onChange={(e) => setCaixinhaByStaff((prev) => ({ ...prev, [assignment.userId]: e.target.value }))}
+                            className="w-32 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-400"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+                        <span className="text-xs text-zinc-500 uppercase tracking-wide">Total caixinha</span>
+                        <span className="text-sm font-semibold text-zinc-100">{formatCurrency(parsedCaixinha)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Caixinha (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={endForm.caixinha}
+                    onChange={(e) => setEndForm((prev) => ({ ...prev, caixinha: e.target.value }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
 
               {isJackpotEnabled && (
                 <div className="space-y-1">

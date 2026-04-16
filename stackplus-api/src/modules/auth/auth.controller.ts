@@ -44,20 +44,19 @@ function isValidCnpj(value: string) {
 
 const registerSchema = z.object({
   name: z.string().min(2),
-  email: z.string().email(),
-  cpf: z.string().trim().optional(),
+  cpf: z.string().trim().min(11),
+  email: z.string().email().optional().or(z.literal('')),
   phone: z.string().trim().optional(),
   password: z.string().min(6),
   pixType: pixTypeEnum,
   pixKey: z.string().trim().min(3).max(120),
 }).superRefine((data, ctx) => {
-  const raw = data.pixKey.trim()
-  const digits = raw.replace(/\D/g, '')
-  const cpfDigits = data.cpf ? data.cpf.replace(/\D/g, '') : ''
-
-  if (data.cpf && !isValidCpf(data.cpf)) {
+  if (!isValidCpf(data.cpf)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF inválido' })
   }
+
+  const raw = data.pixKey.trim()
+  const digits = raw.replace(/\D/g, '')
 
   if (data.pixType === 'CPF' && !isValidCpf(raw)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX CPF inválido' })
@@ -85,10 +84,6 @@ const registerSchema = z.object({
     }
   }
 
-  if (data.pixType !== 'CPF' && data.pixType !== 'CNPJ' && cpfDigits.length !== 11) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'Informe um CPF válido para PIX por e-mail/telefone/chave aleatória' })
-  }
-
   if (data.phone !== undefined && data.phone.trim() !== '') {
     const phoneDigits = data.phone.replace(/\D/g, '')
     if (phoneDigits.length < 10 || phoneDigits.length > 11) {
@@ -98,7 +93,7 @@ const registerSchema = z.object({
 })
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  cpf: z.string().trim().min(11),
   password: z.string().min(1),
 })
 
@@ -116,13 +111,16 @@ const sangeurChangePasswordSchema = z.object({
 
 export async function register(req: Request, res: Response): Promise<void> {
   const data = registerSchema.parse(req.body)
-  const result = await AuthService.register(data)
+  const result = await AuthService.register({
+    ...data,
+    email: data.email || undefined,
+  })
   res.status(201).json(result)
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
-  const { email, password } = loginSchema.parse(req.body)
-  const result = await AuthService.login(email, password)
+  const { cpf, password } = loginSchema.parse(req.body)
+  const result = await AuthService.login(cpf, password)
   res.json(result)
 }
 
@@ -139,12 +137,13 @@ export async function me(req: AuthRequest, res: Response): Promise<void> {
 
 const updateMeSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
-  cpf: z.string().trim().max(20).nullable().optional(),
+  cpf: z.string().trim().max(20).optional(),
+  email: z.string().email().nullable().optional().or(z.literal('')),
   phone: z.string().trim().max(20).nullable().optional(),
   pixType: pixTypeEnum.optional(),
   pixKey: z.string().trim().min(3).max(120).optional(),
 }).superRefine((data, ctx) => {
-  if (data.cpf !== undefined && data.cpf !== null && data.cpf.trim() !== '' && !isValidCpf(data.cpf)) {
+  if (data.cpf !== undefined && data.cpf.trim() !== '' && !isValidCpf(data.cpf)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF inválido' })
   }
 
@@ -163,7 +162,6 @@ const updateMeSchema = z.object({
 
   const raw = data.pixKey.trim()
   const digits = raw.replace(/\D/g, '')
-  const cpfDigits = data.cpf ? data.cpf.replace(/\D/g, '') : ''
 
   if (data.pixType === 'CPF' && !isValidCpf(raw)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX CPF inválido' })
@@ -180,15 +178,14 @@ const updateMeSchema = z.object({
   if (data.pixType === 'RANDOM' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'Chave aleatória deve ser um UUID válido' })
   }
-
-  if (data.pixType !== 'CPF' && data.pixType !== 'CNPJ' && cpfDigits.length !== 11) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'Informe um CPF válido para PIX por e-mail/telefone/chave aleatória' })
-  }
 })
 
 export async function updateMe(req: AuthRequest, res: Response): Promise<void> {
   const data = updateMeSchema.parse(req.body)
-  const user = await AuthService.updateMe(req.user!.userId, data)
+  const user = await AuthService.updateMe(req.user!.userId, {
+    ...data,
+    email: data.email === '' ? null : data.email,
+  })
   res.json(user)
 }
 

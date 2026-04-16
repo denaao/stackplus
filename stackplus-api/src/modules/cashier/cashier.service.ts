@@ -51,13 +51,6 @@ export async function registerTransaction(input: TransactionInput) {
 
   if (state?.hasCashedOut) throw new Error('Jogador já realizou cashout nesta sessão')
 
-  if (input.type === TransactionType.CASHOUT) {
-    const playerCurrentStack = Number(state?.currentStack || 0)
-    if (chips > playerCurrentStack) {
-      throw new Error(`Cashout não pode exceder o stack atual do jogador (${playerCurrentStack.toLocaleString('pt-BR')} fichas)`)
-    }
-  }
-
   const transaction = await prisma.$transaction(async (tx) => {
     const newTx = await tx.transaction.create({
       data: {
@@ -93,6 +86,9 @@ export async function registerTransaction(input: TransactionInput) {
       } else if (isJackpot) {
         currentStack += chips
       } else if (input.type === TransactionType.CASHOUT) {
+        // Cashout = jogador saiu da partida. O valor de fichas informado é o
+        // stack final com que ele saiu (pode ser menor, igual ou maior que o
+        // que ele comprou). Zera o stack e marca hasCashedOut.
         chipsOut += amount
         currentStack = 0
         hasCashedOut = true
@@ -192,6 +188,7 @@ export async function deleteTransaction(transactionId: string) {
 
       if (transaction.type === TransactionType.CASHOUT) {
         chipsOutAmount += amount
+        // Cashout = jogador saiu. Zera o stack e marca hasCashedOut.
         currentStackChips = 0
         hasCashedOut = true
       }

@@ -286,8 +286,8 @@ export default function DashboardPage() {
             {games.map((game) => {
               const gameType = game.gameType || 'CASH_GAME'
               return (
-              <div key={game.id} onClick={() => router.push(`/homegame/${game.id}`)}
-                className="bg-zinc-900 border border-zinc-800 hover:border-yellow-400/40 rounded-xl p-6 cursor-pointer transition-all group">
+              <div key={game.id}
+                className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 transition-all group">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-bold text-lg group-hover:text-yellow-400 transition-colors">{game.name}</h3>
@@ -347,18 +347,39 @@ export default function DashboardPage() {
                   <span>{gameType === 'CASH_GAME' ? `💵 R$ ${game.chipValue}/ficha` : '🏆 Estrutura de torneio'}</span>
                 </div>
                 <div className="mt-4 pt-3 border-t border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleConnectWhatsApp(game)
-                    }}
-                    disabled={connectingGameId === game.id || !canManageWhatsApp}
-                    className="w-full rounded-lg border border-green-700 bg-green-900/40 px-3 py-2 text-sm font-semibold text-green-300 hover:bg-green-800/50 disabled:opacity-50"
-                    title={canManageWhatsApp ? undefined : 'Disponivel apenas para HOST/ADMIN'}
-                  >
-                    {connectingGameId === game.id ? 'Gerando QR code...' : 'Conectar WhatsApp deste Home Game'}
-                  </button>
+                  <p className="text-xl font-bold text-zinc-100 mb-3 text-center">E aí, qual vai ser o jogo de hoje?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/homegame/${game.id}?new=cash`)
+                      }}
+                      className="rounded-lg border border-yellow-400 bg-yellow-400/15 px-3 py-2 text-sm font-bold text-yellow-300 hover:bg-yellow-400/25"
+                    >
+                      Cash Game
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/tournament/create?homeGameId=${game.id}`)
+                      }}
+                      className="rounded-lg border border-blue-500 bg-blue-500/15 px-3 py-2 text-sm font-bold text-blue-300 hover:bg-blue-500/25"
+                    >
+                      Torneio
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/comanda?homeGameId=${game.id}`)
+                      }}
+                      className="rounded-lg border border-zinc-600 bg-zinc-600/15 px-3 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-600/25"
+                    >
+                      Comandas
+                    </button>
+                  </div>
                 </div>
               </div>
               )

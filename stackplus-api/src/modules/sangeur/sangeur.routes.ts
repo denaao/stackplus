@@ -2,6 +2,9 @@ import { Router, Response } from 'express'
 import { z } from 'zod'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
 import * as SangeurService from './sangeur.service'
+import { emitSessionRankingUpdated, getIO, getPrivateSessionRoom } from '../../socket/socket'
+import { prisma } from '../../lib/prisma'
+import * as AnnapayService from '../banking/annapay.service'
 
 const router = Router()
 
@@ -29,6 +32,14 @@ router.use(authenticate)
 router.get('/home-games/:homeGameId/sessions', async (req: AuthRequest, res: Response) => {
   const sessions = await SangeurService.listOperationalSessions(req.params.homeGameId, req.user!.userId)
   res.json(sessions)
+})
+
+router.get('/sessions/:sessionId/participants', async (req: AuthRequest, res: Response) => {
+  const data = await SangeurService.listSessionParticipants({
+    sessionId: req.params.sessionId,
+    userId: req.user!.userId,
+  })
+  res.json(data)
 })
 
 router.post('/shifts/open', async (req: AuthRequest, res: Response) => {
@@ -84,6 +95,7 @@ router.post('/shifts/:shiftId/sales', async (req: AuthRequest, res: Response) =>
   const data = z.object({
     chips: z.number().positive(),
     paymentMethod: z.enum(['PIX_QR', 'VOUCHER', 'CASH', 'CARD']),
+    sessionUserId: z.string().uuid(),
     playerName: z.string().trim().max(120).optional(),
     note: z.string().trim().max(300).optional(),
     paymentReference: z.string().trim().max(200).optional(),
@@ -94,12 +106,73 @@ router.post('/shifts/:shiftId/sales', async (req: AuthRequest, res: Response) =>
     userId: req.user!.userId,
     chips: data.chips,
     paymentMethod: data.paymentMethod,
+    sessionUserId: data.sessionUserId,
     playerName: data.playerName,
     note: data.note,
     paymentReference: data.paymentReference,
   })
 
+  // Realtime broadcast: reusa o canal do caixa (transaction:new) para atualizar
+  // totais/jogador na tela do caixa de graça, e emite sangeur:sale no mesmo room
+  // para o painel lateral específico do sangeur.
+  try {
+    const io = getIO()
+    const sessionId = result.shift.session.id
+    const room = getPrivateSessionRoom(sessionId)
+    const socketsInRoom = await io.in(room).fetchSockets()
+    console.log(`[sangeur] emitting transaction:new to room=${room} | clients=${socketsInRoom.length}`)
+    io.to(room).emit('transaction:new', {
+      transaction: result.transaction,
+      playerState: result.playerState,
+    })
+
+    const { getRanking } = await import('../ranking/ranking.service')
+    const ranking = await getRanking(sessionId)
+    emitSessionRankingUpdated(sessionId, ranking)
+  } catch (error) {
+    console.warn('[sangeur] realtime broadcast failed:', error)
+  }
+
   res.status(201).json(result)
+})
+
+router.post('/sales/:saleId/settle-pix', async (req: AuthRequest, res: Response) => {
+  const { manual } = z.object({ manual: z.boolean().optional() }).parse(req.body)
+
+  const sale = await prisma.sangeurSale.findUniqueOrThrow({
+    where: { id: req.params.saleId },
+    include: { shift: { select: { sangeurUserId: true } } },
+  })
+
+  if (sale.shift.sangeurUserId !== req.user!.userId) throw new Error('Acesso negado')
+  if (sale.paymentStatus === 'PAID') return res.json({ settled: true, message: 'Já confirmado' })
+  if (sale.paymentMethod !== 'PIX_QR') throw new Error('Apenas vendas PIX')
+
+  // Confirmação manual pelo operador (botão "Confirmar pagamento")
+  if (manual) {
+    const updated = await prisma.sangeurSale.update({
+      where: { id: sale.id },
+      data: { paymentStatus: 'PAID', settledAt: new Date() },
+    })
+    return res.json({ settled: true, message: 'Pagamento confirmado manualmente', sale: updated })
+  }
+
+  // Verificação automática — usa mesma lógica robusta do caixa
+  if (!sale.paymentReference) {
+    return res.json({ settled: false, message: 'Cobrança sem referência' })
+  }
+
+  const { paid } = await AnnapayService.checkPixChargeIsPaid(sale.paymentReference)
+
+  if (paid) {
+    const updated = await prisma.sangeurSale.update({
+      where: { id: sale.id },
+      data: { paymentStatus: 'PAID', settledAt: new Date() },
+    })
+    return res.json({ settled: true, message: 'Pagamento confirmado', sale: updated })
+  }
+
+  return res.json({ settled: false, message: 'Aguardando pagamento...' })
 })
 
 router.patch('/sales/:saleId/settle', async (req: AuthRequest, res: Response) => {

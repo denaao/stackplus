@@ -49,6 +49,56 @@ enum SessionFinancialPayoutPurpose {
   CAIXINHA
 }
 
+enum ComandaStatus {
+  OPEN
+  CLOSED
+}
+
+enum ComandaMode {
+  PREPAID
+  POSTPAID
+}
+
+enum ComandaItemType {
+  CASH_BUYIN
+  CASH_REBUY
+  CASH_ADDON
+  CASH_CASHOUT
+  TOURNAMENT_BUYIN
+  TOURNAMENT_REBUY
+  TOURNAMENT_ADDON
+  TOURNAMENT_BOUNTY_RECEIVED
+  TOURNAMENT_PRIZE
+  PAYMENT_PIX_SPOT
+  PAYMENT_PIX_TERM
+  PAYMENT_CASH
+  PAYMENT_CARD
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum ComandaItemPaymentStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELED
+}
+
+enum TournamentStatus {
+  REGISTRATION
+  RUNNING
+  ON_BREAK
+  FINISHED
+  CANCELED
+}
+
+enum TournamentPlayerStatus {
+  REGISTERED
+  ACTIVE
+  ELIMINATED
+  WINNER
+}
+
 enum PixKeyType {
   CPF
   CNPJ
@@ -109,8 +159,8 @@ enum SangeurPaymentStatus {
 model User {
   id           String   @id @default(uuid())
   name         String
-  email        String   @unique
-  cpf          String?  @unique
+  email        String?  @unique
+  cpf          String   @unique
   phone        String?
   pixType      PixKeyType?
   pixKey       String?
@@ -132,9 +182,16 @@ model User {
   sangeurShifts SangeurShift[] @relation("SangeurOperatorShifts")
   sangeurShiftMovementsCreated SangeurShiftMovement[] @relation("SangeurMovementCreator")
   sangeurSalesCreated SangeurSale[] @relation("SangeurSaleCreator")
+  sangeurSalesAsPlayer SangeurSale[] @relation("SangeurSalePlayer")
   prepaidChargePendings PrepaidChargePending[]
   sessionFinancialChargePendings SessionFinancialChargePending[]
   sessionFinancialPayoutPendings SessionFinancialPayoutPending[]
+  comandas               Comanda[]          @relation("PlayerComandas")
+  comandasOpened         Comanda[]          @relation("ComandaOpenedBy")
+  comandasClosed         Comanda[]          @relation("ComandaClosedBy")
+  comandaItemsCreated    ComandaItem[]      @relation("ComandaItemCreator")
+  comandaTransfersCreated ComandaTransfer[] @relation("ComandaTransferCreator")
+  tournamentPlayers      TournamentPlayer[]
 }
 
 model WhatsAppInstanceConfig {
@@ -204,6 +261,8 @@ model HomeGame {
   sangeurAccesses HomeGameSangeurAccess[]
   sangeurShifts SangeurShift[]
   sessions Session[]
+  comandas  Comanda[]
+  tournaments Tournament[]
 }
 
 model HomeGameMember {
@@ -265,6 +324,7 @@ model Session {
   cashierId   String?
   rake        Decimal?      @db.Decimal(10, 2)
   caixinha    Decimal?      @db.Decimal(10, 2)
+  caixinhaMode String       @default("SPLIT")
   status      SessionStatus @default(WAITING)
   startedAt   DateTime?
   finishedAt  DateTime?
@@ -282,9 +342,12 @@ model Session {
   sessionFinancialChargePendings SessionFinancialChargePending[]
   sessionFinancialPayoutPendings SessionFinancialPayoutPending[]
   sangeurShifts SangeurShift[]
+  comandaItems  ComandaItem[]
 
   @@index([homeGameId])
   @@index([status])
+  @@index([homeGameId, createdAt])
+  @@index([homeGameId, status, finishedAt])
 }
 
 model SangeurShift {
@@ -312,6 +375,7 @@ model SangeurShift {
   @@index([sessionId])
   @@index([sangeurUserId])
   @@index([status])
+  @@index([sessionId, sangeurUserId, status])
 }
 
 model SangeurShiftMovement {
@@ -334,6 +398,8 @@ model SangeurShiftMovement {
 model SangeurSale {
   id               String              @id @default(uuid())
   shiftId          String
+  sessionUserId    String?
+  transactionId    String?             @unique
   chips            Decimal             @db.Decimal(10, 2)
   chipValue        Decimal             @db.Decimal(10, 2)
   amount           Decimal             @db.Decimal(10, 2)
@@ -347,13 +413,17 @@ model SangeurSale {
   createdByUserId  String
   createdAt        DateTime            @default(now())
 
-  shift     SangeurShift @relation(fields: [shiftId], references: [id])
-  createdBy User         @relation("SangeurSaleCreator", fields: [createdByUserId], references: [id])
+  shift        SangeurShift @relation(fields: [shiftId], references: [id])
+  createdBy    User         @relation("SangeurSaleCreator", fields: [createdByUserId], references: [id])
+  sessionUser  User?        @relation("SangeurSalePlayer", fields: [sessionUserId], references: [id])
+  transaction  Transaction? @relation("SangeurSaleTransaction", fields: [transactionId], references: [id])
 
   @@index([shiftId])
   @@index([paymentMethod])
   @@index([paymentStatus])
   @@index([createdAt])
+  @@index([paymentMethod, paymentReference, paymentStatus])
+  @@index([sessionUserId])
 }
 
 model SessionParticipant {
@@ -386,10 +456,11 @@ model SessionRakeback {
 }
 
 model SessionStaff {
-  id        String   @id @default(uuid())
-  sessionId String
-  userId    String
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  sessionId      String
+  userId         String
+  caixinhaAmount Decimal? @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
 
   session Session @relation(fields: [sessionId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
@@ -415,6 +486,9 @@ model PlayerSessionState {
 
   @@unique([sessionId, userId])
   @@index([sessionId])
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@index([sessionId, result])
 }
 
 model Transaction {
@@ -430,10 +504,13 @@ model Transaction {
 
   session Session @relation(fields: [sessionId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
+  sangeurSale SangeurSale? @relation("SangeurSaleTransaction")
 
   @@index([sessionId, userId])
   @@index([sessionId, type])
   @@index([createdAt])
+  @@index([sessionId, createdAt])
+  @@index([sessionId, userId, createdAt])
 }
 
 model PrepaidChargePending {
@@ -494,5 +571,182 @@ model SessionFinancialPayoutPending {
 
   @@unique([sessionId, userId, purpose])
   @@unique([payoutOrderId])
+  @@index([status])
+}
+
+// ─── COMANDA ────────────────────────────────────────────────────────────────
+
+model Comanda {
+  id             String        @id @default(uuid())
+  playerId       String
+  homeGameId     String
+  status         ComandaStatus @default(OPEN)
+  mode           ComandaMode   @default(PREPAID)
+  creditLimit    Decimal?      @db.Decimal(10, 2)
+  balance        Decimal       @default(0) @db.Decimal(10, 2)
+  note           String?
+  openedAt       DateTime      @default(now())
+  closedAt       DateTime?
+  openedByUserId String
+  closedByUserId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  player           User              @relation("PlayerComandas", fields: [playerId], references: [id])
+  homeGame         HomeGame          @relation(fields: [homeGameId], references: [id])
+  openedBy         User              @relation("ComandaOpenedBy", fields: [openedByUserId], references: [id])
+  closedBy         User?             @relation("ComandaClosedBy", fields: [closedByUserId], references: [id])
+  items            ComandaItem[]
+  tournamentPlayers TournamentPlayer[]
+
+  @@index([playerId])
+  @@index([homeGameId])
+  @@index([status])
+  @@index([playerId, homeGameId, status])
+}
+
+model ComandaItem {
+  id                    String                    @id @default(uuid())
+  comandaId             String
+  type                  ComandaItemType
+  amount                Decimal                   @db.Decimal(10, 2)
+  description           String?
+  sessionId             String?
+  tournamentId          String?
+  tournamentPlayerId    String?
+  transactionId         String?
+  paymentReference      String?
+  paymentStatus         ComandaItemPaymentStatus?
+  paymentVirtualAccount String?
+  createdByUserId       String
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  comanda          Comanda           @relation(fields: [comandaId], references: [id])
+  createdBy        User              @relation("ComandaItemCreator", fields: [createdByUserId], references: [id])
+  session          Session?          @relation(fields: [sessionId], references: [id])
+  tournament       Tournament?       @relation("TournamentComandaItems", fields: [tournamentId], references: [id])
+  tournamentPlayer TournamentPlayer? @relation(fields: [tournamentPlayerId], references: [id])
+  transferAsSource ComandaTransfer?  @relation("TransferSourceItem")
+  transferAsDest   ComandaTransfer?  @relation("TransferDestItem")
+
+  @@index([comandaId])
+  @@index([type])
+  @@index([tournamentId])
+  @@index([sessionId])
+  @@index([paymentStatus])
+  @@index([paymentReference])
+}
+
+model ComandaTransfer {
+  id              String   @id @default(uuid())
+  sourceItemId    String   @unique
+  destItemId      String   @unique
+  reason          String?
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  sourceItem ComandaItem @relation("TransferSourceItem", fields: [sourceItemId], references: [id])
+  destItem   ComandaItem @relation("TransferDestItem", fields: [destItemId], references: [id])
+  createdBy  User        @relation("ComandaTransferCreator", fields: [createdByUserId], references: [id])
+}
+
+// ─── TOURNAMENT ─────────────────────────────────────────────────────────────
+
+model Tournament {
+  id                       String           @id @default(uuid())
+  homeGameId               String
+  name                     String
+  status                   TournamentStatus @default(REGISTRATION)
+
+  buyInAmount              Decimal          @db.Decimal(10, 2)
+  rebuyAmount              Decimal?         @db.Decimal(10, 2)
+  addonAmount              Decimal?         @db.Decimal(10, 2)
+  bountyAmount             Decimal?         @db.Decimal(10, 2)
+  rake                     Decimal          @default(0) @db.Decimal(5, 2)
+
+  startingChips            Int
+  rebuyChips               Int?
+  addonChips               Int?
+
+  lateRegistrationLevel    Int?
+  rebuyUntilLevel          Int?
+  addonAfterLevel          Int?
+
+  minutesPerLevelPreLateReg  Int              @default(15)
+  minutesPerLevelPostLateReg Int?
+  breaks                     String?
+  buyInTaxAmount             Decimal?         @db.Decimal(10, 2)
+  buyInTaxChips              Int?
+  rebuyTaxAmount             Decimal?         @db.Decimal(10, 2)
+  rebuyTaxChips              Int?
+  addonTaxAmount             Decimal?         @db.Decimal(10, 2)
+  addonTaxChips              Int?
+  blindTemplateName          String?
+
+  currentLevel             Int              @default(0)
+  levelStartedAt           DateTime?
+  isOnBreak                Boolean          @default(false)
+  breakStartedAt           DateTime?
+  prizePool                Decimal          @default(0) @db.Decimal(10, 2)
+  totalRake                Decimal          @default(0) @db.Decimal(10, 2)
+
+  startedAt                DateTime?
+  finishedAt               DateTime?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  homeGame    HomeGame               @relation(fields: [homeGameId], references: [id])
+  blindLevels TournamentBlindLevel[]
+  players     TournamentPlayer[]
+  comandaItems ComandaItem[]         @relation("TournamentComandaItems")
+
+  @@index([homeGameId])
+  @@index([status])
+  @@index([homeGameId, status])
+}
+
+model TournamentBlindLevel {
+  id           String     @id @default(uuid())
+  tournamentId String
+  level        Int
+  smallBlind   Int
+  bigBlind     Int
+  ante         Int        @default(0)
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@unique([tournamentId, level])
+  @@index([tournamentId])
+}
+
+model TournamentPlayer {
+  id                   String                 @id @default(uuid())
+  tournamentId         String
+  playerId             String
+  comandaId            String
+  status               TournamentPlayerStatus @default(REGISTERED)
+  position             Int?
+  rebuysCount          Int                    @default(0)
+  hasAddon             Boolean                @default(false)
+  bountyCollected      Decimal                @default(0) @db.Decimal(10, 2)
+  prizeAmount          Decimal?               @db.Decimal(10, 2)
+  eliminatedByPlayerId String?
+  eliminatedAtLevel    Int?
+  registeredAt         DateTime               @default(now())
+  eliminatedAt         DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  tournament   Tournament        @relation(fields: [tournamentId], references: [id])
+  player       User              @relation(fields: [playerId], references: [id])
+  comanda      Comanda           @relation(fields: [comandaId], references: [id])
+  eliminatedBy TournamentPlayer? @relation("EliminationRelation", fields: [eliminatedByPlayerId], references: [id])
+  eliminations TournamentPlayer[] @relation("EliminationRelation")
+  comandaItems ComandaItem[]
+
+  @@unique([tournamentId, playerId])
+  @@index([tournamentId])
+  @@index([playerId])
   @@index([status])
 }

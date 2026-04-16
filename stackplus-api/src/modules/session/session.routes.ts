@@ -104,19 +104,26 @@ router.patch('/:id/finish', authenticate, async (req: AuthRequest, res: Response
 })
 
 router.patch('/:id/end', authenticate, async (req: AuthRequest, res: Response) => {
-  const { rake, caixinha, jackpotArrecadado } = z.object({
+  const { rake, caixinha, caixinhaByStaff, jackpotArrecadado } = z.object({
     rake: z.number().nonnegative(),
-    caixinha: z.number().nonnegative(),
+    caixinha: z.number().nonnegative().optional(),
+    caixinhaByStaff: z.array(z.object({
+      userId: z.string().uuid(),
+      amount: z.number().nonnegative(),
+    })).optional(),
     jackpotArrecadado: z.number().nonnegative().optional(),
   }).parse(req.body)
-  const session = await SessionService.finishSession(req.params.id, req.user!.userId, { rake, caixinha, jackpotArrecadado })
+  const session = await SessionService.finishSession(req.params.id, req.user!.userId, { rake, caixinha, caixinhaByStaff, jackpotArrecadado })
   emitSessionFinished(req.params.id)
   res.json(session)
 })
 
 router.put('/:id/staff', authenticate, async (req: AuthRequest, res: Response) => {
-  const { userIds } = z.object({ userIds: z.array(z.string().uuid()) }).parse(req.body)
-  const session = await SessionService.updateSessionStaff(req.params.id, req.user!.userId, userIds)
+  const { userIds, caixinhaMode } = z.object({
+    userIds: z.array(z.string().uuid()),
+    caixinhaMode: z.enum(['SPLIT', 'INDIVIDUAL']).optional(),
+  }).parse(req.body)
+  const session = await SessionService.updateSessionStaff(req.params.id, req.user!.userId, userIds, caixinhaMode)
   res.json(session)
 })
 

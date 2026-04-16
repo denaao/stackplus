@@ -28,13 +28,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && typeof window !== 'undefined') {
-      const path = window.location.pathname || ''
-      if (path.startsWith('/sangeur')) {
-        localStorage.removeItem('stackplus-sangeur-auth')
-        window.location.href = '/sangeur/login'
-      } else {
-        localStorage.removeItem('stackplus-auth')
-        window.location.href = '/'
+      const requestUrl: string = error.config?.url || ''
+      const isLoginAttempt = /\/auth\/(login|sangeur\/login)/.test(requestUrl)
+      if (!isLoginAttempt) {
+        const path = window.location.pathname || ''
+        if (path.startsWith('/sangeur')) {
+          localStorage.removeItem('stackplus-sangeur-auth')
+          window.location.href = '/sangeur/login'
+        } else {
+          localStorage.removeItem('stackplus-auth')
+          window.location.href = '/'
+        }
       }
     }
 

@@ -7,14 +7,42 @@ import { useSangeurAuthStore } from '@/store/useStore'
 
 type PaymentMethod = 'PIX_QR' | 'VOUCHER' | 'CASH' | 'CARD'
 
+type FinancialModule = 'POSTPAID' | 'PREPAID' | 'HYBRID'
+
 interface OperationalSession {
   id: string
   status: 'WAITING' | 'ACTIVE' | 'FINISHED'
   createdAt: string
   startedAt?: string | null
   chipValue: number
+  financialModule?: FinancialModule
   openShiftId?: string | null
   _count: { playerStates: number; transactions: number }
+}
+
+interface SessionPlayer {
+  userId: string
+  name: string
+  avatarUrl?: string | null
+  paymentMode?: 'POSTPAID' | 'PREPAID' | null
+  chipsIn: number
+  chipsOut: number
+  currentStack: number
+  result: number
+  hasCashedOut: boolean
+  inSession: boolean
+}
+
+interface SessionCandidate {
+  userId: string
+  name: string
+  avatarUrl?: string | null
+  paymentMode?: 'POSTPAID' | 'PREPAID' | null
+}
+
+interface ParticipantsPayload {
+  players: SessionPlayer[]
+  candidates: SessionCandidate[]
 }
 
 interface ShiftMovement {
@@ -71,6 +99,7 @@ interface VoucherReceiptData {
   saleId: string
   voucherCode?: string | null
   playerName?: string | null
+  playerCpf?: string | null
   chips: number
   chipValue: number
   amount: number
@@ -82,6 +111,15 @@ interface VoucherReceiptData {
   homeGame: { id: string; name: string }
   session: { id: string; createdAt: string }
   operator: { username: string; name?: string | null }
+  playerUnpaidEntries?: Array<{
+    id: string
+    origin: 'C' | 'S'
+    type: 'BUYIN' | 'REBUY' | 'ADDON'
+    chips: number
+    amount: number
+    createdAt: string
+  }>
+  playerUnpaidTotal?: number
 }
 
 interface ClosingReportData {
@@ -173,12 +211,16 @@ export default function SangeurHomePage() {
   const [sessions, setSessions] = useState<OperationalSession[]>([])
   const [activeShift, setActiveShift] = useState<ShiftDetail | null>(null)
   const [loadingData, setLoadingData] = useState(false)
+  const [participants, setParticipants] = useState<ParticipantsPayload>({ players: [], candidates: [] })
+  const [participantsError, setParticipantsError] = useState<string>('')
+  const [loadingParticipants, setLoadingParticipants] = useState(false)
 
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmNewPassword: '' })
   const [openShiftForm, setOpenShiftForm] = useState({ sessionId: '', initialChips: '', note: '' })
-  const [saleForm, setSaleForm] = useState({ chips: '', paymentMethod: 'PIX_QR' as PaymentMethod, playerName: '', note: '', paymentReference: '' })
+  const [saleForm, setSaleForm] = useState({ chips: '', paymentMethod: 'PIX_QR' as PaymentMethod, sessionUserId: '', playerName: '', note: '', paymentReference: '' })
   const [reloadForm, setReloadForm] = useState({ chips: '', note: '' })
   const [closeForm, setCloseForm] = useState({ returnedChips: '', note: '' })
+  const [addCandidateId, setAddCandidateId] = useState('')
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -190,6 +232,51 @@ export default function SangeurHomePage() {
     () => activeShift?.sales.filter((sale) => sale.paymentMethod === 'VOUCHER' && sale.paymentStatus === 'PENDING') || [],
     [activeShift]
   )
+
+  const pendingVoucherGroups = useMemo(() => {
+    const groups = new Map<string, {
+      key: string
+      playerName: string
+      totalChips: number
+      totalAmount: number
+      saleIds: string[]
+      latestSaleId: string
+    }>()
+    for (const sale of pendingVoucherSales) {
+      const name = (sale.playerName || 'Jogador').trim() || 'Jogador'
+      const key = name.toLowerCase()
+      const chips = Number(sale.chips) || 0
+      const amount = Number(sale.amount) || 0
+      const existing = groups.get(key)
+      if (existing) {
+        existing.totalChips += chips
+        existing.totalAmount += amount
+        existing.saleIds.push(sale.id)
+        // manter o saleId mais recente (sales já vem ordenado desc no backend, mas garantimos aqui)
+        if (new Date(sale.createdAt) >= new Date(activeShift?.sales.find((s) => s.id === existing.latestSaleId)?.createdAt || 0)) {
+          existing.latestSaleId = sale.id
+        }
+      } else {
+        groups.set(key, {
+          key,
+          playerName: name,
+          totalChips: chips,
+          totalAmount: amount,
+          saleIds: [sale.id],
+          latestSaleId: sale.id,
+        })
+      }
+    }
+    return Array.from(groups.values()).sort((a, b) => a.playerName.localeCompare(b.playerName))
+  }, [pendingVoucherSales, activeShift])
+
+  const activeSession = useMemo(
+    () => sessions.find((s) => s.id === activeShift?.sessionId) || null,
+    [sessions, activeShift]
+  )
+
+  const isPostpaidSession = (activeSession?.financialModule || 'POSTPAID') === 'POSTPAID'
+  const defaultPaymentMethod: PaymentMethod = isPostpaidSession ? 'VOUCHER' : 'PIX_QR'
 
   useEffect(() => {
     if (!token || !sangeur) {
@@ -223,10 +310,50 @@ export default function SangeurHomePage() {
     loadOperationalData()
   }, [token, sangeur, router])
 
+  // Carrega participantes da sessão quando tem turno aberto
+  useEffect(() => {
+    if (activeShift?.sessionId) {
+      loadParticipants(activeShift.sessionId)
+    } else {
+      setParticipants({ players: [], candidates: [] })
+    }
+  }, [activeShift?.sessionId])
+
+  // Default do método de pagamento conforme regime financeiro da sessão
+  useEffect(() => {
+    setSaleForm((prev) => (
+      prev.paymentMethod === defaultPaymentMethod ? prev : { ...prev, paymentMethod: defaultPaymentMethod }
+    ))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultPaymentMethod, activeShift?.id])
+
   async function refreshShift(shiftId: string) {
     const { data } = await api.get(`/sangeur/shifts/${shiftId}`)
     setActiveShift(data)
     return data as ShiftDetail
+  }
+
+  async function loadParticipants(sessionId: string) {
+    setLoadingParticipants(true)
+    setParticipantsError('')
+    try {
+      const { data } = await api.get<ParticipantsPayload>(`/sangeur/sessions/${sessionId}/participants`)
+      setParticipants({
+        players: Array.isArray(data?.players) ? data.players : [],
+        candidates: Array.isArray(data?.candidates) ? data.candidates : [],
+      })
+    } catch (err: any) {
+      // O interceptor do services/api.ts rejeita com string, não com Error.
+      const baseMsg = typeof err === 'string'
+        ? err
+        : (err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Falha ao carregar jogadores')
+      const msg = `${baseMsg} (sessionId=${sessionId})`
+      console.error('[sangeur] loadParticipants failed:', err)
+      setParticipantsError(String(msg))
+      setParticipants({ players: [], candidates: [] })
+    } finally {
+      setLoadingParticipants(false)
+    }
   }
 
   async function handleChangePassword(e: React.FormEvent) {
@@ -316,35 +443,56 @@ export default function SangeurHomePage() {
       setError('Informe a quantidade de fichas vendidas.')
       return
     }
+    if (!saleForm.sessionUserId) {
+      setError('Selecione o jogador na lista de participantes.')
+      return
+    }
 
     setLoading(true)
     try {
       const { data } = await api.post(`/sangeur/shifts/${activeShift.id}/sales`, {
         chips,
         paymentMethod: saleForm.paymentMethod,
+        sessionUserId: saleForm.sessionUserId,
         playerName: saleForm.playerName || undefined,
         note: saleForm.note || undefined,
         paymentReference: saleForm.paymentReference || undefined,
       })
 
-      // Handle response which can be shift or {shift, pixQrData}
       const shiftData = data.shift || data
       const pixData = data.pixQrData
 
       setActiveShift(shiftData)
-      setSaleForm({ chips: '', paymentMethod: 'PIX_QR', playerName: '', note: '', paymentReference: '' })
-      
-      // Show PIX QR modal if available
-      if (pixData) {
-        setPixQrModal(pixData)
+      setSaleForm({ chips: '', paymentMethod: defaultPaymentMethod, sessionUserId: '', playerName: '', note: '', paymentReference: '' })
+      if (shiftData?.sessionId) {
+        loadParticipants(shiftData.sessionId)
       }
-      
+
+      if (pixData) setPixQrModal(pixData)
       setSuccess('Venda registrada com sucesso.')
     } catch (err: any) {
       setError(typeof err === 'string' ? err : 'Nao foi possivel registrar a venda')
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleSelectPlayer(player: SessionPlayer | SessionCandidate) {
+    setSaleForm((prev) => ({
+      ...prev,
+      sessionUserId: player.userId,
+      playerName: player.name,
+    }))
+  }
+
+  function handleAddCandidate() {
+    if (!addCandidateId) return
+    const candidate = participants.candidates.find((c) => c.userId === addCandidateId)
+    if (!candidate) return
+    handleSelectPlayer(candidate)
+    setAddCandidateId('')
+    setSuccess(`${candidate.name} selecionado(a) — informe as fichas e registre a venda.`)
+    setTimeout(() => setSuccess(''), 2500)
   }
 
   async function handleReload(e: React.FormEvent) {
@@ -383,18 +531,28 @@ export default function SangeurHomePage() {
     try {
       const { data } = await api.get<VoucherReceiptData>(`/sangeur/sales/${saleId}/voucher-receipt`)
       const issuedAt = new Date(data.createdAt).toLocaleString('pt-BR')
-      const settledAt = data.settledAt ? new Date(data.settledAt).toLocaleString('pt-BR') : '-'
       const playerName = data.playerName || 'Jogador nao informado'
+      const playerCpf = data.playerCpf || '-'
       const operatorName = data.operator.name || data.operator.username
-      const voucherCode = data.voucherCode || 'SEM-CODIGO'
-      const note = data.note ? escapeHtml(data.note) : '-'
-      const reference = data.paymentReference ? escapeHtml(data.paymentReference) : '-'
+      const entries = Array.isArray(data.playerUnpaidEntries) && data.playerUnpaidEntries.length > 0
+        ? data.playerUnpaidEntries
+        : [{ id: data.saleId, origin: 'S' as const, type: 'BUYIN' as const, chips: data.chips, amount: data.amount, createdAt: data.createdAt }]
+      const total = typeof data.playerUnpaidTotal === 'number' && data.playerUnpaidTotal > 0
+        ? data.playerUnpaidTotal
+        : entries.reduce((acc, v) => acc + Number(v.amount || 0), 0)
+
+      const entriesRows = entries.map((v) => {
+        const when = new Date(v.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        return `<div class="line"><span>${escapeHtml(v.origin)} ${escapeHtml(when)} - ${formatChips(v.chips)} fichas</span><span></span></div>`
+      }).join('')
+
+      const statusLabel = data.paymentStatus === 'PENDING' ? 'A pagar' : data.paymentStatus === 'PAID' ? 'Pago' : 'Cancelado'
 
       const printHtml = `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Felipeta ${escapeHtml(voucherCode)}</title>
+    <title>Felipeta ${escapeHtml(playerName)}</title>
     <style>
       @page { size: 80mm auto; margin: 4mm; }
       body { font-family: Consolas, 'Courier New', monospace; color: #000; margin: 0; padding: 0; }
@@ -404,29 +562,30 @@ export default function SangeurHomePage() {
       .muted { color: #333; font-size: 11px; }
       .divider { border-top: 1px dashed #444; margin: 8px 0; }
       .line { display: flex; justify-content: space-between; font-size: 12px; margin: 2px 0; gap: 8px; }
-      .code { font-size: 16px; font-weight: 700; letter-spacing: 0.8px; }
+      .player-name { font-size: 15px; font-weight: 700; margin: 0; }
+      .player-cpf { font-size: 11px; color: #333; margin: 2px 0 0 0; }
       .value { font-size: 17px; font-weight: 700; }
+      .spacer { height: 14px; }
+      .signature { border-top: 1px solid #000; margin-top: 4px; padding-top: 4px; font-size: 11px; }
     </style>
   </head>
   <body>
     <div class="ticket">
-      <p class="title center">VALE SANGEUR</p>
+      <p class="title center">Ficha de Caixa</p>
       <p class="center muted">${escapeHtml(data.homeGame.name)}</p>
       <div class="divider"></div>
-      <p class="center code">${escapeHtml(voucherCode)}</p>
+      <p class="player-name center">${escapeHtml(playerName)}</p>
+      <p class="player-cpf center">CPF: ${escapeHtml(playerCpf)}</p>
       <div class="divider"></div>
-      <div class="line"><span>Jogador</span><span>${escapeHtml(playerName)}</span></div>
-      <div class="line"><span>Fichas</span><span>${formatChips(data.chips)}</span></div>
-      <div class="line"><span>Valor da ficha</span><span>${formatCurrency(data.chipValue)}</span></div>
-      <div class="line"><span>Total</span><span class="value">${formatCurrency(data.amount)}</span></div>
-      <div class="line"><span>Status</span><span>${escapeHtml(data.paymentStatus)}</span></div>
+      ${entriesRows}
+      <div class="divider"></div>
+      <div class="line"><span>Total</span><span class="value">${formatCurrency(total)}</span></div>
+      <div class="line"><span>Status</span><span>${escapeHtml(statusLabel)}</span></div>
       <div class="line"><span>Operador</span><span>${escapeHtml(operatorName)}</span></div>
       <div class="line"><span>Emitido em</span><span>${escapeHtml(issuedAt)}</span></div>
-      <div class="line"><span>Liquidado em</span><span>${escapeHtml(settledAt)}</span></div>
-      <div class="line"><span>Referencia</span><span>${reference}</span></div>
-      <div class="line"><span>Obs.</span><span>${note}</span></div>
-      <div class="divider"></div>
-      <p class="center muted">Guarde este comprovante.</p>
+      <div class="spacer"></div>
+      <div class="spacer"></div>
+      <p class="center signature">Assinatura do jogador</p>
     </div>
     <script>
       window.onload = () => {
@@ -461,6 +620,25 @@ export default function SangeurHomePage() {
       setSuccess('Vale liquidado com sucesso.')
     } catch (err: any) {
       setError(typeof err === 'string' ? err : 'Nao foi possivel liquidar o vale')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSettleVoucherGroup(saleIds: string[]) {
+    if (!activeShift || saleIds.length === 0) return
+    setLoading(true)
+    setError('')
+    setSuccess('')
+    try {
+      for (const saleId of saleIds) {
+        await api.patch(`/sangeur/sales/${saleId}/settle`, {})
+      }
+      await refreshShift(activeShift.id)
+      setSuccess(`${saleIds.length} vale(s) liquidado(s) com sucesso.`)
+    } catch (err: any) {
+      setError(typeof err === 'string' ? err : 'Nao foi possivel liquidar os vales')
+      await refreshShift(activeShift.id)
     } finally {
       setLoading(false)
     }
@@ -615,17 +793,27 @@ export default function SangeurHomePage() {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-black text-emerald-300">SANGEUR POS</h1>
+              <h1 className="text-2xl font-black text-emerald-300">SANGEUR</h1>
               <p className="mt-1 text-sm text-zinc-400">Home Game: {sangeur.homeGameName}</p>
-              <p className="text-xs text-zinc-500">Usuario POS: @{sangeur.username} • Operadora: {user?.name}</p>
+              <p className="text-xs text-zinc-500">Usuário: @{sangeur.username} • Operadora: {user?.name}</p>
             </div>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-200 hover:bg-zinc-800"
-            >
-              Sair
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => router.push('/sangeur/pos')}
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-300 hover:bg-emerald-500/20"
+                title="Versão otimizada para maquininha"
+              >
+                Modo POS
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-200 hover:bg-zinc-800"
+              >
+                Sair
+              </button>
+            </div>
           </div>
         </div>
 
@@ -767,9 +955,83 @@ export default function SangeurHomePage() {
                   </div>
                 </div>
 
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Jogadores na sessão</h3>
+                    <span className="text-[11px] uppercase tracking-wide text-zinc-500">{isPostpaidSession ? 'Pós-pago • default VALE' : 'Pré-pago'}</span>
+                  </div>
+                  {participantsError && (
+                    <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">Erro: {participantsError}</p>
+                  )}
+                  {loadingParticipants ? (
+                    <p className="mt-3 text-sm text-zinc-500">Carregando jogadores...</p>
+                  ) : participants.players.length === 0 ? (
+                    <p className="mt-3 text-sm text-zinc-500">Nenhum jogador registrado na sessão ainda. Use &quot;Inserir jogador&quot; abaixo.</p>
+                  ) : (
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {participants.players.map((player) => {
+                        const selected = saleForm.sessionUserId === player.userId
+                        return (
+                          <button
+                            type="button"
+                            key={player.userId}
+                            onClick={() => handleSelectPlayer(player)}
+                            disabled={player.hasCashedOut}
+                            className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                              selected
+                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100'
+                                : player.hasCashedOut
+                                  ? 'border-zinc-800 bg-zinc-950/50 text-zinc-500 cursor-not-allowed'
+                                  : 'border-zinc-800 bg-zinc-950/60 text-zinc-100 hover:border-emerald-500/40 hover:bg-zinc-900'
+                            }`}
+                          >
+                            <p className="font-semibold">{player.name}</p>
+                            <p className="mt-0.5 text-[11px] text-zinc-400">
+                              Stack: {formatChips(player.currentStack)} • Investido: {formatCurrency(player.chipsIn)}
+                              {player.hasCashedOut ? ' • Cashout' : ''}
+                            </p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {participants.candidates.length > 0 && (
+                    <div className="mt-3 flex flex-col gap-2 border-t border-zinc-800 pt-3 sm:flex-row">
+                      <select
+                        value={addCandidateId}
+                        onChange={(e) => setAddCandidateId(e.target.value)}
+                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
+                      >
+                        <option value="">Inserir jogador do home game...</option>
+                        {participants.candidates.map((c) => (
+                          <option key={c.userId} value={c.userId}>{c.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!addCandidateId}
+                        onClick={handleAddCandidate}
+                        className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50"
+                      >
+                        Selecionar
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <form onSubmit={handleRegisterSale} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3">
                     <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Registrar venda</h3>
+                    {saleForm.sessionUserId ? (
+                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                        Jogador selecionado: <span className="font-semibold">{saleForm.playerName || '—'}</span>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                        Selecione um jogador na lista acima antes de registrar a venda.
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <label className="text-[11px] uppercase tracking-wide text-zinc-500">Fichas</label>
@@ -785,10 +1047,9 @@ export default function SangeurHomePage() {
                         </select>
                       </div>
                     </div>
-                    <input type="text" value={saleForm.playerName} onChange={(e) => setSaleForm((prev) => ({ ...prev, playerName: e.target.value }))} placeholder="Nome do jogador (opcional)" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
                     <input type="text" value={saleForm.paymentReference} onChange={(e) => setSaleForm((prev) => ({ ...prev, paymentReference: e.target.value }))} placeholder="Referencia pagamento (opcional)" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
                     <input type="text" value={saleForm.note} onChange={(e) => setSaleForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Observacao (opcional)" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
-                    <button type="submit" disabled={loading} className="w-full rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-zinc-900 hover:bg-emerald-400 disabled:opacity-50">Registrar venda</button>
+                    <button type="submit" disabled={loading || !saleForm.sessionUserId} className="w-full rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-zinc-900 hover:bg-emerald-400 disabled:opacity-50">Registrar venda</button>
                   </form>
 
                   <div className="space-y-4">
@@ -808,27 +1069,27 @@ export default function SangeurHomePage() {
                   </div>
                 </div>
 
-                {pendingVoucherSales.length > 0 && (
+                {pendingVoucherGroups.length > 0 && (
                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
                     <h3 className="text-sm font-bold uppercase tracking-wide text-amber-200">Vales pendentes</h3>
                     <div className="mt-2 space-y-2">
-                      {pendingVoucherSales.map((sale) => (
-                        <div key={sale.id} className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-zinc-900/60 p-3 md:flex-row md:items-center md:justify-between">
+                      {pendingVoucherGroups.map((group) => (
+                        <div key={group.key} className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-zinc-900/60 p-3 md:flex-row md:items-center md:justify-between">
                           <p className="text-sm text-zinc-100">
-                            {sale.playerName || 'Jogador'} • {formatChips(sale.chips)} fichas • {formatCurrency(Number(sale.amount))}
-                            {sale.voucherCode ? ` • ${sale.voucherCode}` : ''}
+                            {group.playerName} • {formatChips(group.totalChips)} fichas • {formatCurrency(group.totalAmount)}
+                            {group.saleIds.length > 1 ? ` • ${group.saleIds.length} vales` : ''}
                           </p>
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => handlePrintVoucher(sale.id)}
+                              onClick={() => handlePrintVoucher(group.latestSaleId)}
                               className="rounded-md border border-zinc-500/40 bg-zinc-500/10 px-3 py-1.5 text-xs font-bold text-zinc-200 hover:bg-zinc-500/20"
                             >
                               Imprimir vale
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleSettleVoucher(sale.id)}
+                              onClick={() => handleSettleVoucherGroup(group.saleIds)}
                               className="rounded-md border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25"
                             >
                               Liquidar vale

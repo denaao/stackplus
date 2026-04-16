@@ -16,15 +16,28 @@ export async function updateUserRole(userId: string, role: string) {
 }
 
 export async function getUserStats(userId: string) {
-  const states = await prisma.playerSessionState.findMany({
-    where: { userId },
-    include: { session: { include: { homeGame: true } } },
-  })
+  const [aggregate, wins, losses] = await Promise.all([
+    prisma.playerSessionState.aggregate({
+      where: { userId },
+      _count: { _all: true },
+      _sum: { result: true },
+    }),
+    prisma.playerSessionState.count({
+      where: {
+        userId,
+        result: { gt: 0 },
+      },
+    }),
+    prisma.playerSessionState.count({
+      where: {
+        userId,
+        result: { lt: 0 },
+      },
+    }),
+  ])
 
-  const totalSessions = states.length
-  const totalResult = states.reduce((acc, s) => acc + Number(s.result), 0)
-  const wins = states.filter((s) => Number(s.result) > 0).length
-  const losses = states.filter((s) => Number(s.result) < 0).length
+  const totalSessions = aggregate._count._all
+  const totalResult = Number(aggregate._sum.result || 0)
 
   return { totalSessions, totalResult, wins, losses }
 }

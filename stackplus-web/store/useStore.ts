@@ -4,8 +4,8 @@ import { persist } from 'zustand/middleware'
 interface User {
   id: string
   name: string
-  email: string
-  cpf?: string | null
+  cpf: string
+  email?: string | null
   phone?: string | null
   pixType?: 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM' | null
   pixKey?: string | null

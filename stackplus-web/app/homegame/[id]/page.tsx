@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 
@@ -60,6 +60,7 @@ type FeedbackState = {
 export default function HomeGamePage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const user = useAuthStore((s) => s.user)
   const id = params.id as string
   const [game, setGame] = useState<HomeGame | null>(null)
@@ -68,19 +69,14 @@ export default function HomeGamePage() {
   const [creating, setCreating] = useState(false)
   const [showCreatePicker, setShowCreatePicker] = useState(false)
   const [pokerVariant, setPokerVariant] = useState<'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'>('HOLDEN')
-  const [newSessionType, setNewSessionType] = useState<'CASH_GAME' | 'TOURNAMENT'>('CASH_GAME')
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1)
+  const [sessionHasSangeur, setSessionHasSangeur] = useState<boolean>(false)
   const [cashChipValue, setCashChipValue] = useState('1')
   const [cashSmallBlind, setCashSmallBlind] = useState('1')
   const [cashBigBlind, setCashBigBlind] = useState('2')
   const [cashMinimumBuyIn, setCashMinimumBuyIn] = useState('0')
   const [cashMinimumStayMinutes, setCashMinimumStayMinutes] = useState('0')
   const [cashFoodFee, setCashFoodFee] = useState('0')
-  const [tourBuyInAmount, setTourBuyInAmount] = useState('0')
-  const [tourRebuyAmount, setTourRebuyAmount] = useState('0')
-  const [tourAddOnAmount, setTourAddOnAmount] = useState('0')
-  const [tourBlindsBeforeBreak, setTourBlindsBeforeBreak] = useState('15')
-  const [tourBlindsAfterBreak, setTourBlindsAfterBreak] = useState('20')
-  const [tourLevelsUntilBreak, setTourLevelsUntilBreak] = useState('4')
   const [jackpotAccumulated, setJackpotAccumulated] = useState('0')
   const [newSessionJackpotEnabled, setNewSessionJackpotEnabled] = useState(false)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
@@ -116,6 +112,15 @@ export default function HomeGamePage() {
 
     loadPage()
   }, [id])
+
+  useEffect(() => {
+    if (!game || loading) return
+    if (searchParams?.get('new') === 'cash' && user?.id === game.host.id && !showCreatePicker) {
+      openCreatePicker()
+      router.replace(`/homegame/${id}`)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, loading, searchParams])
 
   function applySangeurAccess(access: SangeurAccess) {
     setSangeurAccesses((prev) => {
@@ -200,21 +205,16 @@ export default function HomeGamePage() {
   function openCreatePicker() {
     if (!game) return
     setCreateFormError(null)
+    setWizardStep(1)
     setPokerVariant('HOLDEN')
-    setNewSessionType('CASH_GAME')
     setNewSessionFinancialModule(game.financialModule || 'POSTPAID')
+    setSessionHasSangeur(false)
     setCashChipValue(String(game.chipValue || '1'))
     setCashSmallBlind('1')
     setCashBigBlind('2')
     setCashMinimumBuyIn('0')
     setCashMinimumStayMinutes('0')
     setCashFoodFee('0')
-    setTourBuyInAmount(String(game.buyInAmount ?? '0'))
-    setTourRebuyAmount(String(game.rebuyAmount ?? '0'))
-    setTourAddOnAmount(String(game.addOnAmount ?? '0'))
-    setTourBlindsBeforeBreak(String(game.blindsMinutesBeforeBreak ?? '15'))
-    setTourBlindsAfterBreak(String(game.blindsMinutesAfterBreak ?? '20'))
-    setTourLevelsUntilBreak(String(game.levelsUntilBreak ?? '4'))
     setJackpotAccumulated(String(game.jackpotAccumulated ?? '0'))
     setNewSessionJackpotEnabled(false)
     setShowCreatePicker(true)
@@ -225,74 +225,38 @@ export default function HomeGamePage() {
     setPageFeedback(null)
     setCreating(true)
     try {
-      let payload: Record<string, string | number | boolean> = {
-        homeGameId: id,
-        pokerVariant,
-        gameType: newSessionType,
-        financialModule: newSessionFinancialModule,
-        jackpotEnabled: newSessionJackpotEnabled,
+      const chipValue = parseFloat(cashChipValue)
+      const smallBlind = parseFloat(cashSmallBlind)
+      const bigBlind = parseFloat(cashBigBlind)
+      const minimumBuyIn = parseFloat(cashMinimumBuyIn)
+      const minimumStayMinutes = parseInt(cashMinimumStayMinutes, 10)
+      const foodFee = parseFloat(cashFoodFee)
+
+      if (!(chipValue > 0)) {
+        setCreateFormError('Informe um valor/ficha valido para o cash game.')
+        return
+      }
+      if (!(smallBlind >= 0) || !(bigBlind > 0) || bigBlind < smallBlind) {
+        setCreateFormError('Informe blinds validos para o cash game.')
+        return
+      }
+      if (!(minimumBuyIn >= 0) || !(minimumStayMinutes >= 0) || !(foodFee >= 0)) {
+        setCreateFormError('Minimo de entrada, permanencia e taxa de alimentacao devem ser maiores ou iguais a zero.')
+        return
       }
 
-      if (newSessionType === 'CASH_GAME') {
-        const chipValue = parseFloat(cashChipValue)
-        const smallBlind = parseFloat(cashSmallBlind)
-        const bigBlind = parseFloat(cashBigBlind)
-        const minimumBuyIn = parseFloat(cashMinimumBuyIn)
-        const minimumStayMinutes = parseInt(cashMinimumStayMinutes, 10)
-        const foodFee = parseFloat(cashFoodFee)
-
-        if (!(chipValue > 0)) {
-          setCreateFormError('Informe um valor/ficha valido para o cash game.')
-          return
-        }
-        if (!(smallBlind >= 0) || !(bigBlind > 0) || bigBlind < smallBlind) {
-          setCreateFormError('Informe blinds validos para o cash game.')
-          return
-        }
-        if (!(minimumBuyIn >= 0) || !(minimumStayMinutes >= 0) || !(foodFee >= 0)) {
-          setCreateFormError('Minimo de entrada, permanencia e taxa de alimentacao devem ser maiores ou iguais a zero.')
-          return
-        }
-
-        payload = {
-          ...payload,
-          chipValue,
-          smallBlind,
-          bigBlind,
-          minimumBuyIn,
-          minimumStayMinutes,
-          foodFee,
-        }
-      } else {
-        const buyInAmount = parseFloat(tourBuyInAmount)
-        const rebuyAmount = parseFloat(tourRebuyAmount)
-        const addOnAmount = parseFloat(tourAddOnAmount)
-        const blindsMinutesBeforeBreak = parseInt(tourBlindsBeforeBreak, 10)
-        const blindsMinutesAfterBreak = parseInt(tourBlindsAfterBreak, 10)
-        const levelsUntilBreak = parseInt(tourLevelsUntilBreak, 10)
-
-        if (!(buyInAmount > 0)) {
-          setCreateFormError('Informe um buy-in valido para o torneio.')
-          return
-        }
-        if (!(rebuyAmount >= 0) || !(addOnAmount >= 0)) {
-          setCreateFormError('Rebuy e add-on devem ser maiores ou iguais a zero.')
-          return
-        }
-        if (!(blindsMinutesBeforeBreak > 0) || !(blindsMinutesAfterBreak > 0) || !(levelsUntilBreak > 0)) {
-          setCreateFormError('Estrutura do torneio invalida. Verifique os tempos e niveis.')
-          return
-        }
-
-        payload = {
-          ...payload,
-          buyInAmount,
-          rebuyAmount,
-          addOnAmount,
-          blindsMinutesBeforeBreak,
-          blindsMinutesAfterBreak,
-          levelsUntilBreak,
-        }
+      const payload: Record<string, string | number | boolean> = {
+        homeGameId: id,
+        pokerVariant,
+        gameType: 'CASH_GAME',
+        financialModule: newSessionFinancialModule,
+        jackpotEnabled: newSessionJackpotEnabled,
+        chipValue,
+        smallBlind,
+        bigBlind,
+        minimumBuyIn,
+        minimumStayMinutes,
+        foodFee,
       }
 
       const { data } = await api.post('/sessions', payload)
@@ -329,7 +293,6 @@ export default function HomeGamePage() {
 
   if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="text-yellow-400 text-2xl font-black">STACKPLUS</div></div>
   if (!game) return null
-  const gameType = game.gameType || 'CASH_GAME'
   const isHost = user?.id === game.host.id
   const selectedSangeurAccess = sangeurAccesses.find((item) => item.userId === sangeurUserId)
 
@@ -363,138 +326,12 @@ export default function HomeGamePage() {
           </div>
         )}
 
-        {isHost && (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold">SANGEUR POS</h2>
-                <p className="mt-1 text-xs text-zinc-500">Somente o host habilita participantes para acesso POS com usuario e senha.</p>
-              </div>
-              <span className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-zinc-300">Host</span>
-            </div>
-
-            {sangeurError && (
-              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                {sangeurError}
-              </div>
-            )}
-
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="space-y-1">
-                <label className="text-xs text-zinc-400 uppercase tracking-wide">Participante</label>
-                <select
-                  value={sangeurUserId}
-                  onChange={(e) => {
-                    const nextUserId = e.target.value
-                    setSangeurUserId(nextUserId)
-                    const existing = sangeurAccesses.find((item) => item.userId === nextUserId)
-                    if (existing) setSangeurUsername(existing.username)
-                  }}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
-                >
-                  <option value="">Selecione...</option>
-                  {game.members.map((member) => (
-                    <option key={member.user.id} value={member.user.id}>{member.user.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-zinc-400 uppercase tracking-wide">Usuario POS</label>
-                <input
-                  type="text"
-                  value={sangeurUsername}
-                  onChange={(e) => setSangeurUsername(e.target.value)}
-                  placeholder="ex: mesa-sangeur"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-zinc-400 uppercase tracking-wide">Senha temporaria (opcional)</label>
-                <input
-                  type="text"
-                  value={sangeurPassword}
-                  onChange={(e) => setSangeurPassword(e.target.value)}
-                  placeholder="gerada automaticamente"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <p className="text-xs text-zinc-500">
-                {selectedSangeurAccess
-                  ? `Participante ja possui acesso (${selectedSangeurAccess.isActive ? 'ativo' : 'desativado'}). Ao salvar, as credenciais serao atualizadas.`
-                  : 'A senha temporaria sera exibida uma unica vez apos habilitar.'}
-              </p>
-              <button
-                type="button"
-                onClick={handleEnableSangeur}
-                disabled={sangeurLoading}
-                className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
-              >
-                {sangeurLoading ? 'Salvando...' : 'Habilitar / Atualizar SANGEUR'}
-              </button>
-            </div>
-
-            {issuedCredential && (
-              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-200">Credencial gerada</p>
-                <p className="mt-1 text-sm text-zinc-100">Participante: {issuedCredential.userName}</p>
-                <p className="text-sm text-zinc-100">Usuario: <span className="font-semibold text-emerald-300">{issuedCredential.username}</span></p>
-                <p className="text-sm text-zinc-100">Senha temporaria: <span className="font-semibold text-emerald-300">{issuedCredential.temporaryPassword}</span></p>
-                <p className="mt-2 text-xs text-emerald-100/80">Guarde esta senha agora. No primeiro login POS, a SANGEUR deve trocar a senha.</p>
-              </div>
-            )}
-
-            <div className="mt-5 space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">SANGEURs habilitadas</p>
-              {sangeurAccesses.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-zinc-700 px-4 py-6 text-center text-sm text-zinc-500">
-                  Nenhuma SANGEUR configurada para este Home Game.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {sangeurAccesses.map((access) => (
-                    <div key={access.id} className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-zinc-100">{access.user.name}</p>
-                        <p className="text-xs text-zinc-500">@{access.username} • ultimo login: {access.lastLoginAt ? new Date(access.lastLoginAt).toLocaleString('pt-BR') : 'nunca'}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide ${access.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-700 text-zinc-300'}`}>
-                          {access.isActive ? 'Ativa' : 'Desativada'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleResetSangeurPassword(access.userId)}
-                          disabled={sangeurActionUserId === access.userId}
-                          className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-bold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
-                        >
-                          Resetar senha
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDisableSangeur(access.userId)}
-                          disabled={sangeurActionUserId === access.userId || !access.isActive}
-                          className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
-                        >
-                          Desabilitar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-bold">Sessões</h2>
+              <h2 className="text-lg font-bold">Sessões de Cash Game</h2>
               <p className="mt-1 text-xs text-zinc-500">
-                Aqui voce define a modalidade da partida: Cash Game ou Torneio, ao criar uma nova partida.
+                Cada partida começa com as perguntas de configuração (financeiro, sangeur, jackpot).
               </p>
             </div>
             <button
@@ -547,13 +384,21 @@ export default function HomeGamePage() {
           )}
         </div>
 
+        {/* ─── Torneios ─── */}
+        <TournamentsSection homeGameId={id} isHost={isHost} router={router} />
+
       </main>
 
       {showCreatePicker && isHost && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
-            <h3 className="text-lg font-bold">Nova Partida</h3>
-            <p className="mt-1 text-sm text-zinc-400">Escolha o tipo da partida e preencha a configuracao.</p>
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold">Nova Partida</h3>
+              <span className="text-xs font-bold text-zinc-400">Passo {wizardStep} de 2</span>
+            </div>
+            <p className="mt-1 text-sm text-zinc-400">
+              {wizardStep === 1 ? 'Configuração da partida: financeiro, sangeur e jackpot.' : 'Parâmetros do Cash Game.'}
+            </p>
 
             {createFormError && (
               <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -561,87 +406,210 @@ export default function HomeGamePage() {
               </div>
             )}
 
-            <div className="mt-5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Módulo financeiro</p>
-              <p className="mt-1 text-xs text-zinc-500">Define como as cobranças serão tratadas nesta partida.</p>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {[
-                  { key: 'POSTPAID', label: 'Pós-pago' },
-                  { key: 'PREPAID', label: 'Pré-pago' },
-                  { key: 'HYBRID', label: 'Híbrido' },
-                ].map((option) => (
-                  <button
-                    key={option.key}
-                    type="button"
-                    onClick={() => setNewSessionFinancialModule(option.key as 'POSTPAID' | 'PREPAID' | 'HYBRID')}
-                    className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
-                      newSessionFinancialModule === option.key
-                        ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                        : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {wizardStep === 1 && (
+              <>
+                <div className="mt-5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">1. Módulo financeiro</p>
+                  <p className="mt-1 text-xs text-zinc-500">Pós-pago, pré-pago ou híbrido?</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {[
+                      { key: 'POSTPAID', label: 'Pós-pago' },
+                      { key: 'PREPAID', label: 'Pré-pago' },
+                      { key: 'HYBRID', label: 'Híbrido' },
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => setNewSessionFinancialModule(option.key as 'POSTPAID' | 'PREPAID' | 'HYBRID')}
+                        className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                          newSessionFinancialModule === option.key
+                            ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
+                            : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">JACKPOT</p>
-              <p className="mt-1 text-xs text-zinc-500">Informe o valor do JACKPOT acumulado para esta partida.</p>
-              <div className="mt-3 space-y-1">
-                <label className={`text-xs uppercase tracking-wide ${newSessionJackpotEnabled ? 'text-zinc-400' : 'text-zinc-600'}`}>JACKPOT acumulado (R$)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={jackpotAccumulated}
-                  onChange={(e) => setJackpotAccumulated(e.target.value)}
-                  disabled={!newSessionJackpotEnabled}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none ${newSessionJackpotEnabled ? 'border-zinc-700 bg-zinc-900 focus:border-yellow-400' : 'cursor-not-allowed border-zinc-800 bg-zinc-900/50 text-zinc-600'}`}
-                />
-              </div>
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setNewSessionJackpotEnabled((prev) => !prev)}
-                  className={`w-full rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
-                    newSessionJackpotEnabled
-                      ? 'border-emerald-400 bg-emerald-400/15 text-emerald-300'
-                      : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
-                  }`}
-                >
-                  {newSessionJackpotEnabled ? 'Desabilitar JACKPOT na partida' : 'Habilitar JACKPOT na partida'}
-                </button>
-              </div>
-            </div>
+                <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">2. SANGEUR</p>
+                  <p className="mt-1 text-xs text-zinc-500">Esta partida tem SANGEUR (caixa móvel)?</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSessionHasSangeur(true)}
+                      className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                        sessionHasSangeur
+                          ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
+                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Sim
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSessionHasSangeur(false)}
+                      className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                        !sessionHasSangeur
+                          ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
+                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Não
+                    </button>
+                  </div>
 
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setNewSessionType('CASH_GAME')}
-                className={`rounded-xl border px-4 py-3 text-sm font-bold transition-colors ${
-                  newSessionType === 'CASH_GAME'
-                    ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                    : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                }`}
-              >
-                Cash Game
-              </button>
-              <button
-                type="button"
-                onClick={() => setNewSessionType('TOURNAMENT')}
-                className={`rounded-xl border px-4 py-3 text-sm font-bold transition-colors ${
-                  newSessionType === 'TOURNAMENT'
-                    ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                    : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                }`}
-              >
-                Torneio
-              </button>
-            </div>
+                  {sessionHasSangeur && (
+                    <div className="mt-4 space-y-3 rounded-lg border border-zinc-700 bg-zinc-900/70 p-3">
+                      <div className="space-y-1">
+                        <label className="text-xs uppercase tracking-wide text-zinc-400">Participante SANGEUR</label>
+                        <select
+                          value={sangeurUserId}
+                          onChange={(e) => setSangeurUserId(e.target.value)}
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                        >
+                          <option value="">Selecione um membro…</option>
+                          {game.members.map((m) => (
+                            <option key={m.id} value={m.user.id}>{m.user.name}</option>
+                          ))}
+                        </select>
+                      </div>
 
-            {newSessionType === 'CASH_GAME' ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-xs uppercase tracking-wide text-zinc-400">Usuário POS</label>
+                          <input
+                            type="text"
+                            value={sangeurUsername}
+                            onChange={(e) => setSangeurUsername(e.target.value)}
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs uppercase tracking-wide text-zinc-400">Senha (opcional)</label>
+                          <input
+                            type="text"
+                            value={sangeurPassword}
+                            onChange={(e) => setSangeurPassword(e.target.value)}
+                            placeholder="Gerada se vazio"
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {sangeurError && (
+                        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                          {sangeurError}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleEnableSangeur}
+                        disabled={sangeurLoading}
+                        className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-bold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+                      >
+                        {sangeurLoading
+                          ? 'Salvando…'
+                          : selectedSangeurAccess
+                          ? 'Atualizar acesso'
+                          : 'Habilitar SANGEUR'}
+                      </button>
+
+                      {issuedCredential && (
+                        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+                          {issuedCredential.userName}: <span className="font-mono">{issuedCredential.username}</span> / <span className="font-mono">{issuedCredential.temporaryPassword}</span>
+                        </div>
+                      )}
+
+                      {sangeurAccesses.length > 0 && (
+                        <div className="space-y-2 border-t border-zinc-800 pt-3">
+                          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Acessos cadastrados</p>
+                          {sangeurAccesses.map((access) => (
+                            <div key={access.id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs">
+                              <div>
+                                <p className="font-bold text-zinc-200">{access.user.name}</p>
+                                <p className="text-zinc-500 font-mono">{access.username}</p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-700 text-zinc-400'}`}>
+                                  {access.isActive ? 'Ativo' : 'Inativo'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleResetSangeurPassword(access.userId)}
+                                  disabled={sangeurActionUserId === access.userId}
+                                  className="rounded border border-zinc-700 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                                >
+                                  Reset
+                                </button>
+                                {access.isActive && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDisableSangeur(access.userId)}
+                                    disabled={sangeurActionUserId === access.userId}
+                                    className="rounded border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                                  >
+                                    Desativar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">3. JACKPOT</p>
+                  <p className="mt-1 text-xs text-zinc-500">Esta partida tem JACKPOT?</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewSessionJackpotEnabled(true)}
+                      className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                        newSessionJackpotEnabled
+                          ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
+                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Sim
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewSessionJackpotEnabled(false)}
+                      className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                        !newSessionJackpotEnabled
+                          ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
+                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Não
+                    </button>
+                  </div>
+
+                  {newSessionJackpotEnabled && (
+                    <div className="mt-3 space-y-1">
+                      <label className="text-xs uppercase tracking-wide text-zinc-400">JACKPOT acumulado (R$)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={jackpotAccumulated}
+                        onChange={(e) => setJackpotAccumulated(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {wizardStep === 2 && (
               <div className="mt-4 grid grid-cols-1 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs text-zinc-400 uppercase tracking-wide">Modalidade</label>
@@ -683,48 +651,16 @@ export default function HomeGamePage() {
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Minimo entrada (R$)</label>
+                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Mínimo entrada (R$)</label>
                     <input type="number" min="0" step="0.01" value={cashMinimumBuyIn} onChange={(e) => setCashMinimumBuyIn(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Min. permanencia (min)</label>
+                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Min. permanência (min)</label>
                     <input type="number" min="0" step="1" value={cashMinimumStayMinutes} onChange={(e) => setCashMinimumStayMinutes(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Taxa alimentacao (R$)</label>
+                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Taxa alimentação (R$)</label>
                     <input type="number" min="0" step="0.01" value={cashFoodFee} onChange={(e) => setCashFoodFee(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 grid grid-cols-1 gap-3">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Buy-in (R$)</label>
-                    <input type="number" min="0" step="0.01" value={tourBuyInAmount} onChange={(e) => setTourBuyInAmount(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Rebuy (R$)</label>
-                    <input type="number" min="0" step="0.01" value={tourRebuyAmount} onChange={(e) => setTourRebuyAmount(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Add-on (R$)</label>
-                    <input type="number" min="0" step="0.01" value={tourAddOnAmount} onChange={(e) => setTourAddOnAmount(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Blind pre-break (min)</label>
-                    <input type="number" min="1" step="1" value={tourBlindsBeforeBreak} onChange={(e) => setTourBlindsBeforeBreak(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Blind pos-break (min)</label>
-                    <input type="number" min="1" step="1" value={tourBlindsAfterBreak} onChange={(e) => setTourBlindsAfterBreak(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Niveis ate break</label>
-                    <input type="number" min="1" step="1" value={tourLevelsUntilBreak} onChange={(e) => setTourLevelsUntilBreak(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
                   </div>
                 </div>
               </div>
@@ -734,21 +670,43 @@ export default function HomeGamePage() {
               <button
                 type="button"
                 onClick={() => {
-                  setShowCreatePicker(false)
-                  setCreateFormError(null)
+                  if (wizardStep === 2) {
+                    setWizardStep(1)
+                    setCreateFormError(null)
+                  } else {
+                    setShowCreatePicker(false)
+                    setCreateFormError(null)
+                  }
                 }}
                 className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
               >
-                Cancelar
+                {wizardStep === 2 ? 'Voltar' : 'Cancelar'}
               </button>
-              <button
-                type="button"
-                onClick={createSession}
-                disabled={creating}
-                className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
-              >
-                {creating ? 'Criando...' : 'Criar Partida'}
-              </button>
+              {wizardStep === 1 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateFormError(null)
+                    if (sessionHasSangeur && sangeurAccesses.filter((a) => a.isActive).length === 0) {
+                      setCreateFormError('Habilite ao menos uma SANGEUR antes de prosseguir.')
+                      return
+                    }
+                    setWizardStep(2)
+                  }}
+                  className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300"
+                >
+                  Próximo
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={createSession}
+                  disabled={creating}
+                  className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+                >
+                  {creating ? 'Criando...' : 'Criar Partida'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -781,6 +739,86 @@ export default function HomeGamePage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Tournaments Section ──────────────────────────────────────────────────────
+
+function TournamentsSection({ homeGameId, isHost, router }: {
+  homeGameId: string
+  isHost: boolean
+  router: any
+}) {
+  const [tournaments, setTournaments] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/tournaments', { params: { homeGameId } })
+      .then((r) => setTournaments(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [homeGameId])
+
+  const statusBadge: Record<string, string> = {
+    REGISTRATION: 'text-blue-300 bg-blue-400/10',
+    RUNNING: 'text-green-300 bg-green-400/10',
+    ON_BREAK: 'text-yellow-300 bg-yellow-400/10',
+    FINISHED: 'text-zinc-400 bg-zinc-400/10',
+    CANCELED: 'text-red-400 bg-red-400/10',
+  }
+  const statusLabel: Record<string, string> = {
+    REGISTRATION: 'Inscrições',
+    RUNNING: 'Rodando',
+    ON_BREAK: 'Intervalo',
+    FINISHED: 'Finalizado',
+    CANCELED: 'Cancelado',
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-bold">Torneios</h2>
+          <p className="mt-1 text-xs text-zinc-500">Crie e gerencie torneios com comanda por jogador.</p>
+        </div>
+        {isHost && (
+          <button
+            onClick={() => router.push(`/tournament/create?homeGameId=${homeGameId}`)}
+            className="bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-4 py-2 rounded-lg text-sm transition-colors"
+          >
+            + Novo Torneio
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8 text-zinc-600 text-sm">Carregando...</div>
+      ) : tournaments.length === 0 ? (
+        <div className="text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
+          <p>Nenhum torneio ainda</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {tournaments.map((t) => (
+            <div
+              key={t.id}
+              onClick={() => router.push(`/tournament/${t.id}`)}
+              className="bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 cursor-pointer flex items-center justify-between transition-colors"
+            >
+              <div>
+                <p className="text-sm font-medium">{t.name}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {t._count?.players ?? 0} jogadores • Buy-in R$ {Number(t.buyInAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <span className={`text-xs font-bold px-2 py-1 rounded-full ${statusBadge[t.status] ?? 'text-zinc-400'}`}>
+                {statusLabel[t.status] ?? t.status}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>

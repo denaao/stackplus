@@ -5,10 +5,18 @@ import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 
+function maskCpf(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
-  const [form, setForm] = useState({ email: '', password: '' })
+  const [form, setForm] = useState({ cpf: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -17,7 +25,10 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const { data } = await api.post('/auth/login', form)
+      const { data } = await api.post('/auth/login', {
+        cpf: form.cpf.replace(/\D/g, ''),
+        password: form.password,
+      })
       setAuth(data.token, data.user)
       const role = data.user.role
       if (role === 'ADMIN') router.push('/admin/dashboard')
@@ -25,7 +36,7 @@ export default function LoginPage() {
       else if (role === 'CASHIER') router.push('/cashier/select')
       else router.push('/player/dashboard')
     } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Erro ao fazer login')
+      setError(typeof err === 'string' ? err : 'Credenciais inválidas')
     } finally {
       setLoading(false)
     }
@@ -49,14 +60,17 @@ export default function LoginPage() {
           )}
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">E-mail</label>
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF</label>
             <input
-              type="email"
+              type="text"
+              inputMode="numeric"
               required
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              value={form.cpf}
+              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 transition-colors"
-              placeholder="seu@email.com"
+              placeholder="000.000.000-00"
+              maxLength={14}
+              autoComplete="username"
             />
           </div>
 
@@ -69,6 +83,7 @@ export default function LoginPage() {
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 transition-colors"
               placeholder="••••••"
+              autoComplete="current-password"
             />
           </div>
 

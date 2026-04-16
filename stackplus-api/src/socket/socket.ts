@@ -26,9 +26,24 @@ export function emitSessionFinished(sessionId: string): void {
 }
 
 export function initSocket(server: http.Server): Server {
+  const configuredOrigins = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean)
+  const allowedOrigins = Array.from(new Set([
+    ...configuredOrigins,
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ]))
+
   io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true)
+        const normalized = origin.replace(/\/$/, '')
+        if (allowedOrigins.includes(normalized)) return callback(null, true)
+        return callback(null, false)
+      },
       credentials: true,
     },
   })

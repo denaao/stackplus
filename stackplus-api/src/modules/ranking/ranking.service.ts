@@ -14,16 +14,40 @@ export async function getHomeGameRanking(homeGameId: string) {
     include: { user: { select: { id: true, name: true, avatarUrl: true } } },
   })
 
-  const results = await Promise.all(
-    members.map(async (m) => {
-      const states = await prisma.playerSessionState.findMany({
-        where: { userId: m.userId, session: { homeGameId, status: 'FINISHED' } },
-      })
-      const totalResult = states.reduce((acc, s) => acc + Number(s.result), 0)
-      const sessions = states.length
-      return { user: m.user, totalResult, sessions }
-    })
+  const grouped = await prisma.playerSessionState.groupBy({
+    by: ['userId'],
+    where: {
+      session: {
+        homeGameId,
+        status: 'FINISHED',
+      },
+    },
+    _sum: {
+      result: true,
+    },
+    _count: {
+      _all: true,
+    },
+  })
+
+  const groupedByUserId = new Map(
+    grouped.map((row) => [
+      row.userId,
+      {
+        totalResult: Number(row._sum.result || 0),
+        sessions: row._count._all,
+      },
+    ])
   )
+
+  const results = members.map((m) => {
+    const agg = groupedByUserId.get(m.userId)
+    return {
+      user: m.user,
+      totalResult: agg?.totalResult || 0,
+      sessions: agg?.sessions || 0,
+    }
+  })
 
   return results.sort((a, b) => b.totalResult - a.totalResult)
 }
@@ -37,23 +61,41 @@ export async function getMonthlyRanking(homeGameId: string) {
     include: { user: { select: { id: true, name: true, avatarUrl: true } } },
   })
 
-  const results = await Promise.all(
-    members.map(async (m) => {
-      const states = await prisma.playerSessionState.findMany({
-        where: {
-          userId: m.userId,
-          session: {
-            homeGameId,
-            status: 'FINISHED',
-            finishedAt: { gte: startOfMonth },
-          },
-        },
-      })
-      const totalResult = states.reduce((acc, s) => acc + Number(s.result), 0)
-      const sessions = states.length
-      return { user: m.user, totalResult, sessions }
-    })
+  const grouped = await prisma.playerSessionState.groupBy({
+    by: ['userId'],
+    where: {
+      session: {
+        homeGameId,
+        status: 'FINISHED',
+        finishedAt: { gte: startOfMonth },
+      },
+    },
+    _sum: {
+      result: true,
+    },
+    _count: {
+      _all: true,
+    },
+  })
+
+  const groupedByUserId = new Map(
+    grouped.map((row) => [
+      row.userId,
+      {
+        totalResult: Number(row._sum.result || 0),
+        sessions: row._count._all,
+      },
+    ])
   )
+
+  const results = members.map((m) => {
+    const agg = groupedByUserId.get(m.userId)
+    return {
+      user: m.user,
+      totalResult: agg?.totalResult || 0,
+      sessions: agg?.sessions || 0,
+    }
+  })
 
   return results.sort((a, b) => b.totalResult - a.totalResult)
 }

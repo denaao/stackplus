@@ -5,49 +5,51 @@ import { PixKeyType, Role } from '@prisma/client'
 
 export async function register(data: {
   name: string
-  email: string
-  cpf?: string
+  cpf: string
+  email?: string
   phone?: string
   password: string
   pixType: PixKeyType
   pixKey: string
 }) {
-  const existing = await prisma.user.findUnique({ where: { email: data.email } })
-  if (existing) throw new Error('Email já cadastrado')
+  const cpfDigits = data.cpf.replace(/\D/g, '')
+  const cpfInUse = await prisma.user.findUnique({ where: { cpf: cpfDigits }, select: { id: true } })
+  if (cpfInUse) throw new Error('CPF já cadastrado')
 
-  const cpfDigits = data.cpf?.replace(/\D/g, '') || null
-  if (cpfDigits) {
-    const cpfInUse = await prisma.user.findFirst({ where: { cpf: cpfDigits }, select: { id: true } })
-    if (cpfInUse) throw new Error('CPF já cadastrado')
+  const email = data.email?.trim().toLowerCase() || null
+  if (email) {
+    const emailInUse = await prisma.user.findUnique({ where: { email }, select: { id: true } })
+    if (emailInUse) throw new Error('Email já cadastrado')
   }
 
   const passwordHash = await hashPassword(data.password)
   const user = await prisma.user.create({
     data: {
-      name: data.name,
-      email: data.email,
+      name: data.name.trim(),
       cpf: cpfDigits,
+      email,
       phone: data.phone?.trim() || null,
       pixType: data.pixType,
       pixKey: data.pixKey.trim(),
       passwordHash,
       role: Role.PLAYER,
     },
-    select: { id: true, name: true, email: true, cpf: true, phone: true, pixType: true, pixKey: true, role: true, createdAt: true },
+    select: { id: true, name: true, cpf: true, email: true, phone: true, pixType: true, pixKey: true, role: true, createdAt: true },
   })
 
-  const token = signToken({ userId: user.id, email: user.email, role: user.role })
+  const token = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
   return { user, token }
 }
 
-export async function login(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } })
+export async function login(cpf: string, password: string) {
+  const cpfDigits = cpf.replace(/\D/g, '')
+  const user = await prisma.user.findUnique({ where: { cpf: cpfDigits } })
   if (!user) throw new Error('Credenciais inválidas')
 
   const valid = await comparePassword(password, user.passwordHash)
   if (!valid) throw new Error('Credenciais inválidas')
 
-  const token = signToken({ userId: user.id, email: user.email, role: user.role })
+  const token = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
   const { passwordHash, ...safeUser } = user
   return { user: safeUser, token }
 }
@@ -55,34 +57,43 @@ export async function login(email: string, password: string) {
 export async function getMe(userId: string) {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { id: true, name: true, email: true, cpf: true, phone: true, pixType: true, pixKey: true, role: true, avatarUrl: true, createdAt: true },
+    select: { id: true, name: true, cpf: true, email: true, phone: true, pixType: true, pixKey: true, role: true, avatarUrl: true, createdAt: true },
   })
   return user
 }
 
 export async function updateMe(userId: string, data: {
   name?: string
-  cpf?: string | null
+  cpf?: string
+  email?: string | null
   phone?: string | null
   pixType?: PixKeyType
   pixKey?: string
 }) {
-  const cpfDigits = data.cpf === undefined ? undefined : (data.cpf?.replace(/\D/g, '') || null)
-  if (cpfDigits) {
+  if (data.cpf !== undefined) {
+    const cpfDigits = data.cpf.replace(/\D/g, '')
     const cpfInUse = await prisma.user.findFirst({ where: { cpf: cpfDigits, id: { not: userId } }, select: { id: true } })
     if (cpfInUse) throw new Error('CPF já cadastrado')
+    data = { ...data, cpf: cpfDigits }
+  }
+
+  const email = data.email === undefined ? undefined : (data.email?.trim().toLowerCase() || null)
+  if (email) {
+    const emailInUse = await prisma.user.findFirst({ where: { email, id: { not: userId } }, select: { id: true } })
+    if (emailInUse) throw new Error('Email já cadastrado')
   }
 
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
       ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-      ...(cpfDigits !== undefined ? { cpf: cpfDigits } : {}),
+      ...(data.cpf !== undefined ? { cpf: data.cpf } : {}),
+      ...(email !== undefined ? { email } : {}),
       ...(data.phone !== undefined ? { phone: data.phone?.trim() || null } : {}),
       ...(data.pixType !== undefined ? { pixType: data.pixType } : {}),
       ...(data.pixKey !== undefined ? { pixKey: data.pixKey.trim() } : {}),
     },
-    select: { id: true, name: true, email: true, cpf: true, phone: true, pixType: true, pixKey: true, role: true, avatarUrl: true, createdAt: true },
+    select: { id: true, name: true, cpf: true, email: true, phone: true, pixType: true, pixKey: true, role: true, avatarUrl: true, createdAt: true },
   })
   return user
 }
@@ -127,7 +138,7 @@ export async function loginSangeur(homeGameId: string, username: string, passwor
 
   const token = signToken({
     userId: access.user.id,
-    email: access.user.email,
+    email: access.user.email ?? '',
     role: access.user.role,
   })
 

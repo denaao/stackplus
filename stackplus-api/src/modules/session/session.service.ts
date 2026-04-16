@@ -82,23 +82,44 @@ function buildRakebackDistribution(params: {
 
 function withCaixinhaDistribution<T extends {
   caixinha: unknown
+  caixinhaMode?: unknown
   rake?: unknown
-  staffAssignments?: Array<{ userId: string; user?: { id: string; name: string; pixType?: string | null; pixKey?: string | null } }>
+  staffAssignments?: Array<{ userId: string; caixinhaAmount?: unknown; user?: { id: string; name: string; pixType?: string | null; pixKey?: string | null } }>
   rakebackAssignments?: Array<{ userId: string; percent?: unknown; user?: { id: string; name: string; pixType?: string | null; pixKey?: string | null } }>
 }>(session: T) {
   const staffAssignments = Array.isArray(session.staffAssignments) ? session.staffAssignments : []
   const rakebackAssignments = Array.isArray(session.rakebackAssignments) ? session.rakebackAssignments : []
+  const caixinhaMode = session.caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
   const totalCaixinha = Number(session.caixinha || 0)
   const rakebackDistribution = buildRakebackDistribution({
     totalRake: Number(session.rake || 0),
     rakebackAssignments,
   })
 
-  if (totalCaixinha <= 0 || staffAssignments.length === 0) {
+  if (staffAssignments.length === 0 || (caixinhaMode === 'SPLIT' && totalCaixinha <= 0)) {
     return {
       ...session,
+      caixinhaMode,
       caixinhaPerStaff: 0,
       caixinhaDistribution: [] as Array<{ userId: string; name: string; amount: number; pixType?: string | null; pixKey?: string | null }>,
+      totalRakeback: rakebackDistribution.totalRakeback,
+      rakebackDistribution: rakebackDistribution.items,
+    }
+  }
+
+  if (caixinhaMode === 'INDIVIDUAL') {
+    const distribution = staffAssignments.map((assignment) => ({
+      userId: assignment.userId,
+      name: assignment.user?.name || 'Staff',
+      amount: Number(assignment.caixinhaAmount || 0),
+      pixType: assignment.user?.pixType || null,
+      pixKey: assignment.user?.pixKey || null,
+    }))
+    return {
+      ...session,
+      caixinhaMode,
+      caixinhaPerStaff: 0,
+      caixinhaDistribution: distribution,
       totalRakeback: rakebackDistribution.totalRakeback,
       rakebackDistribution: rakebackDistribution.items,
     }
@@ -110,6 +131,7 @@ function withCaixinhaDistribution<T extends {
 
   return {
     ...session,
+    caixinhaMode,
     caixinhaPerStaff: perStaffAmount,
     caixinhaDistribution: staffAssignments.map((assignment) => ({
       userId: assignment.userId,
@@ -275,7 +297,12 @@ export async function startSession(sessionId: string, hostId: string, cashierId?
 export async function finishSession(
   sessionId: string,
   hostId: string,
-  options?: { rake?: number; caixinha?: number; jackpotArrecadado?: number },
+  options?: {
+    rake?: number
+    caixinha?: number
+    caixinhaByStaff?: Array<{ userId: string; amount: number }>
+    jackpotArrecadado?: number
+  },
 ) {
   const session = await prisma.session.findUniqueOrThrow({
     where: { id: sessionId },
@@ -310,7 +337,7 @@ export async function finishSession(
   if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
   if (session.status !== 'ACTIVE') throw new Error('Sessão não está ativa')
 
-  const caixinha = Number(options?.caixinha || 0)
+  const caixinhaMode = (session as unknown as { caixinhaMode?: string }).caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
   const rake = Number(options?.rake || 0)
   const jackpotArrecadado = Number(options?.jackpotArrecadado || 0)
   const jackpotDistribuido = session.transactions
@@ -327,14 +354,34 @@ export async function finishSession(
     throw new Error('A soma do rakeback do staff não pode passar de 100%')
   }
 
-  if (caixinha > 0) {
-    if (session.staffAssignments.length === 0) {
+  let caixinha = 0
+  const caixinhaByStaffMap = new Map<string, number>()
+
+  if (caixinhaMode === 'INDIVIDUAL') {
+    const list = Array.isArray(options?.caixinhaByStaff) ? options!.caixinhaByStaff : []
+    const staffUserIds = new Set(session.staffAssignments.map((s) => s.userId))
+    for (const entry of list) {
+      const amount = Number(entry.amount || 0)
+      if (amount < 0) throw new Error('Caixinha individual não pode ser negativa')
+      if (!staffUserIds.has(entry.userId)) {
+        throw new Error('Caixinha informada para usuário fora do staff')
+      }
+      caixinhaByStaffMap.set(entry.userId, amount)
+    }
+    caixinha = Array.from(caixinhaByStaffMap.values()).reduce((sum, v) => sum + v, 0)
+    if (caixinha > 0 && session.staffAssignments.length === 0) {
       throw new Error('Selecione ao menos 1 membro no staff para distribuir a caixinha')
     }
-
-    const caixinhaCents = Math.round(caixinha * 100)
-    if (caixinhaCents % session.staffAssignments.length !== 0) {
-      throw new Error('A caixinha deve ser divisivel igualmente entre todos do staff')
+  } else {
+    caixinha = Number(options?.caixinha || 0)
+    if (caixinha > 0) {
+      if (session.staffAssignments.length === 0) {
+        throw new Error('Selecione ao menos 1 membro no staff para distribuir a caixinha')
+      }
+      const caixinhaCents = Math.round(caixinha * 100)
+      if (caixinhaCents % session.staffAssignments.length !== 0) {
+        throw new Error('A caixinha deve ser divisivel igualmente entre todos do staff')
+      }
     }
   }
 
@@ -363,13 +410,28 @@ export async function finishSession(
       data: { jackpotAccumulated: jackpotNovo },
     })
 
+    if (caixinhaMode === 'INDIVIDUAL') {
+      for (const assignment of session.staffAssignments) {
+        const amount = caixinhaByStaffMap.get(assignment.userId) ?? 0
+        await tx.sessionStaff.updateMany({
+          where: { sessionId, userId: assignment.userId },
+          data: { caixinhaAmount: amount },
+        })
+      }
+    } else {
+      await tx.sessionStaff.updateMany({
+        where: { sessionId },
+        data: { caixinhaAmount: null },
+      })
+    }
+
     return tx.session.update({
       where: { id: sessionId },
       data: {
         status: 'FINISHED',
         finishedAt: new Date(),
         rake: options?.rake ? Number(options.rake) : null,
-        caixinha: options?.caixinha ? Number(options.caixinha) : null,
+        caixinha: caixinha > 0 ? caixinha : null,
       },
       include: sessionInclude,
     })
@@ -483,6 +545,7 @@ export async function updateSessionStaff(
   sessionId: string,
   hostId: string,
   userIds: string[],
+  caixinhaMode?: 'SPLIT' | 'INDIVIDUAL',
 ) {
   const session = await prisma.session.findUniqueOrThrow({
     where: { id: sessionId },
@@ -515,6 +578,13 @@ export async function updateSessionStaff(
     if (userIds.length > 0) {
       await tx.sessionStaff.createMany({
         data: userIds.map((userId) => ({ sessionId, userId })),
+      })
+    }
+
+    if (caixinhaMode) {
+      await tx.session.update({
+        where: { id: sessionId },
+        data: { caixinhaMode },
       })
     }
   })

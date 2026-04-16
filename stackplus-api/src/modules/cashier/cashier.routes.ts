@@ -1,6 +1,7 @@
 import { Router, Response } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
 import * as CashierService from './cashier.service'
+import * as SangeurService from '../sangeur/sangeur.service'
 import { z } from 'zod'
 import { emitSessionRankingUpdated, getIO, getPrivateSessionRoom } from '../../socket/socket'
 
@@ -41,6 +42,11 @@ router.get('/transactions', authenticate, async (req: AuthRequest, res: Response
   const { sessionId, userId } = req.query as { sessionId: string; userId?: string }
   const transactions = await CashierService.getTransactions(sessionId, userId)
   res.json(transactions)
+})
+
+router.get('/sessions/:sessionId/sangeur-sales', authenticate, async (req: AuthRequest, res: Response) => {
+  const sales = await SangeurService.listSessionSales(req.params.sessionId)
+  res.json(sales)
 })
 
 router.delete('/transaction/:transactionId', authenticate, async (req: AuthRequest, res: Response) => {

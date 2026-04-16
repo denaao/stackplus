@@ -787,6 +787,17 @@ function isPaidStatus(status: string | null): boolean {
   ].some((token) => normalized.includes(token))
 }
 
+export async function checkPixChargeIsPaid(chargeId: string, virtualAccount?: string | null): Promise<{ paid: boolean; cobPayload?: unknown }> {
+  try {
+    const cobPayload = await getCobById(chargeId, virtualAccount)
+    const status = extractStatusDeep(cobPayload)
+    const paid = isPaidStatus(status) || payloadHasPixConfirmation(cobPayload)
+    return { paid, cobPayload }
+  } catch {
+    return { paid: false }
+  }
+}
+
 function getStringByPaths(payload: any, paths: string[][]): string | null {
   for (const path of paths) {
     let current: any = payload
@@ -915,7 +926,7 @@ function normalizeCobPayload(payload: unknown): NormalizedCobResult {
   }
 }
 
-async function createNormalizedCob(input: CreateCobInput, virtualAccount?: string | null): Promise<NormalizedCobResult> {
+export async function createNormalizedCob(input: CreateCobInput, virtualAccount?: string | null): Promise<NormalizedCobResult> {
   const resolved = resolveVirtualAccount(virtualAccount)
   const created = await createCob(input, virtualAccount)
   const createdNormalized = normalizeCobPayload(created)
@@ -1550,6 +1561,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       staffAssignments: {
         select: {
           userId: true,
+          caixinhaAmount: true,
           user: {
             select: {
               id: true,
@@ -1582,9 +1594,21 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
   const totalCaixinha = Number(session.caixinha || 0)
   const staffUserIds = session.staffAssignments.map((s) => s.userId)
-  const caixinhaPerStaff = totalCaixinha > 0 && staffUserIds.length > 0
-    ? amountToFixed(Math.floor(Math.round(totalCaixinha * 100) / staffUserIds.length) / 100)
-    : 0
+  const caixinhaMode = (session as unknown as { caixinhaMode?: string }).caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
+  const caixinhaByUser = new Map<string, number>()
+  if (staffUserIds.length > 0) {
+    if (caixinhaMode === 'INDIVIDUAL') {
+      for (const staff of session.staffAssignments) {
+        const amount = Number((staff as unknown as { caixinhaAmount?: unknown }).caixinhaAmount || 0)
+        caixinhaByUser.set(staff.userId, amountToFixed(amount))
+      }
+    } else if (totalCaixinha > 0) {
+      const perStaff = amountToFixed(Math.floor(Math.round(totalCaixinha * 100) / staffUserIds.length) / 100)
+      for (const userId of staffUserIds) {
+        caixinhaByUser.set(userId, perStaff)
+      }
+    }
+  }
   const caixinhaRecipientsProcessed = new Set<string>()
 
   const charges: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; charge?: unknown; skippedReason?: string }> = []
@@ -1682,7 +1706,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
       return sum + Number(transaction.amount)
     }, 0))
     const chipsOut = amountToFixed(Number(player.chipsOut))
-    const playerCaixinha = staffUserIds.includes(player.userId) ? caixinhaPerStaff : 0
+    const playerCaixinha = caixinhaByUser.get(player.userId) ?? 0
     const playerRakeback = amountToFixed(Number(rakebackByUserId[player.userId] || 0))
     const settlementBalance = amountToFixed(chipsOut - postpaidOpenAmount + playerRakeback)
     // Net final balance per player: settlement +/- caixinha.
@@ -1813,24 +1837,32 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   }
 
   // Staff outside playerStates must also receive their caixinha share.
-  if (caixinhaPerStaff > 0) {
-    for (const staff of session.staffAssignments) {
-      if (caixinhaRecipientsProcessed.has(staff.userId)) continue
+  for (const staff of session.staffAssignments) {
+    if (caixinhaRecipientsProcessed.has(staff.userId)) continue
+    const amount = caixinhaByUser.get(staff.userId) ?? 0
+    if (amount <= 0) continue
 
-      await pushPayout({
-        userId: staff.userId,
-        name: staff.user.name,
-        cpf: staff.user.cpf,
-        pixType: staff.user.pixType,
-        pixKey: staff.user.pixKey,
-        amount: caixinhaPerStaff,
-        purpose: 'CAIXINHA',
-        mode: 'PREPAID',
-        skippedReason: 'Staff sem dados PIX completos para pagamento da caixinha',
-        description: `Caixinha StackPlus - Sessão ${session.id}`,
-      })
-    }
+    await pushPayout({
+      userId: staff.userId,
+      name: staff.user.name,
+      cpf: staff.user.cpf,
+      pixType: staff.user.pixType,
+      pixKey: staff.user.pixKey,
+      amount,
+      purpose: 'CAIXINHA',
+      mode: 'PREPAID',
+      skippedReason: 'Staff sem dados PIX completos para pagamento da caixinha',
+      description: `Caixinha StackPlus - Sessão ${session.id}`,
+    })
   }
+
+  // Reconciliação bancária: cruza cobranças confirmadas com extrato do Annapay
+  const reconciliation = await buildManualConfirmationsReconciliation(
+    session.id,
+    session.startedAt?.toISOString() ?? session.createdAt.toISOString(),
+    session.finishedAt?.toISOString() ?? new Date().toISOString(),
+    virtualAccount,
+  )
 
   return {
     sessionId: session.id,
@@ -1849,5 +1881,181 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     receivedPayments,
     sentPayouts,
     payouts,
+    reconciliation,
   }
+}
+
+// ─── Conciliação Bancária ──────────────────────────────────────────────────────
+
+interface ReconciliationItem {
+  chargeId: string
+  flow: 'PREPAID_PURCHASE' | 'SESSION_SETTLEMENT'
+  userId: string
+  playerName: string
+  amount: number
+  settledAt: string
+  matchStatus: 'FOUND' | 'NOT_FOUND'
+  endToEndId: string | null
+  matchedAt: string | null
+}
+
+interface PrepaidSettledRow {
+  chargeId: string
+  userId: string
+  amount: string
+  updatedAt: string
+}
+
+interface SessionSettledRow {
+  chargeId: string
+  userId: string
+  amount: string
+  updatedAt: string
+}
+
+async function buildManualConfirmationsReconciliation(
+  sessionId: string,
+  startIso: string,
+  endIso: string,
+  virtualAccount: string,
+): Promise<{
+  items: ReconciliationItem[]
+  totalFound: number
+  totalNotFound: number
+  countFound: number
+  countNotFound: number
+}> {
+  try {
+    // 1. Busca cobranças pré-pagas liquidadas (buy-in/rebuy/addon durante a partida)
+    const prepaidRows = await prisma.$queryRaw<PrepaidSettledRow[]>`
+      SELECT "chargeId", "userId", "amount"::text AS "amount", "updatedAt"::text AS "updatedAt"
+      FROM "PrepaidChargePending"
+      WHERE "sessionId" = ${sessionId}
+        AND "status" = 'SETTLED'
+    `
+
+    // 2. Busca cobranças de liquidação final liquidadas (fechamento da sessão)
+    const sessionRows = await prisma.$queryRaw<SessionSettledRow[]>`
+      SELECT "chargeId", "userId", "amount"::text AS "amount", "updatedAt"::text AS "updatedAt"
+      FROM "SessionFinancialChargePending"
+      WHERE "sessionId" = ${sessionId}
+        AND "status" = 'SETTLED'
+    `
+
+    const allRows = [
+      ...prepaidRows.map((r) => ({ ...r, flow: 'PREPAID_PURCHASE' as const })),
+      ...sessionRows.map((r) => ({ ...r, flow: 'SESSION_SETTLEMENT' as const })),
+    ]
+
+    if (allRows.length === 0) {
+      return { items: [], totalFound: 0, totalNotFound: 0, countFound: 0, countNotFound: 0 }
+    }
+
+    // 3. Busca os CPFs dos jogadores envolvidos
+    const userIds = Array.from(new Set(allRows.map((r) => r.userId)))
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, cpf: true },
+    })
+    const userMap = new Map(users.map((u) => [u.id, u]))
+
+    // 4. Busca extrato Annapay para o período da sessão (máx 200 itens, paginação única)
+    let statementsPayload: unknown = null
+    try {
+      statementsPayload = await getStatements({
+        inicio: startIso,
+        fim: endIso,
+        itensPorPagina: 200,
+        paginaAtual: 0,
+        virtualAccount,
+      })
+    } catch {
+      // Extrato indisponível: todas as entradas ficam como NOT_FOUND mas sem falha fatal
+    }
+
+    // 5. Cruza cada cobrança com o extrato
+    const items: ReconciliationItem[] = []
+    let totalFound = 0
+    let totalNotFound = 0
+    let countFound = 0
+    let countNotFound = 0
+
+    for (const row of allRows) {
+      const user = userMap.get(row.userId)
+      const amount = Number(row.amount)
+      const playerName = user?.name ?? row.userId
+      const debtorCpf = user?.cpf ?? null
+
+      let matchStatus: 'FOUND' | 'NOT_FOUND' = 'NOT_FOUND'
+      let endToEndId: string | null = null
+      let matchedAt: string | null = null
+
+      if (statementsPayload) {
+        const result = findChargeInStatements(statementsPayload, row.chargeId, amount, debtorCpf)
+        if (result.found) {
+          matchStatus = 'FOUND'
+          matchedAt = result.paidAt
+          // Extrai endToEndId do objeto que fez match
+          endToEndId = extractEndToEndId(statementsPayload, row.chargeId, amount, debtorCpf)
+        }
+      }
+
+      items.push({
+        chargeId: row.chargeId,
+        flow: row.flow,
+        userId: row.userId,
+        playerName,
+        amount,
+        settledAt: row.updatedAt,
+        matchStatus,
+        endToEndId,
+        matchedAt,
+      })
+
+      if (matchStatus === 'FOUND') {
+        countFound++
+        totalFound += amount
+      } else {
+        countNotFound++
+        totalNotFound += amount
+      }
+    }
+
+    return {
+      items,
+      totalFound: Number(totalFound.toFixed(2)),
+      totalNotFound: Number(totalNotFound.toFixed(2)),
+      countFound,
+      countNotFound,
+    }
+  } catch {
+    // Não deixa a conciliação derrubar o relatório inteiro
+    return { items: [], totalFound: 0, totalNotFound: 0, countFound: 0, countNotFound: 0 }
+  }
+}
+
+function extractEndToEndId(payload: unknown, chargeId: string, amount: number, debtorCpf?: string | null): string | null {
+  const targetCharge = chargeId.toLowerCase()
+  const targetAmount = Number(amount.toFixed(2))
+  const debtorCpfDigits = (debtorCpf || '').replace(/\D/g, '')
+
+  const objects = flattenObjects(payload)
+  for (const obj of objects) {
+    const rawBlob = Object.values(obj).filter((v) => typeof v === 'string').join(' ')
+    const textBlob = rawBlob.toLowerCase()
+    const digitsBlob = rawBlob.replace(/\D/g, '')
+
+    const hasChargeRef = textBlob.includes(targetCharge)
+    const numericCandidates = extractNumericCandidates(obj)
+    const amountMatch = numericCandidates.some((v) => Math.abs(Number(v.toFixed(2)) - targetAmount) < 0.01)
+    const debtorMatch = debtorCpfDigits.length === 11 ? digitsBlob.includes(debtorCpfDigits) : false
+
+    if (hasChargeRef || (amountMatch && debtorMatch)) {
+      const e2e = typeof obj.endToEndId === 'string' ? obj.endToEndId
+        : typeof obj.e2eId === 'string' ? obj.e2eId
+        : null
+      if (e2e) return e2e
+    }
+  }
+  return null
 }

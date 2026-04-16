@@ -71,7 +71,7 @@ function pixErrorMessage(pixType: PixType) {
 export default function ProfilePage() {
   const router = useRouter()
   const { user, setUser } = useAuthStore()
-  const [form, setForm] = useState({ name: '', cpf: '', phone: '', pixType: 'CPF' as PixType, pixKey: '' })
+  const [form, setForm] = useState({ name: '', cpf: '', email: '', phone: '', pixType: 'CPF' as PixType, pixKey: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -83,6 +83,7 @@ export default function ProfilePage() {
       setForm({
         name: data.name || '',
         cpf: data.cpf ? maskCpf(data.cpf) : '',
+        email: data.email || '',
         phone: data.phone || '',
         pixType: (data.pixType as PixType) || 'CPF',
         pixKey: data.pixKey || '',
@@ -105,18 +106,13 @@ export default function ProfilePage() {
     e.preventDefault()
     setError(''); setSuccess('')
 
-    if (!validatePixKey(form.pixType, form.pixKey)) {
-      setError(pixErrorMessage(form.pixType))
-      return
-    }
-
-    if (form.cpf.trim() !== '' && !isValidCpf(form.cpf)) {
+    if (!isValidCpf(form.cpf)) {
       setError('Informe um CPF válido.')
       return
     }
 
-    if (form.pixType !== 'CPF' && form.pixType !== 'CNPJ' && !isValidCpf(form.cpf)) {
-      setError('Para PIX por e-mail/telefone/chave aleatória, informe um CPF válido.')
+    if (!validatePixKey(form.pixType, form.pixKey)) {
+      setError(pixErrorMessage(form.pixType))
       return
     }
 
@@ -129,7 +125,8 @@ export default function ProfilePage() {
     try {
       const { data } = await api.put('/auth/me', {
         name: form.name.trim(),
-        cpf: form.cpf.trim() || null,
+        cpf: form.cpf.trim(),
+        email: form.email.trim() || null,
         phone: form.phone.trim() || null,
         pixType: form.pixType,
         pixKey: form.pixKey.trim(),
@@ -174,25 +171,42 @@ export default function ProfilePage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Telefone <span className="text-zinc-600 normal-case">(opcional)</span></label>
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF</label>
             <input
-              type="tel"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              type="text"
+              inputMode="numeric"
+              required
+              value={form.cpf}
+              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              className={`w-full bg-zinc-800 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 ${
+                form.cpf && !isValidCpf(form.cpf) ? 'border-red-500' : form.cpf && isValidCpf(form.cpf) ? 'border-green-500' : 'border-zinc-700'
+              }`}
+              placeholder="000.000.000-00"
+              maxLength={14}
+            />
+            {form.cpf && !isValidCpf(form.cpf) && <p className="text-xs text-red-400">CPF inválido</p>}
+            {form.cpf && isValidCpf(form.cpf) && <p className="text-xs text-green-400">✓ CPF válido</p>}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">E-mail <span className="text-zinc-600 normal-case">(opcional)</span></label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
-              placeholder="(11) 99999-9999"
+              placeholder="seu@email.com"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF {form.pixType !== 'CPF' && form.pixType !== 'CNPJ' ? '' : <span className="text-zinc-600 normal-case">(opcional)</span>}</label>
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">Telefone <span className="text-zinc-600 normal-case">(opcional)</span></label>
             <input
-              type="text"
-              required={form.pixType !== 'CPF' && form.pixType !== 'CNPJ'}
-              value={form.cpf}
-              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
-              placeholder="000.000.000-00"
+              placeholder="(11) 99999-9999"
             />
           </div>
 

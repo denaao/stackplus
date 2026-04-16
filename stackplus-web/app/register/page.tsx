@@ -100,7 +100,16 @@ function pixErrorMessage(pixType: PixType) {
 export default function RegisterPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
-  const [form, setForm] = useState({ name: '', email: '', cpf: '', phone: '', password: '', pixType: 'CPF' as PixType, pixKey: '', role: 'PLAYER' })
+  const [form, setForm] = useState({
+    name: '',
+    cpf: '',
+    email: '',
+    phone: '',
+    password: '',
+    pixType: 'CPF' as PixType,
+    pixKey: '',
+    role: 'PLAYER',
+  })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -128,22 +137,17 @@ export default function RegisterPage() {
     e.preventDefault()
     setError('')
 
+    if (!isValidCpf(form.cpf)) {
+      setError('Informe um CPF válido.')
+      return
+    }
+
     if (form.phone.trim() !== '') {
       const phoneDigits = form.phone.replace(/\D/g, '')
       if (phoneDigits.length < 10 || phoneDigits.length > 11) {
         setError('Telefone deve ter 10 ou 11 dígitos (com DDD).')
         return
       }
-    }
-
-    if (form.cpf.trim() !== '' && !isValidCpf(form.cpf)) {
-      setError('Informe um CPF válido.')
-      return
-    }
-
-    if (form.pixType !== 'CPF' && form.pixType !== 'CNPJ' && !isValidCpf(form.cpf)) {
-      setError('Para PIX por e-mail/telefone/chave aleatória, informe um CPF válido no cadastro.')
-      return
     }
 
     if (!validatePixKey(form.pixType, form.pixKey)) {
@@ -153,7 +157,15 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      const { data } = await api.post('/auth/register', form)
+      const { data } = await api.post('/auth/register', {
+        name: form.name,
+        cpf: form.cpf,
+        email: form.email.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        password: form.password,
+        pixType: form.pixType,
+        pixKey: form.pixKey,
+      })
       setAuth(data.token, data.user)
       if (data.user.role === 'HOST') router.push('/dashboard')
       else router.push('/player/dashboard')
@@ -165,7 +177,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-black text-yellow-400 tracking-tight">STACKPLUS</h1>
@@ -174,27 +186,49 @@ export default function RegisterPage() {
         <form onSubmit={handleSubmit} className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 space-y-4">
           <h2 className="text-xl font-bold">Cadastro</h2>
           {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">{error}</div>}
+
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Nome</label>
-            <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400" placeholder="Seu nome" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">E-mail</label>
-            <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400" placeholder="seu@email.com" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF {form.pixType !== 'CPF' && form.pixType !== 'CNPJ' ? '' : <span className="text-zinc-600 normal-case">(opcional)</span>}</label>
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">Nome completo</label>
             <input
               type="text"
-              required={form.pixType !== 'CPF' && form.pixType !== 'CNPJ'}
-              value={form.cpf}
-              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
-              placeholder="000.000.000-00"
+              placeholder="Seu nome"
             />
           </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              required
+              value={form.cpf}
+              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              className={`w-full bg-zinc-800 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 ${
+                form.cpf && !isValidCpf(form.cpf) ? 'border-red-500' : form.cpf && isValidCpf(form.cpf) ? 'border-green-500' : 'border-zinc-700'
+              }`}
+              placeholder="000.000.000-00"
+              maxLength={14}
+              autoComplete="username"
+            />
+            {form.cpf && !isValidCpf(form.cpf) && <p className="text-xs text-red-400">CPF inválido</p>}
+            {form.cpf && isValidCpf(form.cpf) && <p className="text-xs text-green-400">✓ CPF válido</p>}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400 uppercase tracking-wide">E-mail <span className="text-zinc-600 normal-case">(opcional)</span></label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              placeholder="seu@email.com"
+            />
+          </div>
+
           <div className="space-y-1">
             <label className="text-xs text-zinc-400 uppercase tracking-wide">Telefone <span className="text-zinc-600 normal-case">(opcional)</span></label>
             <input
@@ -205,15 +239,27 @@ export default function RegisterPage() {
               placeholder="(11) 99999-9999"
             />
           </div>
+
           <div className="space-y-1">
             <label className="text-xs text-zinc-400 uppercase tracking-wide">Senha</label>
-            <input type="password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400" placeholder="••••••" />
+            <input
+              type="password"
+              required
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              placeholder="Mínimo 6 caracteres"
+              autoComplete="new-password"
+            />
           </div>
+
           <div className="space-y-1">
             <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo de PIX</label>
-            <select value={form.pixType} onChange={(e) => handlePixTypeChange(e.target.value as PixType)}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400">
+            <select
+              value={form.pixType}
+              onChange={(e) => handlePixTypeChange(e.target.value as PixType)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+            >
               <option value="CPF">CPF ⭐ recomendado</option>
               <option value="CNPJ">CNPJ</option>
               <option value="EMAIL">E-mail</option>
@@ -226,6 +272,7 @@ export default function RegisterPage() {
               </p>
             )}
           </div>
+
           <div className="space-y-1">
             <label className="text-xs text-zinc-400 uppercase tracking-wide">Chave PIX para recebimento</label>
             <input
@@ -241,15 +288,11 @@ export default function RegisterPage() {
                     : 'border-zinc-700'
               }`}
               placeholder={
-                form.pixType === 'CPF'
-                  ? '000.000.000-00'
-                  : form.pixType === 'CNPJ'
-                    ? '00.000.000/0000-00'
-                    : form.pixType === 'EMAIL'
-                      ? 'seu@email.com'
-                      : form.pixType === 'PHONE'
-                        ? '(11) 99999-9999'
-                        : '00000000-0000-0000-0000-000000000000'
+                form.pixType === 'CPF' ? '000.000.000-00'
+                : form.pixType === 'CNPJ' ? '00.000.000/0000-00'
+                : form.pixType === 'EMAIL' ? 'seu@email.com'
+                : form.pixType === 'PHONE' ? '(11) 99999-9999'
+                : '00000000-0000-0000-0000-000000000000'
               }
             />
             {form.pixKey && !validatePixKey(form.pixType, form.pixKey) && (
@@ -259,19 +302,30 @@ export default function RegisterPage() {
               <p className="text-xs text-green-400">✓ Chave PIX válida</p>
             )}
           </div>
+
           <div className="space-y-1">
             <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo de conta</label>
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400">
+            <select
+              value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+            >
               <option value="PLAYER">Jogador</option>
               <option value="HOST">Host (organizador)</option>
             </select>
           </div>
-          <button type="submit" disabled={loading}
-            className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50">
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+          >
             {loading ? 'Cadastrando...' : 'Criar conta'}
           </button>
-          <p className="text-center text-sm text-zinc-500">Já tem conta? <a href="/" className="text-yellow-400 hover:underline">Entrar</a></p>
+          <p className="text-center text-sm text-zinc-500">
+            Já tem conta?{' '}
+            <a href="/" className="text-yellow-400 hover:underline">Entrar</a>
+          </p>
         </form>
       </div>
     </div>

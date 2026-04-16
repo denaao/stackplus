@@ -13,6 +13,7 @@ interface Session {
   id: string; status: string; startedAt?: string
   rake?: string | number | null
   caixinha?: string | number | null
+  caixinhaMode?: 'SPLIT' | 'INDIVIDUAL'
   caixinhaPerStaff?: number
   caixinhaDistribution?: Array<{ userId: string; name: string; amount: number; pixType?: string | null; pixKey?: string | null }>
   totalRakeback?: number
@@ -20,7 +21,7 @@ interface Session {
   pokerVariant?: 'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'
   gameType?: 'CASH_GAME' | 'TOURNAMENT'
   jackpotEnabled?: boolean
-  homeGame: { name: string; chipValue: string; gameType?: 'CASH_GAME' | 'TOURNAMENT'; hostId: string; jackpotAccumulated?: string | number }
+  homeGame: { id: string; name: string; chipValue: string; gameType?: 'CASH_GAME' | 'TOURNAMENT'; hostId: string; jackpotAccumulated?: string | number }
   cashier?: { id: string; name: string }
   playerStates: PlayerState[]
   staffAssignments: StaffAssignment[]
@@ -30,6 +31,7 @@ interface Session {
 
 interface StaffAssignment {
   userId: string
+  caixinhaAmount?: number | string | null
   user: { id: string; name: string; email?: string; pixType?: string | null; pixKey?: string | null }
 }
 
@@ -56,6 +58,24 @@ interface ParticipantOption {
   id: string
   name: string
   email?: string | null
+}
+
+interface SangeurAccess {
+  id: string
+  homeGameId: string
+  userId: string
+  username: string
+  isActive: boolean
+  mustChangePassword: boolean
+  lastLoginAt?: string | null
+  createdAt: string
+  updatedAt: string
+  user: { id: string; name: string; email?: string }
+}
+
+interface SangeurMember {
+  id: string
+  user: { id: string; name: string; email?: string }
 }
 
 const pokerVariantLabels: Record<'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX', string> = {
@@ -85,6 +105,18 @@ interface FinancialReportItem {
   payoutOrder?: any
 }
 
+interface ReconciliationItem {
+  chargeId: string
+  flow: 'PREPAID_PURCHASE' | 'SESSION_SETTLEMENT'
+  userId: string
+  playerName: string
+  amount: number
+  settledAt: string
+  matchStatus: 'FOUND' | 'NOT_FOUND'
+  endToEndId: string | null
+  matchedAt: string | null
+}
+
 interface FinancialReport {
   sessionId: string
   financialModule: 'POSTPAID' | 'PREPAID' | 'HYBRID'
@@ -99,6 +131,13 @@ interface FinancialReport {
   charges: FinancialReportItem[]
   receivedPayments: Array<{ userId: string; name: string; amount: number; paidAt: string }>
   payouts: FinancialReportItem[]
+  reconciliation?: {
+    items: ReconciliationItem[]
+    totalFound: number
+    totalNotFound: number
+    countFound: number
+    countNotFound: number
+  }
 }
 
 type FeedbackState = {
@@ -245,8 +284,30 @@ export default function SessionManagePage() {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pageFeedback, setPageFeedback] = useState<FeedbackState>(null)
   const [staffModalError, setStaffModalError] = useState<string | null>(null)
+  const [selectedCaixinhaMode, setSelectedCaixinhaMode] = useState<'SPLIT' | 'INDIVIDUAL'>('SPLIT')
   const [participantsModalError, setParticipantsModalError] = useState<string | null>(null)
   const [showFinishConfirmModal, setShowFinishConfirmModal] = useState(false)
+  const [showSangeurModal, setShowSangeurModal] = useState(false)
+  const [sangeurAccesses, setSangeurAccesses] = useState<SangeurAccess[]>([])
+  const [sangeurMembers, setSangeurMembers] = useState<SangeurMember[]>([])
+  const [sangeurUserId, setSangeurUserId] = useState('')
+  const [sangeurUsername, setSangeurUsername] = useState('')
+  const [sangeurPassword, setSangeurPassword] = useState('')
+  const [sangeurLoading, setSangeurLoading] = useState(false)
+  const [sangeurActionUserId, setSangeurActionUserId] = useState<string | null>(null)
+  const [sangeurError, setSangeurError] = useState<string | null>(null)
+  const [sangeurIssuedCredential, setSangeurIssuedCredential] = useState<{ userName: string; username: string; temporaryPassword: string } | null>(null)
+  const [sangeurCopied, setSangeurCopied] = useState<string | null>(null)
+
+  async function copySangeur(key: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setSangeurCopied(key)
+      setTimeout(() => setSangeurCopied((prev) => (prev === key ? null : prev)), 1500)
+    } catch {
+      setSangeurError('Não foi possível copiar para a área de transferência.')
+    }
+  }
 
   function normalizeSession(data: Session): Session {
     const distribution = Array.isArray(data.caixinhaDistribution) ? data.caixinhaDistribution : []
@@ -269,7 +330,17 @@ export default function SessionManagePage() {
   }
 
   useEffect(() => {
-    api.get(`/sessions/${sessionId}`).then(({ data }) => setSession(normalizeSession(data))).finally(() => setLoading(false))
+    api.get(`/sessions/${sessionId}`).then(({ data }) => {
+      const normalized = normalizeSession(data)
+      setSession(normalized)
+      const homeGameId = normalized.homeGame?.id
+      if (homeGameId) {
+        api.get(`/home-games/${homeGameId}`).then((hg) => {
+          setSangeurAccesses(hg.data.sangeurAccesses || [])
+          setSangeurMembers(Array.isArray(hg.data.members) ? hg.data.members : [])
+        }).catch(() => {})
+      }
+    }).finally(() => setLoading(false))
 
     joinSession(sessionId)
     const socket = getSocket()
@@ -330,6 +401,114 @@ export default function SessionManagePage() {
     }
   }
 
+  function applySangeurAccess(access: SangeurAccess) {
+    setSangeurAccesses((prev) => {
+      const idx = prev.findIndex((item) => item.userId === access.userId)
+      if (idx === -1) return [access, ...prev]
+      const clone = [...prev]
+      clone[idx] = access
+      return clone
+    })
+  }
+
+  async function openSangeurModal() {
+    if (!session) return
+    setSangeurError(null)
+    setSangeurIssuedCredential(null)
+    setSangeurUserId('')
+    setSangeurUsername('')
+    setSangeurPassword('')
+    setSangeurLoading(true)
+    try {
+      const { data } = await api.get(`/home-games/${session.homeGame.id}`)
+      setSangeurAccesses(data.sangeurAccesses || [])
+      setSangeurMembers(Array.isArray(data.members) ? data.members : [])
+      setShowSangeurModal(true)
+    } catch (err) {
+      setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel carregar dados do SANGEUR.') })
+    } finally {
+      setSangeurLoading(false)
+    }
+  }
+
+  function closeSangeurModal() {
+    setShowSangeurModal(false)
+    setSangeurError(null)
+    setSangeurIssuedCredential(null)
+  }
+
+  async function handleEnableSangeur() {
+    if (!session) return
+    if (!sangeurUserId) {
+      setSangeurError('Selecione um participante para habilitar como SANGEUR.')
+      return
+    }
+    if (!sangeurUsername.trim()) {
+      setSangeurError('Informe o usuario da SANGEUR para POS.')
+      return
+    }
+    setSangeurError(null)
+    setSangeurLoading(true)
+    try {
+      const payload: Record<string, string> = {
+        userId: sangeurUserId,
+        username: sangeurUsername.trim(),
+      }
+      if (sangeurPassword.trim()) payload.password = sangeurPassword.trim()
+
+      const { data } = await api.post(`/home-games/${session.homeGame.id}/sangeurs`, payload)
+      applySangeurAccess(data.access)
+      setSangeurIssuedCredential({
+        userName: data.access.user.name,
+        username: data.access.username,
+        temporaryPassword: data.temporaryPassword,
+      })
+      setSangeurPassword('')
+      setSangeurUserId('')
+      setSangeurUsername('')
+      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada com sucesso.' })
+    } catch (err) {
+      setSangeurError(getErrorMessage(err, 'Nao foi possivel habilitar a SANGEUR.'))
+    } finally {
+      setSangeurLoading(false)
+    }
+  }
+
+  async function handleDisableSangeur(userId: string) {
+    if (!session) return
+    setSangeurActionUserId(userId)
+    setSangeurError(null)
+    try {
+      const { data } = await api.patch(`/home-games/${session.homeGame.id}/sangeurs/${userId}/disable`)
+      applySangeurAccess(data)
+      setPageFeedback({ tone: 'success', message: 'Acesso de SANGEUR desabilitado.' })
+    } catch (err) {
+      setSangeurError(getErrorMessage(err, 'Nao foi possivel desabilitar a SANGEUR.'))
+    } finally {
+      setSangeurActionUserId(null)
+    }
+  }
+
+  async function handleResetSangeurPassword(userId: string) {
+    if (!session) return
+    setSangeurActionUserId(userId)
+    setSangeurError(null)
+    try {
+      const { data } = await api.patch(`/home-games/${session.homeGame.id}/sangeurs/${userId}/reset-password`, {})
+      applySangeurAccess(data.access)
+      setSangeurIssuedCredential({
+        userName: data.access.user.name,
+        username: data.access.username,
+        temporaryPassword: data.temporaryPassword,
+      })
+      setPageFeedback({ tone: 'success', message: 'Senha temporaria da SANGEUR redefinida.' })
+    } catch (err) {
+      setSangeurError(getErrorMessage(err, 'Nao foi possivel redefinir a senha da SANGEUR.'))
+    } finally {
+      setSangeurActionUserId(null)
+    }
+  }
+
   async function openStaffModal() {
     setStaffModalError(null)
     setStaffLoading(true)
@@ -342,6 +521,7 @@ export default function SessionManagePage() {
       setSession(normalized)
       setStaffOptions(options)
       setSelectedStaffIds(normalized.staffAssignments.map((assignment) => assignment.userId))
+      setSelectedCaixinhaMode(normalized.caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT')
       setSelectedRakebackIds(normalized.rakebackAssignments.map((assignment) => assignment.userId))
       setSelectedRakebackPercent(normalized.rakebackAssignments.reduce<Record<string, string>>((acc, assignment) => {
         acc[assignment.userId] = String(Number(assignment.percent || 0))
@@ -371,7 +551,7 @@ export default function SessionManagePage() {
     setPageFeedback(null)
     setStaffLoading(true)
     try {
-      await api.put(`/sessions/${sessionId}/staff`, { userIds: selectedStaffIds })
+      await api.put(`/sessions/${sessionId}/staff`, { userIds: selectedStaffIds, caixinhaMode: selectedCaixinhaMode })
       const { data } = await api.put(`/sessions/${sessionId}/rakeback`, { assignments: rakebackPayload })
       setSession(normalizeSession(data))
       setShowStaffModal(false)
@@ -747,30 +927,58 @@ export default function SessionManagePage() {
         )}
 
         {isHost && session.status !== 'FINISHED' && (
-          <div className="mb-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-blue-300">Staff da partida</p>
-                <p className="mt-1 text-sm text-zinc-300">{session.status === 'WAITING' ? 'Selecione quem faz parte do staff e configure o rakeback.' : 'Gerencie o staff durante a partida.'}</p>
+          <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-blue-300">Staff da partida</p>
+                  <p className="mt-1 text-sm text-zinc-300">{session.status === 'WAITING' ? 'Selecione quem faz parte do staff e configure o rakeback.' : 'Gerencie o staff durante a partida.'}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openStaffModal}
+                  disabled={staffLoading}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {staffLoading ? 'Carregando...' : `Configurar Staff${session.staffAssignments.length ? ` (${session.staffAssignments.length})` : ''}`}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={openStaffModal}
-                disabled={staffLoading}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50"
-              >
-                {staffLoading ? 'Carregando...' : `Configurar Staff${session.staffAssignments.length ? ` (${session.staffAssignments.length})` : ''}`}
-              </button>
+              {session.staffAssignments.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {session.staffAssignments.map((assignment) => (
+                    <span key={assignment.userId} className="rounded-full bg-blue-500/20 border border-blue-500/30 px-3 py-1 text-xs font-medium text-blue-200">
+                      {assignment.user.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            {session.staffAssignments.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {session.staffAssignments.map((assignment) => (
-                  <span key={assignment.userId} className="rounded-full bg-blue-500/20 border border-blue-500/30 px-3 py-1 text-xs font-medium text-blue-200">
-                    {assignment.user.name}
-                  </span>
-                ))}
+
+            <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/5 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-yellow-300">SANGEUR</p>
+                  <p className="mt-1 text-sm text-zinc-300">Gerencie acessos ao caixa móvel da partida.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openSangeurModal}
+                  disabled={sangeurLoading}
+                  className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+                >
+                  {sangeurLoading && !showSangeurModal ? 'Carregando...' : `Gerenciar SANGEUR${sangeurAccesses.filter((a) => a.isActive).length ? ` (${sangeurAccesses.filter((a) => a.isActive).length})` : ''}`}
+                </button>
               </div>
-            )}
+              {sangeurAccesses.filter((a) => a.isActive).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {sangeurAccesses.filter((a) => a.isActive).map((access) => (
+                    <span key={access.id} className="rounded-full bg-yellow-400/15 border border-yellow-400/30 px-3 py-1 text-xs font-medium text-yellow-200">
+                      {access.user.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -936,6 +1144,79 @@ export default function SessionManagePage() {
               )}
               {bankBalanceError && <p className="mt-1 text-xs text-red-300">{bankBalanceError}</p>}
             </div>
+
+            {financialReport?.reconciliation && (
+              <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-300">⚠ Conciliação bancária — QR codes confirmados</p>
+                  {financialReport.reconciliation.countNotFound > 0 && (
+                    <span className="rounded-full border border-red-500/40 bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">
+                      {financialReport.reconciliation.countNotFound} não encontrado{financialReport.reconciliation.countNotFound !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+
+                {financialReport.reconciliation.items.length === 0 ? (
+                  <p className="text-xs text-zinc-500">Nenhuma cobrança QR liquidada encontrada para esta sessão.</p>
+                ) : (
+                  <>
+                    <div className="mb-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded border border-emerald-500/20 bg-emerald-500/5 p-2">
+                        <p className="text-zinc-500">Encontrado no extrato</p>
+                        <p className="font-bold text-emerald-300">{financialReport.reconciliation.countFound} · {formatCurrency(financialReport.reconciliation.totalFound)}</p>
+                      </div>
+                      <div className={`rounded border p-2 ${financialReport.reconciliation.countNotFound > 0 ? 'border-red-500/30 bg-red-500/10' : 'border-zinc-700 bg-zinc-900/60'}`}>
+                        <p className="text-zinc-500">Não encontrado</p>
+                        <p className={`font-bold ${financialReport.reconciliation.countNotFound > 0 ? 'text-red-300' : 'text-zinc-400'}`}>
+                          {financialReport.reconciliation.countNotFound} · {formatCurrency(financialReport.reconciliation.totalNotFound)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                      {financialReport.reconciliation.items.map((item) => (
+                        <div
+                          key={item.chargeId}
+                          className={`rounded border px-3 py-2 text-xs ${
+                            item.matchStatus === 'FOUND'
+                              ? 'border-emerald-500/20 bg-emerald-500/5'
+                              : 'border-red-500/30 bg-red-500/10'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-zinc-100">{item.playerName}</p>
+                              <p className="text-zinc-500">
+                                {item.flow === 'PREPAID_PURCHASE' ? 'Compra pré-pago' : 'Liquidação final'} · {formatCurrency(item.amount)}
+                              </p>
+                              {item.matchStatus === 'FOUND' && item.endToEndId && (
+                                <p className="mt-0.5 font-mono text-[10px] text-emerald-400">E2E: {item.endToEndId}</p>
+                              )}
+                              {item.matchStatus === 'NOT_FOUND' && (
+                                <p className="mt-0.5 text-[10px] text-red-300">Confirmado manualmente — não localizado no extrato Annapay</p>
+                              )}
+                            </div>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              item.matchStatus === 'FOUND'
+                                ? 'bg-emerald-500/20 text-emerald-200'
+                                : 'bg-red-500/20 text-red-200'
+                            }`}>
+                              {item.matchStatus === 'FOUND' ? '✓ Extrato' : '✗ Ausente'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {financialReport.reconciliation.countNotFound > 0 && (
+                      <p className="mt-2 text-[11px] text-amber-200/70">
+                        Pagamentos marcados como recebidos mas não encontrados no extrato do Annapay. Verifique se o pagamento foi feito em outra conta ou se houve confirmação indevida.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             {financialReport && (
               <div className="mt-4 space-y-4">
@@ -1222,7 +1503,7 @@ export default function SessionManagePage() {
               </div>
             )}
 
-            <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Staff (divide caixinha)</p>
+            <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Staff</p>
             <div className="mt-3 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
                 const checked = selectedStaffIds.includes(person.id)
@@ -1240,6 +1521,42 @@ export default function SessionManagePage() {
                 )
               })}
             </div>
+
+            {selectedStaffIds.length > 0 && (
+              <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3">
+                <p className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Caixinha</p>
+                <p className="text-sm text-zinc-300 mb-3">A caixinha vai ser dividida em partes iguais entre o staff ou cada um recebe um valor individual?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCaixinhaMode('SPLIT')}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                      selectedCaixinhaMode === 'SPLIT'
+                        ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
+                        : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                    }`}
+                  >
+                    Dividir em partes iguais
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCaixinhaMode('INDIVIDUAL')}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                      selectedCaixinhaMode === 'INDIVIDUAL'
+                        ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
+                        : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                    }`}
+                  >
+                    Individual por staff
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-zinc-500">
+                  {selectedCaixinhaMode === 'SPLIT'
+                    ? 'Ao encerrar a partida, o host lança o valor total e o sistema divide igualmente.'
+                    : 'Ao encerrar a partida, o host lança o valor individual de cada staff.'}
+                </p>
+              </div>
+            )}
 
             <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Rakeback (% do rake)</p>
             <div className="mt-3 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
@@ -1375,6 +1692,164 @@ export default function SessionManagePage() {
               >
                 {staffLoading ? 'Salvando...' : 'Salvar Staff'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSangeurModal && session && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-yellow-400/30 bg-zinc-900 p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Gerenciar SANGEUR</h3>
+                <p className="mt-1 text-sm text-zinc-400">Habilite, desabilite ou redefina senhas dos acessos ao caixa móvel deste home game.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSangeurModal}
+                className="rounded-lg border border-zinc-700 px-3 py-1 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-300">Home Game ID (para login na POS)</p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 truncate rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-zinc-200">{session.homeGame.id}</code>
+                <button
+                  type="button"
+                  onClick={() => copySangeur('homeGameId', session.homeGame.id)}
+                  className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20"
+                >
+                  {sangeurCopied === 'homeGameId' ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3 rounded-xl border border-zinc-700 bg-zinc-800/40 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Habilitar novo acesso</p>
+
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-wide text-zinc-400">Participante SANGEUR</label>
+                <select
+                  value={sangeurUserId}
+                  onChange={(e) => setSangeurUserId(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                >
+                  <option value="">Selecione um membro…</option>
+                  {sangeurMembers.map((m) => (
+                    <option key={m.id} value={m.user.id}>{m.user.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wide text-zinc-400">Usuário POS</label>
+                  <input
+                    type="text"
+                    value={sangeurUsername}
+                    onChange={(e) => setSangeurUsername(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs uppercase tracking-wide text-zinc-400">Senha (opcional)</label>
+                  <input
+                    type="text"
+                    value={sangeurPassword}
+                    onChange={(e) => setSangeurPassword(e.target.value)}
+                    placeholder="Gerada se vazio"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {sangeurError && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {sangeurError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleEnableSangeur}
+                disabled={sangeurLoading}
+                className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-bold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+              >
+                {sangeurLoading ? 'Salvando…' : 'Habilitar SANGEUR'}
+              </button>
+
+              {sangeurIssuedCredential && (
+                <div className="space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <p className="text-xs font-bold text-emerald-300">Credencial de {sangeurIssuedCredential.userName}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="w-16 text-[10px] uppercase tracking-wide text-emerald-200/70">Usuário</span>
+                    <code className="flex-1 truncate rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-200">{sangeurIssuedCredential.username}</code>
+                    <button
+                      type="button"
+                      onClick={() => copySangeur('username', sangeurIssuedCredential.username)}
+                      className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/20"
+                    >
+                      {sangeurCopied === 'username' ? 'Copiado!' : 'Copiar'}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-16 text-[10px] uppercase tracking-wide text-emerald-200/70">Senha</span>
+                    <code className="flex-1 truncate rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-200">{sangeurIssuedCredential.temporaryPassword}</code>
+                    <button
+                      type="button"
+                      onClick={() => copySangeur('password', sangeurIssuedCredential.temporaryPassword)}
+                      className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/20"
+                    >
+                      {sangeurCopied === 'password' ? 'Copiado!' : 'Copiar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400 mb-2">Acessos cadastrados</p>
+              {sangeurAccesses.length === 0 ? (
+                <p className="text-xs text-zinc-500">Nenhum acesso cadastrado ainda.</p>
+              ) : (
+                <div className="space-y-2">
+                  {sangeurAccesses.map((access) => (
+                    <div key={access.id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs">
+                      <div>
+                        <p className="font-bold text-zinc-200">{access.user.name}</p>
+                        <p className="text-zinc-500 font-mono">{access.username}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-700 text-zinc-400'}`}>
+                          {access.isActive ? 'Ativo' : 'Inativo'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleResetSangeurPassword(access.userId)}
+                          disabled={sangeurActionUserId === access.userId}
+                          className="rounded border border-zinc-700 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                        >
+                          Reset
+                        </button>
+                        {access.isActive && (
+                          <button
+                            type="button"
+                            onClick={() => handleDisableSangeur(access.userId)}
+                            disabled={sangeurActionUserId === access.userId}
+                            className="rounded border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                          >
+                            Desativar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
