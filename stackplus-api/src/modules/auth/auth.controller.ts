@@ -50,9 +50,6 @@ const registerSchema = z.object({
   password: z.string().min(6),
   pixType: pixTypeEnum,
   pixKey: z.string().trim().min(3).max(120),
-  // Somente PLAYER e HOST sao aceitos via cadastro publico.
-  // ADMIN exige promocao manual via DB ou endpoint protegido.
-  role: z.enum(['PLAYER', 'HOST']).optional(),
 }).superRefine((data, ctx) => {
   if (!isValidCpf(data.cpf)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF inválido' })

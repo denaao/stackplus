@@ -33,9 +33,8 @@ export default function LoginPage() {
       setAuth(data.token, data.user)
       const role = data.user.role
       if (role === 'ADMIN') router.push('/admin/dashboard')
-      else if (role === 'HOST') router.push('/dashboard')
       else if (role === 'CASHIER') router.push('/cashier/select')
-      else router.push('/player/dashboard')
+      else router.push('/dashboard')
     } catch (err: any) {
       setError(typeof err === 'string' ? err : 'Credenciais inválidas')
     } finally {

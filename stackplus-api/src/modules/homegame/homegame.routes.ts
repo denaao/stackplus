@@ -129,4 +129,10 @@ router.post('/join', authenticate, async (req: AuthRequest, res: Response) => {
   res.json(game)
 })
 
+// Dashboard unificado: retorna meus home games separados por papel.
+router.get('/mine/with-roles', authenticate, async (req: AuthRequest, res: Response) => {
+  const result = await HomeGameService.getMyHomeGamesWithRoles(req.user!.userId)
+  res.json(result)
+})
+
 export default router

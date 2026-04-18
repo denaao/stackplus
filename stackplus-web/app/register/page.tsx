@@ -108,7 +108,6 @@ export default function RegisterPage() {
     password: '',
     pixType: 'CPF' as PixType,
     pixKey: '',
-    role: 'PLAYER',
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -167,8 +166,7 @@ export default function RegisterPage() {
         pixKey: form.pixKey,
       })
       setAuth(data.token, data.user)
-      if (data.user.role === 'HOST') router.push('/dashboard')
-      else router.push('/player/dashboard')
+      router.push('/dashboard')
     } catch (err: any) {
       setError(typeof err === 'string' ? err : 'Erro ao cadastrar')
     } finally {
@@ -301,18 +299,6 @@ export default function RegisterPage() {
             {form.pixKey && validatePixKey(form.pixType, form.pixKey) && (
               <p className="text-xs text-sx-cyan">✓ Chave PIX válida</p>
             )}
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs text-sx-muted uppercase tracking-wide">Tipo de conta</label>
-            <select
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
-            >
-              <option value="PLAYER">Jogador</option>
-              <option value="HOST">Host (organizador)</option>
-            </select>
           </div>
 
           <button

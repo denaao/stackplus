@@ -11,7 +11,6 @@ export async function register(data: {
   password: string
   pixType: PixKeyType
   pixKey: string
-  role?: 'PLAYER' | 'HOST'
 }) {
   const cpfDigits = data.cpf.replace(/\D/g, '')
   const cpfInUse = await prisma.user.findUnique({ where: { cpf: cpfDigits }, select: { id: true } })
@@ -33,7 +32,7 @@ export async function register(data: {
       pixType: data.pixType,
       pixKey: data.pixKey.trim(),
       passwordHash,
-      role: data.role === 'HOST' ? Role.HOST : Role.PLAYER,
+      role: Role.PLAYER,
     },
     select: { id: true, name: true, cpf: true, email: true, phone: true, pixType: true, pixKey: true, role: true, createdAt: true },
   })

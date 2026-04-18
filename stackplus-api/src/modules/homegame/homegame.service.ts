@@ -161,6 +161,47 @@ export async function updateFinancialConfig(
   return getHomeGameById(homeGameId)
 }
 
+/**
+ * Retorna todos os home games do usuario agrupados pelo papel que ele tem em cada.
+ * - asOwner: home games onde ele eh dono original (HomeGame.hostId)
+ * - asCoHost: home games onde ele eh HomeGameMember.role = HOST
+ * - asPlayer: home games onde ele eh HomeGameMember.role = PLAYER
+ */
+export async function getMyHomeGamesWithRoles(userId: string) {
+  const [ownerGames, memberEntries] = await Promise.all([
+    prisma.homeGame.findMany({
+      where: { hostId: userId },
+      include: { _count: { select: { members: true, sessions: true } } },
+      orderBy: { createdAt: 'desc' },
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (prisma as any).homeGameMember.findMany({
+      where: { userId },
+      include: {
+        homeGame: {
+          include: { _count: { select: { members: true, sessions: true } } },
+        },
+      },
+      orderBy: { joinedAt: 'desc' },
+    }),
+  ])
+
+  const coHostGames: typeof ownerGames = []
+  const playerGames: typeof ownerGames = []
+  for (const entry of memberEntries as Array<{ role: 'HOST' | 'PLAYER'; homeGame: typeof ownerGames[number] }>) {
+    // Se o usuario tambem eh dono desse home game, ja esta em asOwner — nao duplica.
+    if (entry.homeGame.hostId === userId) continue
+    if (entry.role === 'HOST') coHostGames.push(entry.homeGame)
+    else playerGames.push(entry.homeGame)
+  }
+
+  return {
+    asOwner: ownerGames,
+    asCoHost: coHostGames,
+    asPlayer: playerGames,
+  }
+}
+
 export async function joinHomeGame(userId: string, joinCode: string) {
   const homeGame = await prisma.homeGame.findUnique({ where: { joinCode } })
   if (!homeGame) throw new Error('Código inválido')
