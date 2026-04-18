@@ -2009,6 +2009,3 @@ function PayoutModal({ payout, players, tournamentId, actionLoading, onClose, on
     </div>
   )
 }
-
-
-}

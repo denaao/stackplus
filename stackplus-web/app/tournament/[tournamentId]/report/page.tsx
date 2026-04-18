@@ -328,4 +328,3 @@ export default function TournamentReportPage() {
     </div>
   )
 }
-}
