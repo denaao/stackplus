@@ -423,5 +423,3 @@ export default function ComandaDetailPage() {
     </div>
   )
 }
-)
-}
