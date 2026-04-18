@@ -2054,3 +2054,14 @@ function extractEndToEndId(payload: unknown, chargeId: string, amount: number, d
     if (hasChargeRef || (amountMatch && debtorMatch)) {
       const e2e = typeof obj.endToEndId === 'string' ? obj.endToEndId
         : typeof obj.e2eId === 'string' ? obj.e2eId
+        : null
+      if (e2e) return e2e
+    }
+  }
+  return null
+}        : null
+      if (e2e) return e2e
+    }
+  }
+  return null
+}

@@ -60,4 +60,9 @@ router.delete('/:homeGameId/members/:userId', authenticate, async (req: AuthRequ
   }
 
   await prisma.homeGameMember.deleteMany({
-    where: { homeGameId: req.params.homeGameId, userId: req.params.us
+    where: { homeGameId: req.params.homeGameId, userId: req.params.userId },
+  })
+  res.status(204).send()
+})
+
+export default router

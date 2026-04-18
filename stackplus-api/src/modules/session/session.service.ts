@@ -741,4 +741,9 @@ export async function deleteSession(sessionId: string, hostId: string) {
     await tx.sangeurShift.deleteMany({ where: { sessionId } })
     await tx.transaction.deleteMany({ where: { sessionId } })
     await tx.playerSessionState.deleteMany({ where: { sessionId } })
-    await t
+    await tx.sessionStaff.deleteMany({ where: { sessionId } })
+    await tx.sessionRakeback.deleteMany({ where: { sessionId } })
+    await tx.sessionParticipant.deleteMany({ where: { sessionId } })
+    await tx.session.delete({ where: { id: sessionId } })
+  })
+}
