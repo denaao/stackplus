@@ -404,29 +404,29 @@ export default function SangeurPosPage() {
   const availablePayments: PaymentMethod[] = ['PIX_QR', 'CASH', 'CARD', 'VOUCHER']
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100">
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[430px] flex-col bg-zinc-950 shadow-2xl shadow-black/40">
+    <div className="min-h-screen bg-sx-card text-zinc-100">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[430px] flex-col bg-sx-bg shadow-2xl shadow-black/40">
       {/* Header compacto */}
-      <div className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
+      <div className="sticky top-0 z-20 border-b border-sx-border bg-sx-bg/95 backdrop-blur">
         <div className="flex items-center justify-between px-4 py-3">
           <button
             type="button"
             onClick={() => setShowHeaderInfo((v) => !v)}
             className="flex items-center gap-2 text-left"
           >
-            <span className="text-xl font-black tracking-tight text-emerald-400">SANGEUR</span>
-            <span className="text-zinc-600">▾</span>
+            <span className="text-xl font-black tracking-tight text-sx-cyan">SANGEUR</span>
+            <span className="text-sx-muted">▾</span>
           </button>
           <button
             type="button"
             onClick={handleLogout}
-            className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-200 active:bg-zinc-800"
+            className="rounded-lg border border-sx-border2 px-3 py-2 text-xs font-bold text-zinc-200 active:bg-sx-input"
           >
             Sair
           </button>
         </div>
         {showHeaderInfo && (
-          <div className="border-t border-zinc-800 bg-zinc-900 px-4 py-3 text-xs text-zinc-400">
+          <div className="border-t border-sx-border bg-sx-card px-4 py-3 text-xs text-sx-muted">
             <p>Home Game: {sangeur.homeGameName}</p>
             <p>Usuário: @{sangeur.username}</p>
             <p>Operadora: {user?.name}</p>
@@ -434,16 +434,16 @@ export default function SangeurPosPage() {
         )}
 
         {activeShift && (
-          <div className="grid grid-cols-2 gap-px border-t border-zinc-800 bg-zinc-800">
-            <div className="bg-zinc-950 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-wide text-zinc-500">Saldo</p>
-              <p className="text-2xl font-black text-emerald-300">{formatChips(activeShift.summary.availableChips)}</p>
-              <p className="text-[10px] text-zinc-500">fichas</p>
+          <div className="grid grid-cols-2 gap-px border-t border-sx-border bg-sx-input">
+            <div className="bg-sx-bg px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wide text-sx-muted">Saldo</p>
+              <p className="text-2xl font-black text-sx-cyan">{formatChips(activeShift.summary.availableChips)}</p>
+              <p className="text-[10px] text-sx-muted">fichas</p>
             </div>
-            <div className="bg-zinc-950 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-wide text-zinc-500">Vendido</p>
+            <div className="bg-sx-bg px-4 py-3">
+              <p className="text-[10px] uppercase tracking-wide text-sx-muted">Vendido</p>
               <p className="text-2xl font-black text-zinc-100">{formatCurrency(activeShift.summary.totalSalesAmount)}</p>
-              <p className="text-[10px] text-zinc-500">{formatChips(activeShift.summary.soldChips)} fichas</p>
+              <p className="text-[10px] text-sx-muted">{formatChips(activeShift.summary.soldChips)} fichas</p>
             </div>
           </div>
         )}
@@ -453,13 +453,13 @@ export default function SangeurPosPage() {
       {(error || success) && (
         <div className="px-4 pt-3">
           {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
-          {success && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">{success}</div>}
+          {success && <div className="rounded-lg border border-sx-cyan/30 bg-sx-cyan/10 p-3 text-sm text-sx-cyan">{success}</div>}
         </div>
       )}
 
       {/* Conteúdo */}
       <div className="px-4 py-4 pb-32">
-        {loadingData && <p className="text-sm text-zinc-500">Carregando...</p>}
+        {loadingData && <p className="text-sm text-sx-muted">Carregando...</p>}
 
         {/* Abrir turno */}
         {!loadingData && !activeShift && (
@@ -469,11 +469,11 @@ export default function SangeurPosPage() {
             </div>
             <form onSubmit={handleOpenShift} className="space-y-3">
               <div>
-                <label className="text-xs uppercase tracking-wide text-zinc-400">Sessão</label>
+                <label className="text-xs uppercase tracking-wide text-sx-muted">Sessão</label>
                 <select
                   value={openShiftForm.sessionId}
                   onChange={(e) => setOpenShiftForm((p) => ({ ...p, sessionId: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-base focus:border-emerald-400 focus:outline-none"
+                  className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-4 text-base focus:border-sx-cyan focus:outline-none"
                 >
                   <option value="">Selecione...</option>
                   {sessions.map((s) => (
@@ -484,30 +484,30 @@ export default function SangeurPosPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-zinc-400">Fichas iniciais</label>
+                <label className="text-xs uppercase tracking-wide text-sx-muted">Fichas iniciais</label>
                 <input
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={openShiftForm.initialChips}
                   onChange={(e) => setOpenShiftForm((p) => ({ ...p, initialChips: e.target.value.replace(/\D/g, '') }))}
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-2xl font-bold focus:border-emerald-400 focus:outline-none"
+                  className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-4 text-2xl font-bold focus:border-sx-cyan focus:outline-none"
                   placeholder="0"
                 />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-zinc-400">Observação</label>
+                <label className="text-xs uppercase tracking-wide text-sx-muted">Observação</label>
                 <input
                   type="text"
                   value={openShiftForm.note}
                   onChange={(e) => setOpenShiftForm((p) => ({ ...p, note: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none"
+                  className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
                   placeholder="Opcional"
                 />
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-emerald-500 py-4 text-lg font-black text-zinc-900 active:bg-emerald-400 disabled:opacity-50"
+                className="w-full rounded-lg bg-sx-cyan py-4 text-lg font-black text-sx-bg active:bg-sx-cyan disabled:opacity-50"
               >
                 {loading ? 'Abrindo...' : 'Abrir turno'}
               </button>
@@ -522,11 +522,11 @@ export default function SangeurPosPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Toque no jogador</h2>
-                  <span className="text-[10px] uppercase text-zinc-500">{isPostpaidSession ? 'Pós • default Vale' : 'Pré-pago'}</span>
+                  <span className="text-[10px] uppercase text-sx-muted">{isPostpaidSession ? 'Pós • default Vale' : 'Pré-pago'}</span>
                 </div>
 
                 {participants.players.length === 0 && (
-                  <p className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-500">
+                  <p className="rounded-lg border border-sx-border bg-sx-card p-4 text-sm text-sx-muted">
                     Nenhum jogador na sessão. Adicione abaixo.
                   </p>
                 )}
@@ -540,15 +540,15 @@ export default function SangeurPosPage() {
                       onClick={() => setSelectedPlayer(p)}
                       className={`w-full rounded-xl border px-4 py-4 text-left transition-colors ${
                         p.hasCashedOut
-                          ? 'border-zinc-800 bg-zinc-950/50 text-zinc-600'
-                          : 'border-zinc-800 bg-zinc-900 text-zinc-100 active:border-emerald-400 active:bg-emerald-500/10'
+                          ? 'border-sx-border bg-sx-bg/50 text-sx-muted'
+                          : 'border-sx-border bg-sx-card text-zinc-100 active:border-sx-cyan active:bg-sx-cyan/10'
                       }`}
                     >
                       <div className="flex items-baseline justify-between gap-2">
                         <p className="truncate text-base font-bold">{p.name}</p>
-                        <p className="shrink-0 text-sm font-bold text-emerald-300">{formatChips(p.currentStack)}</p>
+                        <p className="shrink-0 text-sm font-bold text-sx-cyan">{formatChips(p.currentStack)}</p>
                       </div>
-                      <p className="mt-0.5 text-xs text-zinc-500">
+                      <p className="mt-0.5 text-xs text-sx-muted">
                         Investido: {formatCurrency(p.chipsIn)}{p.hasCashedOut ? ' • Cashout' : ''}
                       </p>
                     </button>
@@ -556,13 +556,13 @@ export default function SangeurPosPage() {
                 </div>
 
                 {participants.candidates.length > 0 && (
-                  <div className="mt-4 space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-xs uppercase tracking-wide text-zinc-400">Inserir jogador</p>
+                  <div className="mt-4 space-y-2 rounded-xl border border-sx-border bg-sx-card p-3">
+                    <p className="text-xs uppercase tracking-wide text-sx-muted">Inserir jogador</p>
                     <div className="flex gap-2">
                       <select
                         value={addCandidateId}
                         onChange={(e) => setAddCandidateId(e.target.value)}
-                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-3 text-sm"
+                        className="flex-1 rounded-lg border border-sx-border2 bg-sx-input px-3 py-3 text-sm"
                       >
                         <option value="">Selecione...</option>
                         {participants.candidates.map((c) => (
@@ -573,7 +573,7 @@ export default function SangeurPosPage() {
                         type="button"
                         onClick={handleAddCandidate}
                         disabled={!addCandidateId}
-                        className="rounded-lg bg-emerald-500 px-4 font-bold text-zinc-900 active:bg-emerald-400 disabled:opacity-50"
+                        className="rounded-lg bg-sx-cyan px-4 font-bold text-sx-bg active:bg-sx-cyan disabled:opacity-50"
                       >
                         OK
                       </button>
@@ -586,32 +586,32 @@ export default function SangeurPosPage() {
             {tab === 'REFORCO' && (
               <form onSubmit={handleReload} className="space-y-3">
                 <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Reforço do caixa</h2>
-                <p className="text-xs text-zinc-500">Fichas adicionais recebidas do caixa principal durante o turno.</p>
+                <p className="text-xs text-sx-muted">Fichas adicionais recebidas do caixa principal durante o turno.</p>
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-zinc-400">Fichas recebidas</label>
+                  <label className="text-xs uppercase tracking-wide text-sx-muted">Fichas recebidas</label>
                   <input
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={reloadForm.chips}
                     onChange={(e) => setReloadForm((p) => ({ ...p, chips: e.target.value.replace(/\D/g, '') }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-2xl font-bold focus:border-cyan-400 focus:outline-none"
+                    className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-4 text-2xl font-bold focus:border-cyan-400 focus:outline-none"
                     placeholder="0"
                   />
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-zinc-400">Observação</label>
+                  <label className="text-xs uppercase tracking-wide text-sx-muted">Observação</label>
                   <input
                     type="text"
                     value={reloadForm.note}
                     onChange={(e) => setReloadForm((p) => ({ ...p, note: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm focus:border-cyan-400 focus:outline-none"
+                    className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-3 text-sm focus:border-cyan-400 focus:outline-none"
                     placeholder="Opcional"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-lg bg-cyan-500 py-4 text-lg font-black text-zinc-900 active:bg-cyan-400 disabled:opacity-50"
+                  className="w-full rounded-lg bg-cyan-500 py-4 text-lg font-black text-sx-bg active:bg-cyan-400 disabled:opacity-50"
                 >
                   {loading ? 'Registrando...' : 'Registrar reforço'}
                 </button>
@@ -622,41 +622,41 @@ export default function SangeurPosPage() {
               <form onSubmit={handleCloseShift} className="space-y-3">
                 <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Encerrar turno</h2>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[10px] uppercase text-zinc-500">Iniciais</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[10px] uppercase text-sx-muted">Iniciais</p>
                     <p className="text-lg font-bold">{formatChips(activeShift.summary.initialChips)}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[10px] uppercase text-zinc-500">Reforço</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[10px] uppercase text-sx-muted">Reforço</p>
                     <p className="text-lg font-bold text-cyan-300">{formatChips(activeShift.summary.reloadedChips)}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[10px] uppercase text-zinc-500">Vendidas</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[10px] uppercase text-sx-muted">Vendidas</p>
                     <p className="text-lg font-bold text-amber-300">{formatChips(activeShift.summary.soldChips)}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[10px] uppercase text-zinc-500">Saldo atual</p>
-                    <p className="text-lg font-bold text-emerald-300">{formatChips(activeShift.summary.availableChips)}</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[10px] uppercase text-sx-muted">Saldo atual</p>
+                    <p className="text-lg font-bold text-sx-cyan">{formatChips(activeShift.summary.availableChips)}</p>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-zinc-400">Fichas devolvidas ao caixa</label>
+                  <label className="text-xs uppercase tracking-wide text-sx-muted">Fichas devolvidas ao caixa</label>
                   <input
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={closeForm.returnedChips}
                     onChange={(e) => setCloseForm((p) => ({ ...p, returnedChips: e.target.value.replace(/\D/g, '') }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-4 text-2xl font-bold focus:border-red-400 focus:outline-none"
+                    className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-4 text-2xl font-bold focus:border-red-400 focus:outline-none"
                     placeholder={String(activeShift.summary.availableChips || 0)}
                   />
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-zinc-400">Observação</label>
+                  <label className="text-xs uppercase tracking-wide text-sx-muted">Observação</label>
                   <input
                     type="text"
                     value={closeForm.note}
                     onChange={(e) => setCloseForm((p) => ({ ...p, note: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm focus:border-red-400 focus:outline-none"
+                    className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-3 text-sm focus:border-red-400 focus:outline-none"
                     placeholder="Opcional"
                   />
                 </div>
@@ -667,7 +667,7 @@ export default function SangeurPosPage() {
                 >
                   {loading ? 'Encerrando...' : 'Encerrar turno'}
                 </button>
-                <p className="text-center text-xs text-zinc-500">
+                <p className="text-center text-xs text-sx-muted">
                   O relatório completo fica disponível na versão desktop da POS.
                 </p>
               </form>
@@ -678,17 +678,17 @@ export default function SangeurPosPage() {
 
       {/* Tab bar inferior */}
       {activeShift && (
-        <div className="sticky bottom-0 z-20 mt-auto grid grid-cols-3 border-t border-zinc-800 bg-zinc-950">
+        <div className="sticky bottom-0 z-20 mt-auto grid grid-cols-3 border-t border-sx-border bg-sx-bg">
           {(['VENDA', 'REFORCO', 'FECHAR'] as Tab[]).map((t) => {
             const active = tab === t
-            const color = t === 'FECHAR' ? 'text-red-300' : t === 'REFORCO' ? 'text-cyan-300' : 'text-emerald-300'
+            const color = t === 'FECHAR' ? 'text-red-300' : t === 'REFORCO' ? 'text-cyan-300' : 'text-sx-cyan'
             return (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
                 className={`py-4 text-sm font-black uppercase tracking-wide transition-colors ${
-                  active ? `${color} border-t-2 ${t === 'FECHAR' ? 'border-red-400' : t === 'REFORCO' ? 'border-cyan-400' : 'border-emerald-400'} bg-zinc-900` : 'text-zinc-500'
+                  active ? `${color} border-t-2 ${t === 'FECHAR' ? 'border-red-400' : t === 'REFORCO' ? 'border-cyan-400' : 'border-sx-cyan'} bg-sx-card` : 'text-sx-muted'
                 }`}
               >
                 {t === 'REFORCO' ? 'Reforço' : t === 'FECHAR' ? 'Fechar' : 'Venda'}
@@ -702,19 +702,19 @@ export default function SangeurPosPage() {
       {selectedPlayer && activeShift && (
         <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/60" onClick={() => setSelectedPlayer(null)}>
           <div
-            className="w-full max-w-[430px] rounded-t-2xl border-t border-zinc-700 bg-zinc-900 p-4"
+            className="w-full max-w-[430px] rounded-t-2xl border-t border-sx-border2 bg-sx-card p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-zinc-700" />
+            <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-sx-border2" />
             <div className="mb-4 flex items-baseline justify-between">
               <div>
-                <p className="text-[10px] uppercase text-zinc-500">Venda para</p>
+                <p className="text-[10px] uppercase text-sx-muted">Venda para</p>
                 <p className="text-xl font-black">{selectedPlayer.name}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedPlayer(null)}
-                className="rounded-lg border border-zinc-700 px-3 py-2 text-xs"
+                className="rounded-lg border border-sx-border2 px-3 py-2 text-xs"
               >
                 Fechar
               </button>
@@ -722,25 +722,25 @@ export default function SangeurPosPage() {
 
             <form onSubmit={handleRegisterSale} className="space-y-3">
               <div>
-                <label className="text-xs uppercase tracking-wide text-zinc-400">Fichas</label>
+                <label className="text-xs uppercase tracking-wide text-sx-muted">Fichas</label>
                 <input
                   inputMode="numeric"
                   pattern="[0-9]*"
                   autoFocus
                   value={saleForm.chips}
                   onChange={(e) => setSaleForm((p) => ({ ...p, chips: e.target.value.replace(/\D/g, '') }))}
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-4 text-3xl font-black focus:border-emerald-400 focus:outline-none"
+                  className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-bg px-4 py-4 text-3xl font-black focus:border-sx-cyan focus:outline-none"
                   placeholder="0"
                 />
                 {chipValue > 0 && saleForm.chips && (
-                  <p className="mt-1 text-sm text-zinc-400">
-                    Valor: <span className="font-bold text-emerald-300">{formatCurrency(Number(saleForm.chips) * chipValue)}</span>
+                  <p className="mt-1 text-sm text-sx-muted">
+                    Valor: <span className="font-bold text-sx-cyan">{formatCurrency(Number(saleForm.chips) * chipValue)}</span>
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="text-xs uppercase tracking-wide text-zinc-400">Pagamento</label>
+                <label className="text-xs uppercase tracking-wide text-sx-muted">Pagamento</label>
                 <div className="mt-1 grid grid-cols-4 gap-2">
                   {availablePayments.map((m) => {
                     const active = saleForm.paymentMethod === m
@@ -750,7 +750,7 @@ export default function SangeurPosPage() {
                         type="button"
                         onClick={() => setSaleForm((p) => ({ ...p, paymentMethod: m }))}
                         className={`rounded-lg border px-2 py-3 text-xs font-bold transition-colors ${
-                          active ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200' : 'border-zinc-700 bg-zinc-950 text-zinc-400'
+                          active ? 'border-sx-cyan bg-sx-cyan/20 text-sx-cyan/80' : 'border-sx-border2 bg-sx-bg text-sx-muted'
                         }`}
                       >
                         {PAYMENT_LABELS[m]}
@@ -762,12 +762,12 @@ export default function SangeurPosPage() {
 
               {(saleForm.paymentMethod === 'PIX_QR' || saleForm.paymentMethod === 'CARD') && (
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-zinc-400">Referência (opcional)</label>
+                  <label className="text-xs uppercase tracking-wide text-sx-muted">Referência (opcional)</label>
                   <input
                     type="text"
                     value={saleForm.paymentReference}
                     onChange={(e) => setSaleForm((p) => ({ ...p, paymentReference: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none"
+                    className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-bg px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
                   />
                 </div>
               )}
@@ -775,7 +775,7 @@ export default function SangeurPosPage() {
               <button
                 type="submit"
                 disabled={loading || !saleForm.chips}
-                className="w-full rounded-lg bg-emerald-500 py-4 text-lg font-black text-zinc-900 active:bg-emerald-400 disabled:opacity-50"
+                className="w-full rounded-lg bg-sx-cyan py-4 text-lg font-black text-sx-bg active:bg-sx-cyan disabled:opacity-50"
               >
                 {loading ? 'Registrando...' : 'Registrar venda'}
               </button>
@@ -788,13 +788,13 @@ export default function SangeurPosPage() {
       {/* Modal PIX QR */}
       {pixQrModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-[400px] rounded-2xl border border-zinc-700 bg-zinc-900 p-5 space-y-4">
+          <div className="w-full max-w-[400px] rounded-2xl border border-sx-border2 bg-sx-card p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black text-zinc-100">QR Code PIX</h2>
               <button
                 type="button"
                 onClick={() => setPixQrModal(null)}
-                className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 active:bg-zinc-800"
+                className="rounded-lg border border-sx-border2 px-3 py-2 text-xs font-bold text-zinc-300 active:bg-sx-input"
               >
                 ✕ Fechar
               </button>
@@ -812,9 +812,9 @@ export default function SangeurPosPage() {
                   )}
                   {copyPaste && (
                     <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-wide text-zinc-500">PIX Copia e Cola</p>
+                      <p className="text-xs uppercase tracking-wide text-sx-muted">PIX Copia e Cola</p>
                       <div className="flex items-center gap-2">
-                        <code className="flex-1 break-all rounded-lg bg-zinc-800 px-3 py-2 text-xs font-mono text-cyan-300">
+                        <code className="flex-1 break-all rounded-lg bg-sx-input px-3 py-2 text-xs font-mono text-cyan-300">
                           {copyPaste}
                         </code>
                         <button
@@ -823,7 +823,7 @@ export default function SangeurPosPage() {
                             navigator.clipboard.writeText(copyPaste)
                             setSuccess('Código copiado')
                           }}
-                          className="shrink-0 rounded-lg bg-emerald-500 px-3 py-3 text-xs font-black text-zinc-900 active:bg-emerald-400"
+                          className="shrink-0 rounded-lg bg-sx-cyan px-3 py-3 text-xs font-black text-sx-bg active:bg-sx-cyan"
                         >
                           Copiar
                         </button>
@@ -831,21 +831,21 @@ export default function SangeurPosPage() {
                     </div>
                   )}
                   {!qrImg && !copyPaste && (
-                    <p className="text-sm text-zinc-500 text-center">QR code não disponível</p>
+                    <p className="text-sm text-sx-muted text-center">QR code não disponível</p>
                   )}
                 </>
               )
             })()}
 
             {pixStatusMsg && (
-              <p className="text-center text-sm text-zinc-400 animate-pulse">{pixStatusMsg}</p>
+              <p className="text-center text-sm text-sx-muted animate-pulse">{pixStatusMsg}</p>
             )}
 
             <button
               type="button"
               onClick={handleConfirmPixManual}
               disabled={confirmingPix}
-              className="w-full rounded-lg bg-emerald-500 py-4 text-base font-black text-zinc-900 active:bg-emerald-400 disabled:opacity-50"
+              className="w-full rounded-lg bg-sx-cyan py-4 text-base font-black text-sx-bg active:bg-sx-cyan disabled:opacity-50"
             >
               {confirmingPix ? 'Confirmando...' : 'Confirmar pagamento'}
             </button>
@@ -853,7 +853,7 @@ export default function SangeurPosPage() {
             <button
               type="button"
               onClick={() => { setPixQrModal(null); setPixSaleId(null); setPixStatusMsg('') }}
-              className="w-full rounded-lg bg-zinc-800 py-3 text-sm font-bold text-zinc-100 active:bg-zinc-700"
+              className="w-full rounded-lg bg-sx-input py-3 text-sm font-bold text-zinc-100 active:bg-sx-border2"
             >
               Fechar (manter pendente)
             </button>

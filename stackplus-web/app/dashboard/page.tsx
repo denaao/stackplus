@@ -184,84 +184,81 @@ export default function DashboardPage() {
             {games.map((game) => {
               const gameType = game.gameType || 'CASH_GAME'
               return (
-                <div key={game.id} className="bg-sx-card border border-sx-border rounded-xl p-6 transition-all group hover:border-sx-border2">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-bold text-lg text-white group-hover:text-sx-cyan transition-colors">{game.name}</h3>
-                      <p className="mt-1 text-xs uppercase tracking-wide text-sx-muted">{gameTypeLabel[gameType]}</p>
-                    </div>
-                    <div className="relative flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleConnectWhatsApp(game) }}
-                        disabled={connectingGameId === game.id || !canManageWhatsApp}
-                        className="h-7 rounded-md border border-green-700 bg-green-900/40 px-2 text-xs font-semibold text-green-300 hover:bg-green-800/50 disabled:opacity-50"
-                        title={canManageWhatsApp ? undefined : 'Disponivel apenas para HOST/ADMIN'}
-                      >
-                        {connectingGameId === game.id ? 'Gerando QR...' : 'WhatsApp'}
-                      </button>
-                      <span className="bg-sx-input text-sx-cyan text-xs font-mono font-bold px-2 py-1 rounded border border-sx-border">{game.joinCode}</span>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setOpenMenuId((prev) => prev === game.id ? null : game.id) }}
-                        className="h-7 w-7 rounded-md border border-sx-border bg-sx-input text-sx-muted hover:text-white hover:border-sx-border2 transition-colors"
-                        aria-label="Abrir menu"
-                      >
-                        ⋮
-                      </button>
-                      {openMenuId === game.id && (
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 top-9 z-10 w-44 rounded-lg border border-sx-border bg-sx-card2 p-1 shadow-xl"
+                <div
+                  key={game.id}
+                  onClick={() => router.push(`/homegame/${game.id}/select`)}
+                  className="relative rounded-2xl overflow-hidden transition-all group cursor-pointer"
+                  style={{
+                    background: 'linear-gradient(135deg, #0C2438 0%, #071828 55%, #050D15 100%)',
+                    border: '1px solid rgba(0,200,224,0.15)',
+                    boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(0,200,224,0.08)',
+                  }}
+                >
+                  {/* Left cyan accent bar */}
+                  <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl"
+                    style={{ background: 'linear-gradient(180deg, #00C8E0 0%, rgba(0,200,224,0.2) 100%)' }} />
+
+                  <div className="pl-5 pr-5 pt-5 pb-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="font-black text-lg text-white group-hover:text-sx-cyan transition-colors">{game.name}</h3>
+                        <span className="inline-block mt-1 text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: 'rgba(0,200,224,0.12)', color: '#00C8E0', border: '1px solid rgba(0,200,224,0.25)' }}>
+                          {gameTypeLabel[gameType]}
+                        </span>
+                      </div>
+                      <div className="relative flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleConnectWhatsApp(game) }}
+                          disabled={connectingGameId === game.id || !canManageWhatsApp}
+                          className="h-7 rounded-md border border-sx-cyan-dim bg-sx-cyan-deep/40 px-2 text-xs font-semibold text-sx-cyan hover:bg-sx-cyan-deep/50 disabled:opacity-50"
+                          title={canManageWhatsApp ? undefined : 'Disponivel apenas para HOST/ADMIN'}
                         >
-                          <button
-                            type="button"
-                            onClick={() => { setOpenMenuId(null); handleDeleteHomeGame(game) }}
-                            disabled={deletingId === game.id}
-                            className="w-full rounded-md px-3 py-2 text-left text-sm text-red-300 hover:bg-sx-input disabled:opacity-50"
+                          {connectingGameId === game.id ? 'Gerando QR...' : 'WhatsApp'}
+                        </button>
+                        <span className="text-xs font-mono font-bold px-2 py-1 rounded"
+                          style={{ background: 'rgba(0,200,224,0.1)', color: '#00C8E0', border: '1px solid rgba(0,200,224,0.2)' }}>
+                          {game.joinCode}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setOpenMenuId((prev) => prev === game.id ? null : game.id) }}
+                          className="h-7 w-7 rounded-md border border-sx-border bg-sx-input text-sx-muted hover:text-white hover:border-sx-border2 transition-colors"
+                          aria-label="Abrir menu"
+                        >
+                          ⋮
+                        </button>
+                        {openMenuId === game.id && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-0 top-9 z-10 w-44 rounded-lg border border-sx-border bg-sx-card2 p-1 shadow-xl"
                           >
-                            {deletingId === game.id ? 'Excluindo...' : 'Excluir Home Game'}
-                          </button>
-                        </div>
-                      )}
+                            <button
+                              type="button"
+                              onClick={() => { setOpenMenuId(null); handleDeleteHomeGame(game) }}
+                              disabled={deletingId === game.id}
+                              className="w-full rounded-md px-3 py-2 text-left text-sm text-red-300 hover:bg-sx-input disabled:opacity-50"
+                            >
+                              {deletingId === game.id ? 'Excluindo...' : 'Excluir Home Game'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Info */}
+                    <p className="text-sx-muted text-sm mb-1">📍 {game.address}</p>
+                    <p className="text-sx-muted text-sm mb-3">🕐 {game.dayOfWeek} às {game.startTime}</p>
+
+                    <div className="flex gap-4 text-xs text-sx-muted">
+                      <span>👥 {game._count.members} membros</span>
+                      <span>🎮 {game._count.sessions} sessões</span>
+                      <span>{gameType === 'CASH_GAME' ? `💵 R$ ${game.chipValue}/ficha` : '🏆 Estrutura de torneio'}</span>
                     </div>
                   </div>
 
-                  <p className="text-sx-muted text-sm mb-1">📍 {game.address}</p>
-                  <p className="text-sx-muted text-sm mb-4">🕐 {game.dayOfWeek} às {game.startTime}</p>
-
-                  <div className="flex gap-4 text-sm text-sx-muted">
-                    <span>👥 {game._count.members} membros</span>
-                    <span>🎮 {game._count.sessions} sessões</span>
-                    <span>{gameType === 'CASH_GAME' ? `💵 R$ ${game.chipValue}/ficha` : '🏆 Estrutura de torneio'}</span>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-sx-border">
-                    <p className="text-sm font-semibold text-sx-muted mb-3 text-center uppercase tracking-wider">Iniciar</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); router.push(`/homegame/${game.id}?new=cash`) }}
-                        className="rounded-lg border border-sx-cyan bg-sx-cyan/10 px-3 py-2 text-sm font-bold text-sx-cyan hover:bg-sx-cyan/20 transition-colors"
-                      >
-                        Cash Game
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); router.push(`/tournament/create?homeGameId=${game.id}`) }}
-                        className="rounded-lg border border-sx-cyan/50 bg-sx-cyan/5 px-3 py-2 text-sm font-bold text-sx-cyan/80 hover:bg-sx-cyan/15 transition-colors"
-                      >
-                        Torneio
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); router.push(`/comanda?homeGameId=${game.id}`) }}
-                        className="rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm font-bold text-white/60 hover:text-white hover:border-sx-cyan/50 transition-colors"
-                      >
-                        Comandas
-                      </button>
-                    </div>
-                  </div>
                 </div>
               )
             })}
@@ -290,7 +287,7 @@ export default function DashboardPage() {
               <div className="rounded-md border border-red-900/50 bg-red-950/40 p-3 text-sm text-red-300">{qrError}</div>
             ) : qrImage ? (
               <div className="space-y-3">
-                <div className={`rounded-md border p-3 text-sm ${qrConnected ? 'border-emerald-900/50 bg-emerald-950/40 text-emerald-300' : 'border-sx-border bg-sx-input text-white/70'}`}>
+                <div className={`rounded-md border p-3 text-sm ${qrConnected ? 'border-sx-cyan-deep/50 bg-sx-cyan-deep/40 text-sx-cyan' : 'border-sx-border bg-sx-input text-white/70'}`}>
                   {qrStatusMessage}
                 </div>
                 <div className="rounded-lg bg-white p-3">

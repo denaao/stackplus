@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import api from '@/services/api'
 import { joinSession, leaveSession, getSocket } from '@/services/socket'
+import { useAuthStore } from '@/store/useStore'
+import AppHeader from '@/components/AppHeader'
 
 interface Member { id: string; name: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null }
 interface PlayerState {
@@ -235,9 +237,23 @@ function resolvePlayerPaymentMode(financialModule: string | undefined, memberMod
   return memberMode === 'PREPAID' ? 'PREPAID' : 'POSTPAID'
 }
 
+const cardStyle: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)',
+  border: '1px solid rgba(0,200,224,0.12)',
+  borderRadius: '16px',
+  padding: '16px',
+}
+
+const cardStyle2: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)',
+  border: '1px solid rgba(0,200,224,0.12)',
+  borderRadius: '16px',
+}
+
 export default function CashierPage() {
   const router = useRouter()
   const params = useParams()
+  const { user, logout } = useAuthStore()
   const sessionId = params.sessionId as string
   const [session, setSession] = useState<any>(null)
   const [members, setMembers] = useState<Member[]>([])
@@ -289,8 +305,6 @@ export default function CashierPage() {
         })
       }
 
-      // Host may not exist in /groups/:homeGameId/members, so we merge selected
-      // session participants to ensure anyone selected for the match appears.
       for (const assignment of Array.isArray(data.participantAssignments) ? data.participantAssignments : []) {
         if (!assignment?.userId || !assignment?.user?.name) continue
         if (!memberMap.has(assignment.userId)) {
@@ -302,9 +316,6 @@ export default function CashierPage() {
         }
       }
 
-      // Qualquer jogador com playerState (ou seja, já recebeu fichas via caixa OU sangeur)
-      // precisa aparecer no dropdown, mesmo que o SessionParticipant não tenha sido criado
-      // (ex: vendas feitas antes do fix de upsert).
       for (const state of Array.isArray(data.playerStates) ? data.playerStates : []) {
         if (!state?.user?.id || !state?.user?.name) continue
         if (!memberMap.has(state.user.id)) {
@@ -339,7 +350,6 @@ export default function CashierPage() {
     }
     socket.on('connect', onConnect)
     if (socket.connected) {
-      // Already connected when effect ran — ensure we've joined the room.
       joinSession(sessionId)
     }
     socket.on('session:join:error', (payload: any) => {
@@ -350,8 +360,6 @@ export default function CashierPage() {
         const exists = prev.find((p) => p.userId === playerState.userId)
         return exists ? prev.map((p) => p.userId === playerState.userId ? playerState : p) : [...prev, playerState]
       })
-      // Se um jogador novo entrou via sangeur (ad-hoc), ele precisa aparecer na
-      // lista do caixa pra poder receber fichas e fazer cashout direto por aqui.
       if (playerState?.user?.id && playerState?.user?.name) {
         setMembers((prev) => {
           if (prev.some((m) => m.id === playerState.user.id)) return prev
@@ -700,18 +708,13 @@ export default function CashierPage() {
   const selectedPlayerState = playerStates.find((p) => p.userId === form.userId)
   const selectedPlayerCurrentStack = Number(selectedPlayerState?.currentStack || 0)
   const hasExistingBuyIn = Boolean(selectedPlayerState)
-  const selectableMembers = members.filter((member) => {
-    const state = playerStates.find((player) => player.userId === member.id)
-    return !state?.hasCashedOut
-  })
+  // Todos os membros são selecionáveis — quem fez cashout pode re-entrar com novo buy-in
+  const selectableMembers = members
   const totalChipsInPlay = playerStates.reduce((sum, p) => sum + Number(p.currentStack || 0), 0)
   const currentType = transactionType
 
   const allPlayersHaveCashedOut = playerStates.length > 0 && playerStates.every((p) => p.hasCashedOut)
   const activePlayers = playerStates.filter((p) => !p.hasCashedOut)
-  // Fichas não casheadas calculado a partir das transações (fonte de verdade),
-  // não do PlayerSessionState.currentStack — o currentStack pode estar
-  // corrompido em sessões antigas (bug do cashout zerando stack em cashout parcial).
   const pendingChipsByPlayer = (() => {
     const map = new Map<string, { in: number; out: number; userId: string; name: string }>()
     for (const t of transactions) {
@@ -844,20 +847,18 @@ export default function CashierPage() {
 
   if (sessionGameType === 'TOURNAMENT') {
     return (
-      <div className="min-h-screen bg-zinc-950">
-        <header className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center gap-3">
-          <button onClick={() => router.back()} className="text-zinc-400 hover:text-white">←</button>
-          <div>
-            <h1 className="font-bold">Caixa indisponível</h1>
-            <p className="text-xs text-zinc-400">{session?.homeGame?.name}</p>
-          </div>
-        </header>
-
-        <main className="max-w-2xl mx-auto px-6 py-12">
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-amber-100">
-            <h2 className="text-lg font-bold">Esta mesa foi criada como torneio</h2>
-            <p className="mt-2 text-sm text-amber-200/90">
-              O caixa atual pertence ao fluxo de cash game. A separacao entre cash game e torneio foi criada, mas o operacional especifico de torneio ainda precisa ser implementado antes de liberar esta tela.
+      <div style={{ minHeight: '100vh', background: '#050D15' }}>
+        <AppHeader
+          title={session?.homeGame?.name ?? 'Caixa indisponível'}
+          onBack={() => router.back()}
+          userName={user?.name}
+          onLogout={() => { logout(); router.push('/') }}
+        />
+        <main style={{ maxWidth: '768px', margin: '0 auto', padding: '48px 16px' }}>
+          <div style={{ borderRadius: '16px', border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.08)', padding: '24px', color: '#fde68a' }}>
+            <h2 style={{ fontSize: '17px', fontWeight: 700, marginBottom: '8px' }}>Esta mesa foi criada como torneio</h2>
+            <p style={{ fontSize: '14px', color: 'rgba(253,230,138,0.8)', margin: 0 }}>
+              O caixa pertence ao fluxo de cash game. Use a tela de torneio para gerenciar este evento.
             </p>
           </div>
         </main>
@@ -865,278 +866,324 @@ export default function CashierPage() {
     )
   }
 
-  return (
-    <div className="min-h-screen bg-zinc-950">
-      <header className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.back()} className="text-zinc-400 hover:text-white">←</button>
-        <div>
-          <h1 className="font-bold">Caixa</h1>
-          <p className="text-xs text-zinc-400">{session?.homeGame?.name}</p>
-        </div>
-      </header>
+  // Type button config
+  const typeButtons = (isJackpotEnabled
+    ? (['BUYIN', 'REBUY', 'CASHOUT', 'JACKPOT'] as const)
+    : (['BUYIN', 'REBUY', 'CASHOUT'] as const))
 
-      <main className="max-w-4xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div>
-          {allPlayersHaveCashedOut ? (
-            <>
-              <h2 className="text-lg font-bold mb-4">Encerramento</h2>
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
-                {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">{error}</div>}
-                {success && <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3">{success}</div>}
-                <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-                  <p className="text-sm font-semibold text-zinc-100">Todos os jogadores já realizaram cashout.</p>
-                  <p className="mt-1 text-sm text-zinc-400">A partida está operacionalmente encerrada. Agora restam apenas os trâmites finais.</p>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">Staff selecionado</p>
-                  <p className="mt-2 text-sm text-zinc-200">
-                    {staffAssignments.length > 0 ? staffAssignments.map((assignment) => assignment.user.name).join(', ') : 'Nenhum staff selecionado'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowEndModal(true)}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg transition-colors text-lg"
+  const typeConfig: Record<string, { label: string; activeGrad: string; activeBorder: string; idleColor: string }> = {
+    BUYIN:  { label: 'Buy-in',  activeGrad: 'linear-gradient(135deg,#006070,#003848)', activeBorder: '#00C8E0', idleColor: 'rgba(0,200,224,0.15)' },
+    REBUY:  { label: 'Rebuy',   activeGrad: 'linear-gradient(135deg,#1e3a8a,#0f1e5c)', activeBorder: '#60a5fa', idleColor: 'rgba(96,165,250,0.12)' },
+    CASHOUT:{ label: 'Cashout', activeGrad: 'linear-gradient(135deg,#7f1d1d,#450a0a)', activeBorder: '#f87171', idleColor: 'rgba(248,113,113,0.12)' },
+    JACKPOT:{ label: 'Jackpot', activeGrad: 'linear-gradient(135deg,#005A73,#002A3A)', activeBorder: '#00C8E0', idleColor: 'rgba(0,200,224,0.12)' },
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#050D15', color: '#e2e8f0' }}>
+      <AppHeader
+        title={session?.homeGame?.name ?? 'Caixa'}
+        onBack={() => router.back()}
+        userName={user?.name}
+        onLogout={() => { logout(); router.push('/') }}
+        rightSlot={playerStates.length > 0 ? (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ background: 'rgba(0,200,224,0.08)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '20px', padding: '3px 10px', fontSize: '12px' }}>
+              <span style={{ color: '#4A7A90' }}>fichas </span>
+              <span style={{ color: '#00C8E0', fontWeight: 700 }}>{formatChips(totalChipsInPlay)}</span>
+            </div>
+            <div style={{ background: 'rgba(0,200,224,0.08)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '20px', padding: '3px 10px', fontSize: '12px' }}>
+              <span style={{ color: '#4A7A90' }}>jogadores </span>
+              <span style={{ color: '#00C8E0', fontWeight: 700 }}>{activePlayers.length}</span>
+            </div>
+          </div>
+        ) : undefined}
+      />
+
+      <main style={{ maxWidth: '768px', margin: '0 auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+        {/* Global feedback */}
+        {error && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '10px', padding: '10px 14px', fontSize: '13px' }}>{error}</div>
+        )}
+        {success && (
+          <div style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.3)', color: '#86efac', borderRadius: '10px', padding: '10px 14px', fontSize: '13px' }}>{success}</div>
+        )}
+
+        {/* === ENCERRAMENTO (todos cashearam) === */}
+        {allPlayersHaveCashedOut ? (
+          <div style={cardStyle}>
+            <div style={{ marginBottom: '12px' }}>
+              <p style={{ fontWeight: 700, fontSize: '15px', color: '#fff', margin: '0 0 4px' }}>Todos os jogadores realizaram cashout</p>
+              <p style={{ fontSize: '13px', color: '#4A7A90', margin: 0 }}>A partida está operacionalmente encerrada.</p>
+            </div>
+            {staffAssignments.length > 0 && (
+              <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '12px' }}>
+                <span style={{ color: '#4A7A90' }}>Staff: </span>{staffAssignments.map((a) => a.user.name).join(', ')}
+              </p>
+            )}
+            {pendingChips > 0 && (
+              <p style={{ fontSize: '13px', color: '#4A7A90', marginBottom: '12px' }}>
+                Fichas em aberto: <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{formatChips(pendingChips)}</span>
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowEndModal(true)}
+              style={{ width: '100%', background: 'linear-gradient(135deg,#005A73,#002A3A)', border: '1px solid rgba(0,200,224,0.35)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '14px', cursor: 'pointer' }}
+            >
+              Encerrar Partida
+            </button>
+          </div>
+        ) : (
+          /* === FORMULÁRIO DE TRANSAÇÃO === */
+          <div style={cardStyle}>
+            <p style={{ fontWeight: 700, fontSize: '14px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>Registrar transação</p>
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Jogador */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Jogador</label>
+                <select
+                  value={form.userId}
+                  onChange={(e) => {
+                    const userId = e.target.value
+                    const ps = playerStates.find((p) => p.userId === userId)
+                    setForm((prev) => ({ ...prev, userId }))
+                    setTransactionType(ps && !ps.hasCashedOut ? 'REBUY' : 'BUYIN')
+                  }}
+                  style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
                 >
-                  Encerrar Partida
-                </button>
-                {pendingChips > 0 && (
-                  <p className="text-sm text-zinc-400 text-center">
-                    Fichas em aberto: <span className="font-semibold text-zinc-200">{formatChips(pendingChips)}</span>
-                  </p>
+                  <option value="">Selecione...</option>
+                  {selectableMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </div>
+
+              {/* Tipo — grid 2×2 */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Tipo</label>
+                <div style={{ display: 'grid', gridTemplateColumns: isJackpotEnabled ? '1fr 1fr' : '1fr 1fr 1fr', gap: '8px' }}>
+                  {typeButtons.map((t) => {
+                    const isDisabled =
+                      (t === 'BUYIN' && hasExistingBuyIn && !selectedPlayerState?.hasCashedOut) ||
+                      (t === 'CASHOUT' && (!hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut))) ||
+                      (t === 'REBUY' && (!hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut))) ||
+                      (t === 'JACKPOT' && (!isJackpotEnabled || !hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut)))
+                    const cfg = typeConfig[t]
+                    const isActive = currentType === t
+
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => !isDisabled && setTransactionType(t)}
+                        style={{
+                          padding: '10px 8px',
+                          borderRadius: '10px',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.15s',
+                          background: isDisabled
+                            ? 'rgba(10,31,48,0.5)'
+                            : isActive
+                              ? cfg.activeGrad
+                              : cfg.idleColor,
+                          border: isDisabled
+                            ? '1px solid rgba(255,255,255,0.05)'
+                            : isActive
+                              ? `1px solid ${cfg.activeBorder}`
+                              : '1px solid transparent',
+                          color: isDisabled
+                            ? '#4A7A90'
+                            : isActive
+                              ? '#fff'
+                              : '#94a3b8',
+                          opacity: isDisabled ? 0.5 : 1,
+                        }}
+                      >
+                        {cfg.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {selectedPlayerState?.hasCashedOut && (
+                  <p style={{ fontSize: '12px', color: '#4A7A90', marginTop: '6px' }}>Jogador já realizou cashout nesta sessão.</p>
                 )}
               </div>
-            </>
-          ) : (
-            <>
-              <h2 className="text-lg font-bold mb-4">Registrar Transação</h2>
-              <form onSubmit={handleSubmit} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Jogador</label>
-                  <select
-                    value={form.userId}
-                    onChange={(e) => {
-                      const userId = e.target.value
-                      const ps = playerStates.find((p) => p.userId === userId)
-                      setForm((prev) => ({ ...prev, userId }))
-                      setTransactionType(ps ? 'REBUY' : 'BUYIN')
-                    }}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-yellow-400"
-                  >
-                    <option value="">Selecione...</option>
-                    {selectableMembers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo</label>
-                  <div className="flex flex-col gap-2">
-                    {(isJackpotEnabled
-                      ? (['BUYIN', 'REBUY', 'CASHOUT', 'JACKPOT'] as const)
-                      : (['BUYIN', 'REBUY', 'CASHOUT'] as const)).map((t) => {
-                      const isDisabled =
-                        (t === 'BUYIN' && hasExistingBuyIn) ||
-                        (t === 'CASHOUT' && Boolean(selectedPlayerState?.hasCashedOut)) ||
-                        (t === 'REBUY' && Boolean(selectedPlayerState?.hasCashedOut)) ||
-                        (t === 'JACKPOT' && (!isJackpotEnabled || !hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut)))
+              {/* Fichas */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
+                  {currentType === 'JACKPOT' ? 'Fichas de prêmio JACKPOT' : 'Fichas'}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.chips}
+                  onChange={(e) => setForm((prev) => ({ ...prev, chips: e.target.value }))}
+                  placeholder="0"
+                  style={{ width: '100%', background: '#0A1F30', border: `1px solid ${currentType === 'JACKPOT' ? 'rgba(0,200,224,0.25)' : 'rgba(0,200,224,0.15)'}`, borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
+                />
+                {currentType === 'CASHOUT' && playerStates.length > 0 && (
+                  <p style={{ fontSize: '12px', color: '#4A7A90', marginTop: '4px' }}>Stack atual: {formatChips(selectedPlayerCurrentStack)} fichas</p>
+                )}
+                {form.chips && chipValue && (
+                  <p style={{ fontSize: '12px', color: '#4A7A90', marginTop: '4px' }}>≈ {formatCurrency(parseFloat(form.chips) * chipValue)}</p>
+                )}
+              </div>
 
-                      const activeClass = t === 'CASHOUT'
-                        ? 'bg-red-500 text-white border-2 border-red-300'
-                        : t === 'JACKPOT'
-                          ? 'bg-emerald-500 text-white border-2 border-emerald-300'
-                        : 'bg-yellow-400 text-zinc-900 border-2 border-yellow-200'
+              <button
+                type="submit"
+                disabled={loading}
+                style={{ width: '100%', background: loading ? 'rgba(0,200,224,0.3)' : 'linear-gradient(135deg,#006070,#003848)', border: '1px solid rgba(0,200,224,0.4)', borderRadius: '10px', color: loading ? '#4A7A90' : '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '13px', cursor: loading ? 'not-allowed' : 'pointer' }}
+              >
+                {loading ? 'Registrando...' : 'Registrar'}
+              </button>
+            </form>
+          </div>
+        )}
 
-                      const idleClass = t === 'CASHOUT'
-                        ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-transparent'
-                        : t === 'JACKPOT'
-                          ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-transparent'
-                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-transparent'
-
-                      const label = t === 'JACKPOT' ? 'Receber JACKPOT' : t
-
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          disabled={isDisabled}
-                          onClick={() => !isDisabled && setTransactionType(t)}
-                          className={`w-full py-2 rounded-lg text-sm font-bold transition-colors ${
-                            isDisabled
-                              ? 'bg-zinc-800/60 text-zinc-500 cursor-not-allowed'
-                              : currentType === t
-                                ? activeClass
-                                : idleClass
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {hasExistingBuyIn && !selectedPlayerState?.hasCashedOut && isJackpotEnabled && (
-                    <p className="text-xs text-zinc-500">Buy-in já realizado — disponível: REBUY, CASHOUT e Receber JACKPOT.</p>
-                  )}
-                  {!hasExistingBuyIn && form.userId && isJackpotEnabled && (
-                    <p className="text-xs text-zinc-500">JACKPOT fica disponível após o buy-in do jogador.</p>
-                  )}
-                  {selectedPlayerState?.hasCashedOut && (
-                    <p className="text-xs text-zinc-500">Jogador já realizou cashout nesta sessão.</p>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">
-                    {currentType === 'JACKPOT' ? 'Fichas de prêmio JACKPOT' : 'Fichas'}
-                  </label>
-                  <input type="number" min="0" value={form.chips} onChange={(e) => setForm((prev) => ({ ...prev, chips: e.target.value }))}
-                    className={`w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none ${currentType === 'JACKPOT' ? 'focus:border-emerald-400' : 'focus:border-yellow-400'}`} placeholder="0" />
-                  {currentType === 'CASHOUT' && playerStates.length > 0 && (
-                    <p className="text-xs text-zinc-500">Stack atual: {formatChips(selectedPlayerCurrentStack)} fichas. Informe o valor final com que o jogador está saindo.</p>
-                  )}
-                  {form.chips && chipValue && (
-                    <p className="text-xs text-zinc-400">≈ {formatCurrency(parseFloat(form.chips) * chipValue)}</p>
-                  )}
-                </div>
-
-                <button type="submit" disabled={loading}
-                  className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50">
-                  {loading ? 'Registrando...' : 'Registrar'}
-                </button>
-
-                {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">{error}</div>}
-                {success && <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3">{success}</div>}
-              </form>
-            </>
-          )}
-        </div>
-
-        <div>
-          <h2 className="text-lg font-bold mb-4">Jogadores</h2>
-          <div className="space-y-3">
-            {activePlayers.length === 0 ? (
-              <p className="text-zinc-500 text-sm">Nenhum jogador ainda</p>
-            ) : (
-              [...activePlayers].sort((a, b) => parseFloat(b.result) - parseFloat(a.result)).map((p) => {
+        {/* === JOGADORES === */}
+        {playerStates.length > 0 && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <p style={{ fontWeight: 700, fontSize: '14px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Jogadores</p>
+              {playerStates.length - activePlayers.length > 0 && (
+                <span style={{ fontSize: '12px', color: '#4A7A90', background: 'rgba(0,200,224,0.06)', border: '1px solid rgba(0,200,224,0.1)', borderRadius: '20px', padding: '2px 10px' }}>
+                  {playerStates.length - activePlayers.length} encerraram
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[...activePlayers].sort((a, b) => parseFloat(b.result) - parseFloat(a.result)).map((p) => {
                 const playerTransactions = transactions
-                  .filter((transaction) => transaction.userId === p.userId)
+                  .filter((t) => t.userId === p.userId)
                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                const totalMoved = playerTransactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0)
+
+                const resultNum = parseFloat(p.result || '0')
+                const borderColor = p.hasCashedOut
+                  ? resultNum > 0 ? '#00C8E0' : resultNum < 0 ? '#f87171' : '#4A7A90'
+                  : '#00C8E0'
 
                 return (
-                <div key={p.userId} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-sm">{p.user?.name || 'Jogador'}</span>
-                    {p.hasCashedOut && <span className="text-xs bg-zinc-700 text-zinc-400 px-2 py-0.5 rounded">Cashout</span>}
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div><p className="text-zinc-500">Investido</p><p className="font-bold">{formatCurrency(p.chipsIn)}</p></div>
-                    <div><p className="text-zinc-500">Sacado</p><p className="font-bold">{p.hasCashedOut ? formatCurrency(p.chipsOut) : '—'}</p></div>
-                    <div>
-                      {p.hasCashedOut ? (() => {
-                        const result = parseFloat(p.result)
-                        if (result < 0) return (
-                          <>
-                            <p className="text-zinc-500">Deve pagar</p>
-                            <p className="font-bold text-red-400">{formatCurrency(Math.abs(result))}</p>
-                          </>
-                        )
-                        if (result > 0) return (
-                          <>
-                            <p className="text-zinc-500">Deve receber</p>
-                            <p className="font-bold text-green-400">{formatCurrency(result)}</p>
-                          </>
-                        )
-                        return (
-                          <>
-                            <p className="text-zinc-500">Resultado</p>
-                            <p className="font-bold text-zinc-400">Empatou</p>
-                          </>
-                        )
-                      })() : (
-                        <>
-                          <p className="text-zinc-500">Stack</p>
-                          <p className="font-bold">{formatChips(p.currentStack)}</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                    <div className="mb-3 flex items-center justify-between text-xs">
-                      <p className="text-zinc-400 uppercase tracking-wide">Auditoria</p>
-                      <p className="text-zinc-500">Total movimentado: <span className="font-semibold text-zinc-200">{formatCurrency(totalMoved)}</span></p>
-                    </div>
-
-                    {playerTransactions.length === 0 ? (
-                      <p className="text-xs text-zinc-500">Sem transações registradas.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {playerTransactions.map((transaction) => {
-                          const isSangeur = typeof transaction.registeredBy === 'string' && transaction.registeredBy.startsWith('sangeur:')
-                          return (
-                          <div key={transaction.id} className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[10px] font-bold uppercase tracking-wide rounded border px-1.5 py-0.5 ${
-                                  isSangeur
-                                    ? 'border-purple-500/40 bg-purple-500/10 text-purple-300'
-                                    : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'
-                                }`}>
-                                  {isSangeur ? 'Sangeur' : 'Caixa'}
-                                </span>
-                                <div>
-                                  <p className="font-semibold text-zinc-100">{transactionTypeLabel[transaction.type]}</p>
-                                  <p className="text-zinc-500">{formatDateTime(transaction.createdAt)}</p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="font-semibold text-zinc-100">{formatCurrency(transaction.amount)}</p>
-                                <p className="text-zinc-500">
-                                  {formatChips(transaction.chips)} fichas{transaction.type === 'JACKPOT' ? ' (prêmio)' : ''}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="mt-2 flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTransaction(transaction.id)}
-                                disabled={deletingTransactionId === transaction.id}
-                                className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
-                              >
-                                {deletingTransactionId === transaction.id ? 'Excluindo...' : 'Excluir transação'}
-                              </button>
-                            </div>
-                            {transaction.note && <p className="mt-2 text-zinc-400">{transaction.note}</p>}
+                  <div key={p.userId} style={{ ...cardStyle2, overflow: 'hidden' }}>
+                    {/* Colored left accent */}
+                    <div style={{ display: 'flex' }}>
+                      <div style={{ width: '3px', background: borderColor, flexShrink: 0 }} />
+                      <div style={{ flex: 1, padding: '14px' }}>
+                        {/* Player header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <div>
+                            <p style={{ fontWeight: 700, fontSize: '15px', margin: 0 }}>{p.user?.name || 'Jogador'}</p>
+                            {p.hasCashedOut && (
+                              <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)', color: '#4A7A90', padding: '2px 8px', borderRadius: '20px', display: 'inline-block', marginTop: '3px' }}>Cashout</span>
+                            )}
                           </div>
-                        )})}
+                          <div style={{ textAlign: 'right' }}>
+                            {p.hasCashedOut ? (
+                              <>
+                                <p style={{ fontSize: '11px', color: '#4A7A90', margin: '0 0 2px' }}>{resultNum >= 0 ? 'Deve receber' : 'Deve pagar'}</p>
+                                <p style={{ fontWeight: 700, fontSize: '16px', margin: 0, color: resultNum > 0 ? '#00C8E0' : resultNum < 0 ? '#f87171' : '#4A7A90' }}>
+                                  {formatCurrency(Math.abs(resultNum))}
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p style={{ fontSize: '11px', color: '#4A7A90', margin: '0 0 2px' }}>Stack</p>
+                                <p style={{ fontWeight: 700, fontSize: '16px', margin: 0, color: '#00C8E0' }}>{formatChips(p.currentStack)}</p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stats row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                          <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '8px 10px' }}>
+                            <p style={{ fontSize: '11px', color: '#4A7A90', margin: '0 0 2px' }}>Investido</p>
+                            <p style={{ fontWeight: 700, fontSize: '14px', margin: 0 }}>{formatCurrency(p.chipsIn)}</p>
+                          </div>
+                          <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '8px 10px' }}>
+                            <p style={{ fontSize: '11px', color: '#4A7A90', margin: '0 0 2px' }}>Sacado</p>
+                            <p style={{ fontWeight: 700, fontSize: '14px', margin: 0 }}>{p.hasCashedOut ? formatCurrency(p.chipsOut) : '—'}</p>
+                          </div>
+                        </div>
+
+                        {/* Transactions */}
+                        {playerTransactions.length > 0 && (
+                          <div style={{ borderTop: '1px solid rgba(0,200,224,0.08)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <p style={{ fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>Transações</p>
+                            {playerTransactions.map((tx) => {
+                              const isSangeur = typeof tx.registeredBy === 'string' && tx.registeredBy.startsWith('sangeur:')
+                              return (
+                                <div key={tx.id} style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,200,224,0.06)', borderRadius: '8px', padding: '8px 10px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{
+                                        fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                                        borderRadius: '4px', padding: '2px 6px',
+                                        border: isSangeur ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(0,200,224,0.3)',
+                                        background: isSangeur ? 'rgba(168,85,247,0.1)' : 'rgba(0,200,224,0.08)',
+                                        color: isSangeur ? '#c084fc' : '#00C8E0',
+                                      }}>
+                                        {isSangeur ? 'Sangeur' : 'Caixa'}
+                                      </span>
+                                      <div>
+                                        <p style={{ fontWeight: 600, fontSize: '13px', margin: 0 }}>{transactionTypeLabel[tx.type]}</p>
+                                        <p style={{ fontSize: '11px', color: '#4A7A90', margin: 0 }}>{formatDateTime(tx.createdAt)}</p>
+                                      </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                      <p style={{ fontWeight: 600, fontSize: '13px', margin: 0 }}>{formatCurrency(tx.amount)}</p>
+                                      <p style={{ fontSize: '11px', color: '#4A7A90', margin: 0 }}>{formatChips(tx.chips)} fichas</p>
+                                    </div>
+                                  </div>
+                                  {tx.note && <p style={{ fontSize: '11px', color: '#4A7A90', marginTop: '4px' }}>{tx.note}</p>}
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteTransaction(tx.id)}
+                                      disabled={deletingTransactionId === tx.id}
+                                      style={{ fontSize: '11px', fontWeight: 700, color: '#f87171', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: '6px', padding: '3px 10px', cursor: deletingTransactionId === tx.id ? 'not-allowed' : 'pointer', opacity: deletingTransactionId === tx.id ? 0.6 : 1 }}
+                                    >
+                                      {deletingTransactionId === tx.id ? 'Excluindo...' : 'Excluir'}
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-              )})
-            )}
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
       </main>
 
+      {/* === MODAL ENCERRAMENTO === */}
       {showEndModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-6 space-y-4">
-            <h2 className="text-xl font-bold">Encerrar Partida</h2>
-            
-            <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
-              <p className="text-zinc-400">Fichas não casheadas:</p>
-              <p className="text-lg font-bold text-yellow-400">{formatChips(pendingChips)} fichas</p>
-              <p className="text-xs text-zinc-500 mt-1">≈ {formatCurrency(pendingChips * chipValue)}</p>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50, padding: '0' }}>
+          <div style={{ background: 'linear-gradient(180deg,#0C2238 0%,#071828 100%)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '768px', maxHeight: '90vh', overflowY: 'auto', padding: '24px 20px 32px' }}>
+            <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.15)', borderRadius: '4px', margin: '0 auto 20px' }} />
+            <h2 style={{ fontWeight: 700, fontSize: '18px', margin: '0 0 16px' }}>Encerrar Partida</h2>
+
+            {/* Fichas pendentes */}
+            <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,200,224,0.1)', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px' }}>
+              <p style={{ fontSize: '12px', color: '#4A7A90', margin: '0 0 4px' }}>Fichas não casheadas</p>
+              <p style={{ fontWeight: 700, fontSize: '20px', color: '#00C8E0', margin: '0 0 2px' }}>{formatChips(pendingChips)}</p>
+              <p style={{ fontSize: '12px', color: '#4A7A90', margin: 0 }}>≈ {formatCurrency(pendingChips * chipValue)}</p>
               {pendingChipsByPlayer.length > 0 && (
-                <div className="mt-3 space-y-1 border-t border-zinc-700 pt-2">
-                  <p className="text-[10px] uppercase tracking-wide text-zinc-500">Detalhe por jogador</p>
-                  {pendingChipsByPlayer.map((p) => (
-                    <div key={p.userId} className="flex items-center justify-between text-xs text-zinc-300">
-                      <span className="truncate">{p.name}</span>
-                      <span className="font-mono text-zinc-400">
-                        {formatChips(p.in)} − {formatChips(p.out)} = <span className={p.result > 0 ? 'text-green-400' : p.result < 0 ? 'text-red-400' : 'text-zinc-500'}>{p.result > 0 ? '+' : ''}{formatChips(p.result)}</span>
+                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(0,200,224,0.08)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {pendingChipsByPlayer.map((pl) => (
+                    <div key={pl.userId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{pl.name}</span>
+                      <span style={{ color: pl.result > 0 ? '#00C8E0' : pl.result < 0 ? '#f87171' : '#4A7A90', fontWeight: 600, marginLeft: '8px' }}>
+                        {pl.result > 0 ? '+' : ''}{formatChips(pl.result)}
                       </span>
                     </div>
                   ))}
@@ -1145,156 +1192,105 @@ export default function CashierPage() {
             </div>
 
             {isJackpotEnabled && (
-              <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
-                <p className="text-zinc-400">JACKPOT distribuído:</p>
-                <p className="text-lg font-bold text-emerald-400">{formatCurrency(jackpotDistributed)}</p>
-                <p className="text-xs text-zinc-500 mt-2">Total distribuído nas transações do tipo JACKPOT nesta sessão.</p>
+              <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,200,224,0.12)', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px' }}>
+                <p style={{ fontSize: '12px', color: '#4A7A90', margin: '0 0 4px' }}>JACKPOT distribuído nesta partida</p>
+                <p style={{ fontWeight: 700, fontSize: '16px', color: '#00C8E0', margin: '0 0 4px' }}>{formatCurrency(jackpotDistributed)}</p>
+                <p style={{ fontSize: '12px', color: '#4A7A90', margin: 0 }}>Jackpot atual: {formatCurrency(jackpotAtual)} → projetado: <span style={{ color: '#86efac' }}>{formatCurrency(jackpotProjetado)}</span></p>
               </div>
             )}
 
-            {isJackpotEnabled && (
-              <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
-                <p className="text-zinc-400">JACKPOT atual do Home Game:</p>
-                <p className="text-lg font-bold text-zinc-100">{formatCurrency(jackpotAtual)}</p>
-                <p className="text-xs text-zinc-500 mt-2">Novo JACKPOT projetado: <span className="font-semibold text-emerald-300">{formatCurrency(jackpotProjetado)}</span></p>
+            {staffAssignments.length > 0 && (
+              <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,200,224,0.1)', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px' }}>
+                <p style={{ fontSize: '12px', color: '#4A7A90', margin: '0 0 4px' }}>Staff</p>
+                <p style={{ fontSize: '13px', color: '#e2e8f0', margin: '0 0 8px' }}>{staffAssignments.map((a) => a.user.name).join(', ')}</p>
+                {rakebackAssignments.length > 0 && (
+                  <>
+                    <p style={{ fontSize: '12px', color: '#4A7A90', margin: '4px 0 4px' }}>Rakeback</p>
+                    <p style={{ fontSize: '13px', color: '#e2e8f0', margin: 0 }}>
+                      {rakebackAssignments.map((a) => `${a.user.name} (${Number(a.percent || 0).toFixed(2)}%)`).join(', ')}
+                    </p>
+                    {hasInvalidRakebackSplit && <p style={{ fontSize: '12px', color: '#f87171', marginTop: '4px' }}>A soma do rakeback não pode ultrapassar 100%.</p>}
+                    {rakebackDistributionPreview.length > 0 && (
+                      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {rakebackDistributionPreview.map((item) => (
+                          <div key={`rb-${item.userId}`} style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '6px', padding: '6px 10px', fontSize: '12px' }}>
+                            <span>{item.name} ({item.percent.toFixed(2)}%)</span>
+                            <span style={{ color: '#fbbf24', fontWeight: 600 }}>{formatCurrency(item.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
-            <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 text-sm">
-              <p className="text-zinc-400">Staff da partida:</p>
-              <p className="mt-2 text-zinc-100">
-                {staffAssignments.length > 0 ? staffAssignments.map((assignment) => assignment.user.name).join(', ') : 'Nenhum staff selecionado'}
-              </p>
-              <p className="mt-3 text-zinc-400">Rakeback:</p>
-              <p className="mt-1 text-zinc-100">
-                {rakebackAssignments.length > 0
-                  ? rakebackAssignments.map((assignment) => `${assignment.user.name} (${Number(assignment.percent || 0).toFixed(2)}%)`).join(', ')
-                  : 'Nenhum rakeback selecionado'}
-              </p>
-              {parsedRake > 0 && rakebackAssignments.length > 0 && (
-                <p className="mt-2 text-xs text-zinc-400">Rakeback total configurado: {totalRakebackPercent.toFixed(2)}% do rake</p>
-              )}
-              {hasInvalidRakebackSplit && (
-                <p className="mt-2 text-xs text-red-400">A soma das porcentagens de rakeback do staff não pode ultrapassar 100%.</p>
-              )}
-              {rakebackDistributionPreview.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {rakebackDistributionPreview.map((item) => (
-                    <div key={`rakeback-${item.userId}`} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
-                      <span className="text-zinc-200">{item.name} ({item.percent.toFixed(2)}%)</span>
-                      <span className="font-semibold text-amber-300">{formatCurrency(item.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {parsedCaixinha > 0 && staffAssignments.length > 0 && (
-                <p className="mt-2 text-xs text-zinc-400">Divisão da caixinha: {formatCurrency(caixinhaPerStaff)} por pessoa</p>
-              )}
-              {hasInvalidCaixinhaSplit && (
-                <p className="mt-2 text-xs text-red-400">Valor inválido: a caixinha precisa dividir igualmente entre o total de staff.</p>
-              )}
-              {caixinhaDistributionPreview.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {caixinhaDistributionPreview.map((item) => (
-                    <div key={item.userId} className="flex items-center justify-between rounded-md border border-zinc-700/70 bg-zinc-900/40 px-3 py-2 text-xs">
-                      <span className="text-zinc-200">{item.name}</span>
-                      <span className="font-semibold text-green-400">{formatCurrency(item.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <form onSubmit={handleEndSession} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '10px', padding: '10px 14px', fontSize: '13px' }}>{error}</div>}
+              {success && <div style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.3)', color: '#86efac', borderRadius: '10px', padding: '10px 14px', fontSize: '13px' }}>{success}</div>}
 
-            <form onSubmit={handleEndSession} className="space-y-4">
-              {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">{error}</div>}
-              {success && <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3">{success}</div>}
-
-              <div className="space-y-1">
-                <label className="text-xs text-zinc-400 uppercase tracking-wide">Rake (R$)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={endForm.rake}
-                  onChange={(e) => setEndForm((prev) => ({ ...prev, rake: e.target.value }))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
-                  placeholder="0.00"
-                />
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Rake (R$)</label>
+                <input type="number" step="0.01" min="0" value={endForm.rake} onChange={(e) => setEndForm((p) => ({ ...p, rake: e.target.value }))} placeholder="0.00"
+                  style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
               </div>
 
               {caixinhaMode === 'INDIVIDUAL' ? (
-                <div className="space-y-2">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Caixinha por staff (R$)</label>
-                  {staffAssignments.length === 0 ? (
-                    <p className="text-xs text-zinc-500">Nenhum staff selecionado para essa partida.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {staffAssignments.map((assignment) => (
-                        <div key={assignment.userId} className="flex items-center gap-3">
-                          <span className="flex-1 text-sm text-zinc-200 truncate">{assignment.user.name}</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={caixinhaByStaff[assignment.userId] ?? ''}
-                            onChange={(e) => setCaixinhaByStaff((prev) => ({ ...prev, [assignment.userId]: e.target.value }))}
-                            className="w-32 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-400"
-                            placeholder="0.00"
-                          />
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Caixinha por staff (R$)</label>
+                  {staffAssignments.length === 0
+                    ? <p style={{ fontSize: '13px', color: '#4A7A90' }}>Nenhum staff selecionado.</p>
+                    : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {staffAssignments.map((a) => (
+                          <div key={a.userId} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ flex: 1, fontSize: '14px', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.user.name}</span>
+                            <input type="number" step="0.01" min="0" value={caixinhaByStaff[a.userId] ?? ''} onChange={(e) => setCaixinhaByStaff((p) => ({ ...p, [a.userId]: e.target.value }))} placeholder="0.00"
+                              style={{ width: '120px', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '8px 12px', fontSize: '14px', color: '#fff', outline: 'none' }} />
+                          </div>
+                        ))}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid rgba(0,200,224,0.08)', fontSize: '13px' }}>
+                          <span style={{ color: '#4A7A90' }}>Total caixinha</span>
+                          <span style={{ fontWeight: 700 }}>{formatCurrency(parsedCaixinha)}</span>
                         </div>
-                      ))}
-                      <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
-                        <span className="text-xs text-zinc-500 uppercase tracking-wide">Total caixinha</span>
-                        <span className="text-sm font-semibold text-zinc-100">{formatCurrency(parsedCaixinha)}</span>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               ) : (
-                <div className="space-y-1">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Caixinha (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={endForm.caixinha}
-                    onChange={(e) => setEndForm((prev) => ({ ...prev, caixinha: e.target.value }))}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
-                    placeholder="0.00"
-                  />
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Caixinha (R$)</label>
+                  <input type="number" step="0.01" min="0" value={endForm.caixinha} onChange={(e) => setEndForm((p) => ({ ...p, caixinha: e.target.value }))} placeholder="0.00"
+                    style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+                  {hasInvalidCaixinhaSplit && <p style={{ fontSize: '12px', color: '#f87171', marginTop: '4px' }}>A caixinha precisa dividir igualmente entre o staff.</p>}
+                  {caixinhaDistributionPreview.length > 0 && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {caixinhaDistributionPreview.map((item) => (
+                        <div key={item.userId} style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,200,224,0.08)', borderRadius: '6px', padding: '6px 10px', fontSize: '12px' }}>
+                          <span>{item.name}</span>
+                          <span style={{ color: '#00C8E0', fontWeight: 600 }}>{formatCurrency(item.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
               {isJackpotEnabled && (
-                <div className="space-y-1">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Arrecadado JACKPOT (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={endForm.jackpotArrecadado}
-                    onChange={(e) => setEndForm((prev) => ({ ...prev, jackpotArrecadado: e.target.value }))}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-emerald-400"
-                    placeholder="0.00"
-                  />
-                  <p className="text-xs text-zinc-500">Valor informado manualmente para arrecadação do JACKPOT na partida. {formatCurrency(parsedJackpotArrecadado)}</p>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Arrecadado JACKPOT (R$)</label>
+                  <input type="number" step="0.01" min="0" value={endForm.jackpotArrecadado} onChange={(e) => setEndForm((p) => ({ ...p, jackpotArrecadado: e.target.value }))} placeholder="0.00"
+                    style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.2)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+                  <p style={{ fontSize: '12px', color: '#4A7A90', marginTop: '4px' }}>Valor manual da arrecadação de JACKPOT nesta partida. {parsedJackpotArrecadado > 0 ? formatCurrency(parsedJackpotArrecadado) : ''}</p>
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowEndModal(false)}
-                  disabled={loading}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
-                >
+              <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
+                <button type="button" onClick={() => setShowEndModal(false)} disabled={loading}
+                  style={{ flex: 1, background: 'rgba(10,31,48,0.8)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', color: '#94a3b8', fontWeight: 700, fontSize: '15px', padding: '13px', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1 }}>
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading || hasInvalidCaixinhaSplit}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
-                >
+                <button type="submit" disabled={loading || hasInvalidCaixinhaSplit}
+                  style={{ flex: 1, background: (loading || hasInvalidCaixinhaSplit) ? 'rgba(0,90,115,0.4)' : 'linear-gradient(135deg,#005A73,#002A3A)', border: '1px solid rgba(0,200,224,0.35)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '13px', cursor: (loading || hasInvalidCaixinhaSplit) ? 'not-allowed' : 'pointer', opacity: (loading || hasInvalidCaixinhaSplit) ? 0.6 : 1 }}>
                   {loading ? 'Encerrando...' : 'Confirmar'}
                 </button>
               </div>
@@ -1303,50 +1299,56 @@ export default function CashierPage() {
         </div>
       )}
 
+      {/* === MODAL PREPAID PIX === */}
       {showPrepaidModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full p-6 space-y-4">
-            <h2 className="text-xl font-bold">Cobrança Pré-paga</h2>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: 'linear-gradient(180deg,#0C2238 0%,#071828 100%)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '768px', maxHeight: '90vh', overflowY: 'auto', padding: '24px 20px 32px' }}>
+            <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.15)', borderRadius: '4px', margin: '0 auto 20px' }} />
+            <h2 style={{ fontWeight: 700, fontSize: '18px', margin: '0 0 16px' }}>Cobrança Pré-paga</h2>
 
             {prepaidChargeResult?.amount ? (
-              <p className="text-sm text-zinc-300">Valor da compra: <span className="font-semibold text-zinc-100">{formatCurrency(prepaidChargeResult.amount)}</span></p>
+              <p style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '14px' }}>
+                Valor: <span style={{ fontWeight: 700, color: '#fff' }}>{formatCurrency(prepaidChargeResult.amount)}</span>
+              </p>
             ) : null}
 
             {extractPixQrImage(prepaidChargeResult?.charge) ? (
-              <div className="rounded-lg bg-white p-3">
-                <img src={extractPixQrImage(prepaidChargeResult?.charge) || ''} alt="QR Code PIX" className="h-auto w-full" />
+              <div style={{ background: '#fff', borderRadius: '12px', padding: '12px', marginBottom: '14px' }}>
+                <img src={extractPixQrImage(prepaidChargeResult?.charge) || ''} alt="QR Code PIX" style={{ width: '100%', height: 'auto', display: 'block' }} />
               </div>
             ) : (
-              <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3 text-xs text-zinc-400">
+              <div style={{ background: 'rgba(10,31,48,0.8)', border: '1px solid rgba(0,200,224,0.12)', borderRadius: '10px', padding: '12px 14px', fontSize: '13px', color: '#4A7A90', marginBottom: '14px' }}>
                 QR code não disponível no retorno da Annapay.
               </div>
             )}
 
             {extractPixCopyPaste(prepaidChargeResult?.charge) ? (
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">PIX Copia e Cola</p>
+              <div style={{ marginBottom: '14px' }}>
+                <p style={{ fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 6px' }}>PIX Copia e Cola</p>
                 <textarea
                   readOnly
                   value={extractPixCopyPaste(prepaidChargeResult?.charge) || ''}
-                  className="w-full min-h-[90px] rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-xs text-zinc-200"
+                  style={{ width: '100%', minHeight: '80px', background: '#050D15', border: '1px solid rgba(0,200,224,0.12)', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#e2e8f0', resize: 'none', boxSizing: 'border-box', outline: 'none' }}
                 />
               </div>
             ) : null}
 
-            <p className="text-xs text-zinc-400">Escaneie o QR code para efetuar o pagamento. O sistema verificará automaticamente, mas você também pode confirmar manualmente.</p>
+            <p style={{ fontSize: '12px', color: '#4A7A90', marginBottom: '12px' }}>
+              Escaneie o QR code para efetuar o pagamento. O sistema verificará automaticamente.
+            </p>
 
             {chargeStatusMessage && (
-              <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3 text-xs text-zinc-300">
+              <div style={{ background: 'rgba(0,200,224,0.06)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#94a3b8', marginBottom: '14px' }}>
                 {chargeStatusMessage}
               </div>
             )}
 
-            <div className="flex gap-3 pt-2">
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 type="button"
                 onClick={() => registerPendingPrepaidTransaction({ closeModalOnStart: true })}
                 disabled={registeringPendingPrepaid || !pendingPrepaidTransaction || autoProcessingPaidCharge}
-                className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+                style={{ flex: 1, background: 'linear-gradient(135deg,#006070,#003848)', border: '1px solid rgba(0,200,224,0.4)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, fontSize: '14px', padding: '13px', cursor: (registeringPendingPrepaid || !pendingPrepaidTransaction || autoProcessingPaidCharge) ? 'not-allowed' : 'pointer', opacity: (registeringPendingPrepaid || !pendingPrepaidTransaction || autoProcessingPaidCharge) ? 0.6 : 1 }}
               >
                 {registeringPendingPrepaid ? 'Registrando...' : 'Pagamento confirmado'}
               </button>
@@ -1354,9 +1356,9 @@ export default function CashierPage() {
                 type="button"
                 onClick={() => setShowPrepaidModal(false)}
                 disabled={registeringPendingPrepaid || autoProcessingPaidCharge || checkingChargeStatus}
-                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+                style={{ flex: 1, background: 'rgba(10,31,48,0.8)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', color: '#94a3b8', fontWeight: 700, fontSize: '14px', padding: '13px', cursor: (registeringPendingPrepaid || autoProcessingPaidCharge || checkingChargeStatus) ? 'not-allowed' : 'pointer', opacity: (registeringPendingPrepaid || autoProcessingPaidCharge || checkingChargeStatus) ? 0.5 : 1 }}
               >
-                {registeringPendingPrepaid ? 'Registrando...' : autoProcessingPaidCharge ? 'Processando pagamento...' : 'Fechar'}
+                {registeringPendingPrepaid ? 'Registrando...' : autoProcessingPaidCharge ? 'Processando...' : 'Fechar'}
               </button>
             </div>
           </div>

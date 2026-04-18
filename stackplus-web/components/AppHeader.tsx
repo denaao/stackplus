@@ -23,48 +23,61 @@ export default function AppHeader({
   const router = useRouter()
 
   return (
-    <header className="bg-sx-card border-b border-sx-border px-4 py-3">
-      <div className="max-w-5xl mx-auto flex items-center gap-3">
+    <header
+      className="px-5 py-0"
+      style={{
+        background: 'linear-gradient(180deg, rgba(7,24,40,0.99) 0%, rgba(5,13,21,0.97) 100%)',
+        borderBottom: '1px solid rgba(0,200,224,0.2)',
+        boxShadow: '0 2px 24px rgba(0,200,224,0.1)',
+        minHeight: '80px',
+      }}
+    >
+      <div className="max-w-5xl mx-auto h-20 flex items-center gap-4">
 
         {/* Back button */}
         {onBack && (
-          <button onClick={onBack} className="text-sx-muted hover:text-white transition-colors shrink-0">
+          <button onClick={onBack} className="text-sx-muted hover:text-sx-cyan transition-colors shrink-0 text-xl leading-none">
             ←
           </button>
         )}
 
         {/* Logo + branding */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-col items-start leading-none shrink-0 gap-1">
+          <span
+            className="text-3xl font-black text-sx-cyan tracking-tight"
+            style={{ textShadow: '0 0 20px rgba(0,200,224,0.75)' }}
+          >
+            STACK+
+          </span>
           <Image
             src="/sx-poker-logo.png"
             alt="SX Poker"
-            width={90}
-            height={22}
+            width={68}
+            height={16}
             className="object-contain"
+            style={{ opacity: 0.75 }}
             priority
           />
-          <div className="flex flex-col leading-none">
-            <span className="text-[10px] text-sx-muted uppercase tracking-[0.15em] font-medium">powered by</span>
-            <span className="text-sm font-black text-sx-cyan tracking-wider">STACK+</span>
-          </div>
         </div>
 
-        {/* Title */}
+        {/* Separator + Title */}
         {title && (
-          <div className="flex-1 pl-2 border-l border-sx-border">
+          <div className="flex-1 pl-4 border-l border-sx-border">
             <h1 className="font-bold text-base text-white truncate">{title}</h1>
           </div>
         )}
 
         {!title && <div className="flex-1" />}
 
-        {/* Right slot (custom buttons) */}
+        {/* Right slot */}
         {rightSlot}
 
         {/* User nav */}
         {(userName || onLogout) && (
-          <div className="flex items-center gap-3 shrink-0">
-            {userName && <span className="text-sm text-sx-muted hidden sm:block">{userName}</span>}
+          <div className="flex items-center gap-4 shrink-0">
+            {userName && (
+              <span className="text-sm text-sx-muted hidden sm:block">{userName}</span>
+            )}
             {onProfile && (
               <button onClick={onProfile} className="text-sm text-sx-muted hover:text-sx-cyan transition-colors">
                 Perfil

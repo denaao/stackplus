@@ -75,7 +75,7 @@ export default function TvPage() {
                 <p className="text-zinc-400 text-sm">Stack: {parseFloat(p.currentStack).toLocaleString('pt-BR')} fichas</p>
               </div>
               <div className="text-right">
-                <p className={`text-3xl font-black ${isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-zinc-400'}`}>
+                <p className={`text-3xl font-black ${isPositive ? 'text-sx-cyan' : isNegative ? 'text-red-400' : 'text-zinc-400'}`}>
                   {isPositive ? '+' : ''}R$ {Math.abs(result).toFixed(2)}
                 </p>
                 <p className="text-zinc-500 text-sm">Inv: R$ {parseFloat(p.chipsIn).toFixed(2)}</p>

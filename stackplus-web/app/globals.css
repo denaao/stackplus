@@ -4,5 +4,61 @@
 
 body {
   background-color: #050D15;
+  background-image: radial-gradient(ellipse at 50% 115%, rgba(0, 90, 115, 0.5) 0%, rgba(7, 24, 40, 0.7) 38%, #050D15 68%);
+  background-attachment: fixed;
+  min-height: 100vh;
   color: #ffffff;
+}
+
+/* Cyan glow text */
+.text-glow {
+  text-shadow: 0 0 18px rgba(0, 200, 224, 0.75), 0 0 40px rgba(0, 200, 224, 0.35);
+}
+
+/* Gradient CTA button */
+.btn-sx-primary {
+  background: linear-gradient(135deg, #00C8E0 0%, #007A95 100%);
+  box-shadow: 0 4px 22px rgba(0, 200, 224, 0.45);
+  transition: all 0.2s ease;
+}
+.btn-sx-primary:hover:not(:disabled) {
+  box-shadow: 0 6px 32px rgba(0, 200, 224, 0.65);
+  transform: translateY(-1px);
+}
+.btn-sx-primary:disabled {
+  opacity: 0.5;
+}
+
+/* Glowing card */
+.card-sx {
+  background: rgba(7, 24, 40, 0.85);
+  border: 1px solid rgba(0, 200, 224, 0.18);
+  box-shadow: 0 0 30px rgba(0, 200, 224, 0.07), inset 0 1px 0 rgba(0, 200, 224, 0.08);
+  backdrop-filter: blur(4px);
+}
+
+/* Inputs: force dark background + white text */
+input,
+select,
+textarea {
+  color: #ffffff;
+  background-color: #0A1F30;
+}
+
+/* Cyan glow border on focus */
+input:focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 2px rgba(0, 200, 224, 0.2);
+}
+
+/* Kill Chrome autofill white background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0px 1000px #0A1F30 inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+  caret-color: #ffffff;
 }

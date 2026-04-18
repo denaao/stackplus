@@ -177,88 +177,88 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4 py-8">
+    <div className="min-h-screen flex items-center justify-center bg-sx-bg px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black text-yellow-400 tracking-tight">STACKPLUS</h1>
-          <p className="text-zinc-400 mt-2 text-sm">Crie sua conta</p>
+          <h1 className="text-4xl font-black text-sx-cyan tracking-tight">STACKPLUS</h1>
+          <p className="text-sx-muted mt-2 text-sm">Crie sua conta</p>
         </div>
-        <form onSubmit={handleSubmit} className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 space-y-4">
+        <form onSubmit={handleSubmit} className="bg-sx-card border border-sx-border rounded-xl p-8 space-y-4">
           <h2 className="text-xl font-bold">Cadastro</h2>
           {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">{error}</div>}
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Nome completo</label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">Nome completo</label>
             <input
               type="text"
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
               placeholder="Seu nome"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF</label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">CPF</label>
             <input
               type="text"
               inputMode="numeric"
               required
               value={form.cpf}
               onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
-              className={`w-full bg-zinc-800 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 ${
-                form.cpf && !isValidCpf(form.cpf) ? 'border-red-500' : form.cpf && isValidCpf(form.cpf) ? 'border-green-500' : 'border-zinc-700'
+              className={`w-full bg-sx-input border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan ${
+                form.cpf && !isValidCpf(form.cpf) ? 'border-red-500' : form.cpf && isValidCpf(form.cpf) ? 'border-sx-cyan' : 'border-sx-border2'
               }`}
               placeholder="000.000.000-00"
               maxLength={14}
               autoComplete="username"
             />
             {form.cpf && !isValidCpf(form.cpf) && <p className="text-xs text-red-400">CPF inválido</p>}
-            {form.cpf && isValidCpf(form.cpf) && <p className="text-xs text-green-400">✓ CPF válido</p>}
+            {form.cpf && isValidCpf(form.cpf) && <p className="text-xs text-sx-cyan">✓ CPF válido</p>}
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">E-mail <span className="text-zinc-600 normal-case">(opcional)</span></label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">E-mail <span className="text-sx-muted normal-case">(opcional)</span></label>
             <input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
               placeholder="seu@email.com"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Telefone <span className="text-zinc-600 normal-case">(opcional)</span></label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">Telefone <span className="text-sx-muted normal-case">(opcional)</span></label>
             <input
               type="tel"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
               placeholder="(11) 99999-9999"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Senha</label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">Senha</label>
             <input
               type="password"
               required
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
               placeholder="Mínimo 6 caracteres"
               autoComplete="new-password"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo de PIX</label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">Tipo de PIX</label>
             <select
               value={form.pixType}
               onChange={(e) => handlePixTypeChange(e.target.value as PixType)}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
             >
               <option value="CPF">CPF ⭐ recomendado</option>
               <option value="CNPJ">CNPJ</option>
@@ -274,18 +274,18 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Chave PIX para recebimento</label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">Chave PIX para recebimento</label>
             <input
               type={form.pixType === 'EMAIL' ? 'email' : 'text'}
               required
               value={form.pixKey}
               onChange={(e) => handlePixKeyChange(e.target.value)}
-              className={`w-full bg-zinc-800 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 ${
+              className={`w-full bg-sx-input border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan ${
                 form.pixKey && !validatePixKey(form.pixType, form.pixKey)
                   ? 'border-red-500'
                   : form.pixKey && validatePixKey(form.pixType, form.pixKey)
-                    ? 'border-green-500'
-                    : 'border-zinc-700'
+                    ? 'border-sx-cyan'
+                    : 'border-sx-border2'
               }`}
               placeholder={
                 form.pixType === 'CPF' ? '000.000.000-00'
@@ -299,16 +299,16 @@ export default function RegisterPage() {
               <p className="text-xs text-red-400">{pixErrorMessage(form.pixType)}</p>
             )}
             {form.pixKey && validatePixKey(form.pixType, form.pixKey) && (
-              <p className="text-xs text-green-400">✓ Chave PIX válida</p>
+              <p className="text-xs text-sx-cyan">✓ Chave PIX válida</p>
             )}
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo de conta</label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">Tipo de conta</label>
             <select
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
             >
               <option value="PLAYER">Jogador</option>
               <option value="HOST">Host (organizador)</option>
@@ -318,13 +318,13 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+            className="btn-sx-primary w-full text-sx-bg font-black py-3 rounded-xl text-sm tracking-widest uppercase"
           >
             {loading ? 'Cadastrando...' : 'Criar conta'}
           </button>
-          <p className="text-center text-sm text-zinc-500">
+          <p className="text-center text-sm text-sx-muted">
             Já tem conta?{' '}
-            <a href="/" className="text-yellow-400 hover:underline">Entrar</a>
+            <a href="/" className="text-sx-cyan hover:underline">Entrar</a>
           </p>
         </form>
       </div>

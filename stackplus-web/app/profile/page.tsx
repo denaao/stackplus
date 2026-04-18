@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
+import AppLoading from '@/components/AppLoading'
 
 type PixType = 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM'
 
@@ -141,87 +142,87 @@ export default function ProfilePage() {
     }
   }
 
-  if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-yellow-400 font-black text-2xl">STACKPLUS</div>
+  if (loading) return <AppLoading />
 
   const pixKeyValid = form.pixKey ? validatePixKey(form.pixType, form.pixKey) : null
   const needsCpfCnpj = form.pixType === 'EMAIL' || form.pixType === 'PHONE' || form.pixType === 'RANDOM'
 
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <header className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.back()} className="text-zinc-400 hover:text-white">←</button>
+    <div className="min-h-screen bg-sx-bg">
+      <header className="bg-sx-card border-b border-sx-border px-6 py-4 flex items-center gap-3">
+        <button onClick={() => router.back()} className="text-sx-muted hover:text-white">←</button>
         <h1 className="font-bold">Meu Perfil</h1>
       </header>
 
       <main className="max-w-lg mx-auto px-6 py-8">
-        <form onSubmit={handleSubmit} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="bg-sx-card border border-sx-border rounded-xl p-6 space-y-5">
           {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">{error}</div>}
-          {success && <div className="bg-green-500/10 border border-green-500/30 text-green-400 text-sm rounded-lg p-3">{success}</div>}
+          {success && <div className="bg-sx-cyan/10 border border-sx-cyan/30 text-sx-cyan text-sm rounded-lg p-3">{success}</div>}
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Nome</label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">Nome</label>
             <input
               type="text"
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
               placeholder="Seu nome"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF</label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">CPF</label>
             <input
               type="text"
               inputMode="numeric"
               required
               value={form.cpf}
               onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
-              className={`w-full bg-zinc-800 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 ${
-                form.cpf && !isValidCpf(form.cpf) ? 'border-red-500' : form.cpf && isValidCpf(form.cpf) ? 'border-green-500' : 'border-zinc-700'
+              className={`w-full bg-sx-input border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan ${
+                form.cpf && !isValidCpf(form.cpf) ? 'border-red-500' : form.cpf && isValidCpf(form.cpf) ? 'border-sx-cyan' : 'border-sx-border2'
               }`}
               placeholder="000.000.000-00"
               maxLength={14}
             />
             {form.cpf && !isValidCpf(form.cpf) && <p className="text-xs text-red-400">CPF inválido</p>}
-            {form.cpf && isValidCpf(form.cpf) && <p className="text-xs text-green-400">✓ CPF válido</p>}
+            {form.cpf && isValidCpf(form.cpf) && <p className="text-xs text-sx-cyan">✓ CPF válido</p>}
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">E-mail <span className="text-zinc-600 normal-case">(opcional)</span></label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">E-mail <span className="text-sx-muted normal-case">(opcional)</span></label>
             <input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
               placeholder="seu@email.com"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Telefone <span className="text-zinc-600 normal-case">(opcional)</span></label>
+            <label className="text-xs text-sx-muted uppercase tracking-wide">Telefone <span className="text-sx-muted normal-case">(opcional)</span></label>
             <input
               type="tel"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
               placeholder="(11) 99999-9999"
             />
           </div>
 
-          <div className="rounded-xl border border-zinc-700 bg-zinc-800/50 p-4 space-y-4">
+          <div className="rounded-xl border border-sx-border2 bg-sx-input/50 p-4 space-y-4">
             <div>
               <p className="text-sm font-semibold text-zinc-200">Chave PIX</p>
-              <p className="text-xs text-zinc-400 mt-0.5">Usada para receber pagamentos e cobranças automáticas na liquidação da sessão.</p>
+              <p className="text-xs text-sx-muted mt-0.5">Usada para receber pagamentos e cobranças automáticas na liquidação da sessão.</p>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-zinc-400 uppercase tracking-wide">Tipo de chave</label>
+              <label className="text-xs text-sx-muted uppercase tracking-wide">Tipo de chave</label>
               <select
                 value={form.pixType}
                 onChange={(e) => handlePixTypeChange(e.target.value as PixType)}
-                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400"
+                className="w-full bg-sx-card border border-sx-border2 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan"
               >
                 <option value="CPF">CPF ⭐ recomendado</option>
                 <option value="CNPJ">CNPJ</option>
@@ -237,14 +238,14 @@ export default function ProfilePage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-zinc-400 uppercase tracking-wide">Chave</label>
+              <label className="text-xs text-sx-muted uppercase tracking-wide">Chave</label>
               <input
                 type={form.pixType === 'EMAIL' ? 'email' : 'text'}
                 required
                 value={form.pixKey}
                 onChange={(e) => handlePixKeyChange(e.target.value)}
-                className={`w-full bg-zinc-900 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 ${
-                  pixKeyValid === false ? 'border-red-500' : pixKeyValid === true ? 'border-green-500' : 'border-zinc-700'
+                className={`w-full bg-sx-card border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan ${
+                  pixKeyValid === false ? 'border-red-500' : pixKeyValid === true ? 'border-sx-cyan' : 'border-sx-border2'
                 }`}
                 placeholder={
                   form.pixType === 'CPF' ? '000.000.000-00'
@@ -255,14 +256,14 @@ export default function ProfilePage() {
                 }
               />
               {pixKeyValid === false && <p className="text-xs text-red-400">{pixErrorMessage(form.pixType)}</p>}
-              {pixKeyValid === true && <p className="text-xs text-green-400">✓ Chave PIX válida</p>}
+              {pixKeyValid === true && <p className="text-xs text-sx-cyan">✓ Chave PIX válida</p>}
             </div>
           </div>
 
           <button
             type="submit"
             disabled={saving || pixKeyValid === false}
-            className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+            className="w-full bg-sx-cyan hover:bg-sx-cyan-dim text-sx-bg font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
           >
             {saving ? 'Salvando...' : 'Salvar alterações'}
           </button>

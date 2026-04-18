@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
+import AppHeader from '@/components/AppHeader'
+import AppLoading from '@/components/AppLoading'
 
 interface HomeGame {
   id: string; name: string; address: string; dayOfWeek: string
@@ -61,7 +63,7 @@ export default function HomeGamePage() {
   const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
-  const user = useAuthStore((s) => s.user)
+  const { user, logout } = useAuthStore()
   const id = params.id as string
   const [game, setGame] = useState<HomeGame | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
@@ -113,14 +115,6 @@ export default function HomeGamePage() {
     loadPage()
   }, [id])
 
-  useEffect(() => {
-    if (!game || loading) return
-    if (searchParams?.get('new') === 'cash' && user?.id === game.host.id && !showCreatePicker) {
-      openCreatePicker()
-      router.replace(`/homegame/${id}`)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, loading, searchParams])
 
   function applySangeurAccess(access: SangeurAccess) {
     setSangeurAccesses((prev) => {
@@ -291,37 +285,40 @@ export default function HomeGamePage() {
     }
   }
 
-  if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="text-yellow-400 text-2xl font-black">STACKPLUS</div></div>
+  if (loading) return <AppLoading />
   if (!game) return null
   const isHost = user?.id === game.host.id
   const selectedSangeurAccess = sangeurAccesses.find((item) => item.userId === sangeurUserId)
 
   const statusColors: Record<string, string> = {
-    WAITING: 'text-yellow-400 bg-yellow-400/10',
-    ACTIVE: 'text-green-400 bg-green-400/10',
-    FINISHED: 'text-zinc-400 bg-zinc-400/10',
+    WAITING: 'text-sx-cyan bg-sx-cyan/10',
+    ACTIVE: 'text-sx-cyan bg-sx-cyan/10',
+    FINISHED: 'text-sx-muted bg-white/5',
   }
   const statusLabel: Record<string, string> = { WAITING: 'Aguardando', ACTIVE: 'Ativa', FINISHED: 'Finalizada' }
 
+  function handleLogout() { logout(); router.push('/') }
+
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <header className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.back()} className="text-zinc-400 hover:text-white">←</button>
-        <div>
-          <h1 className="font-bold text-lg flex items-center gap-2">
-            {game.name}
-            <span className="text-xs font-normal text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded-full">{game.members.length} membros</span>
-          </h1>
-          <p className="text-xs text-zinc-400">{game.address}</p>
-        </div>
-        <div className="ml-auto">
-          <span className="bg-zinc-800 text-yellow-400 font-mono font-bold px-3 py-1 rounded text-sm">{game.joinCode}</span>
-        </div>
-      </header>
+    <div className="min-h-screen bg-sx-bg">
+      <AppHeader
+        title={game.name}
+        onBack={() => router.push(`/homegame/${id}/select`)}
+        userName={user?.name}
+        onLogout={handleLogout}
+        rightSlot={
+          <span
+            className="text-xs font-mono font-bold px-2 py-1 rounded"
+            style={{ background: 'rgba(0,200,224,0.1)', color: '#00C8E0', border: '1px solid rgba(0,200,224,0.2)' }}
+          >
+            {game.joinCode}
+          </span>
+        }
+      />
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-8">
         {pageFeedback && (
-          <div className={`rounded-xl border px-4 py-3 text-sm ${pageFeedback.tone === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+          <div className={`rounded-xl border px-4 py-3 text-sm ${pageFeedback.tone === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-sx-cyan/30 bg-sx-cyan/10 text-sx-cyan'}`}>
             {pageFeedback.message}
           </div>
         )}
@@ -330,53 +327,78 @@ export default function HomeGamePage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold">Sessões de Cash Game</h2>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-sx-muted">
                 Cada partida começa com as perguntas de configuração (financeiro, sangeur, jackpot).
               </p>
             </div>
             <button
               onClick={openCreatePicker}
               disabled={creating || !isHost}
-              className="bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50">
+              className="btn-sx-primary px-5 py-2 rounded-xl text-sm font-black text-sx-bg disabled:opacity-50">
               {creating ? 'Criando...' : '+ Nova Partida'}
             </button>
           </div>
 
           {sessions.length === 0 ? (
-            <div className="text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
+            <div className="text-center py-12 text-sx-muted border border-dashed border-sx-border rounded-xl">
               <p>Nenhuma sessão ainda</p>
             </div>
           ) : (
             <div className="space-y-3">
               {sessions.map((s) => (
-                <div key={s.id} onClick={() => router.push(`/session/${s.id}/manage`)}
-                  className="bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 cursor-pointer flex items-center justify-between transition-colors">
-                  <div>
-                    <p className="text-sm font-medium">{new Date(s.createdAt).toLocaleDateString('pt-BR')}</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">
-                      {pokerVariantOptions.find((option) => option.value === (s.pokerVariant || 'HOLDEN'))?.label || 'Holden'} • {s._count.playerStates} jogadores • {s._count.transactions} transações
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-zinc-300">
-                      {(s.gameType || 'CASH_GAME') === 'CASH_GAME' ? 'Cash Game' : 'Torneio'}
-                    </span>
-                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${statusColors[s.status]}`}>
-                      {statusLabel[s.status]}
-                    </span>
-                    {isHost && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          cancelSession(s.id)
-                        }}
-                        disabled={deletingSessionId === s.id}
-                        className="bg-red-500/15 border border-red-500/40 hover:bg-red-500/25 text-red-300 text-xs font-bold px-3 py-1 rounded transition-colors disabled:opacity-50"
-                      >
-                        {deletingSessionId === s.id ? 'Cancelando...' : 'Cancelar partida'}
-                      </button>
-                    )}
+                <div
+                  key={s.id}
+                  onClick={() => router.push(`/session/${s.id}/manage`)}
+                  className="relative rounded-xl overflow-hidden cursor-pointer group transition-all"
+                  style={{
+                    background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)',
+                    border: '1px solid rgba(0,200,224,0.12)',
+                    boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(0,200,224,0.3)' }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(0,200,224,0.12)' }}
+                >
+                  {/* Status color bar */}
+                  <div className="absolute left-0 top-0 bottom-0 w-[3px]"
+                    style={{ background: s.status === 'ACTIVE' ? '#00C8E0' : s.status === 'WAITING' ? '#00C8E0' : 'rgba(255,255,255,0.15)' }} />
+
+                  <div className="pl-4 pr-4 py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-white">
+                        {new Date(s.createdAt).toLocaleDateString('pt-BR')}
+                      </p>
+                      <p className="text-xs text-sx-muted mt-0.5">
+                        {pokerVariantOptions.find((o) => o.value === (s.pokerVariant || 'HOLDEN'))?.label || 'Holden'}
+                        {' · '}{s._count.playerStates} jogadores
+                        {' · '}{s._count.transactions} transações
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${statusColors[s.status]}`}>
+                        {statusLabel[s.status]}
+                      </span>
+                      {s.status === 'FINISHED' && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); router.push(`/session/${s.id}/report`) }}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-full transition-colors"
+                          style={{ background: 'rgba(0,200,224,0.08)', border: '1px solid rgba(0,200,224,0.25)', color: '#00C8E0' }}
+                        >
+                          📊 Relatório
+                        </button>
+                      )}
+                      {isHost && s.status !== 'FINISHED' && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); cancelSession(s.id) }}
+                          disabled={deletingSessionId === s.id}
+                          className="bg-red-500/15 border border-red-500/30 hover:bg-red-500/25 text-red-300 text-xs font-bold px-3 py-1 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {deletingSessionId === s.id ? 'Cancelando...' : 'Cancelar'}
+                        </button>
+                      )}
+                      <span className="text-sx-muted group-hover:text-sx-cyan transition-colors text-sm">→</span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -384,20 +406,21 @@ export default function HomeGamePage() {
           )}
         </div>
 
-        {/* ─── Torneios ─── */}
-        <TournamentsSection homeGameId={id} isHost={isHost} router={router} />
 
       </main>
 
       {showCreatePicker && isHost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold">Nova Partida</h3>
-              <span className="text-xs font-bold text-zinc-400">Passo {wizardStep} de 2</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl p-6"
+            style={{ background: 'linear-gradient(160deg, #0C2238 0%, #071828 100%)', border: '1px solid rgba(0,200,224,0.2)', boxShadow: '0 8px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,200,224,0.05)' }}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-lg font-black text-white">Nova Partida</h3>
+              <span className="text-[11px] font-bold text-sx-muted uppercase tracking-widest px-2 py-1 rounded-full" style={{ background: 'rgba(0,200,224,0.08)', border: '1px solid rgba(0,200,224,0.15)' }}>
+                Passo {wizardStep} de 2
+              </span>
             </div>
-            <p className="mt-1 text-sm text-zinc-400">
-              {wizardStep === 1 ? 'Configuração da partida: financeiro, sangeur e jackpot.' : 'Parâmetros do Cash Game.'}
+            <p className="text-sm text-sx-muted mb-1">
+              {wizardStep === 1 ? 'Configure financeiro, sangeur e jackpot.' : 'Parâmetros do Cash Game.'}
             </p>
 
             {createFormError && (
@@ -408,10 +431,10 @@ export default function HomeGamePage() {
 
             {wizardStep === 1 && (
               <>
-                <div className="mt-5 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">1. Módulo financeiro</p>
-                  <p className="mt-1 text-xs text-zinc-500">Pós-pago, pré-pago ou híbrido?</p>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
+                <div className="mt-5 rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-sx-cyan mb-0.5">1. Módulo Financeiro</p>
+                  <p className="text-xs text-sx-muted mb-3">Pós-pago, pré-pago ou híbrido?</p>
+                  <div className="grid grid-cols-3 gap-2">
                     {[
                       { key: 'POSTPAID', label: 'Pós-pago' },
                       { key: 'PREPAID', label: 'Pré-pago' },
@@ -421,11 +444,12 @@ export default function HomeGamePage() {
                         key={option.key}
                         type="button"
                         onClick={() => setNewSessionFinancialModule(option.key as 'POSTPAID' | 'PREPAID' | 'HYBRID')}
-                        className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
+                        className={`rounded-xl py-2.5 text-sm font-bold transition-all ${
                           newSessionFinancialModule === option.key
-                            ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                            : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                            ? 'btn-sx-primary text-sx-bg'
+                            : 'text-sx-muted hover:text-white'
                         }`}
+                        style={newSessionFinancialModule !== option.key ? { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' } : {}}
                       >
                         {option.label}
                       </button>
@@ -433,42 +457,40 @@ export default function HomeGamePage() {
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">2. SANGEUR</p>
-                  <p className="mt-1 text-xs text-zinc-500">Esta partida tem SANGEUR (caixa móvel)?</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3 rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-sx-cyan mb-0.5">2. Sangeur</p>
+                  <p className="text-xs text-sx-muted mb-3">Esta partida tem SANGEUR (caixa móvel)?</p>
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setSessionHasSangeur(true)}
-                      className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
-                        sessionHasSangeur
-                          ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                      className={`rounded-xl py-2.5 text-sm font-bold transition-all ${
+                        sessionHasSangeur ? 'btn-sx-primary text-sx-bg' : 'text-sx-muted hover:text-white'
                       }`}
+                      style={!sessionHasSangeur ? { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' } : {}}
                     >
                       Sim
                     </button>
                     <button
                       type="button"
                       onClick={() => setSessionHasSangeur(false)}
-                      className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
-                        !sessionHasSangeur
-                          ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                      className={`rounded-xl py-2.5 text-sm font-bold transition-all ${
+                        !sessionHasSangeur ? 'btn-sx-primary text-sx-bg' : 'text-sx-muted hover:text-white'
                       }`}
+                      style={sessionHasSangeur ? { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' } : {}}
                     >
                       Não
                     </button>
                   </div>
 
                   {sessionHasSangeur && (
-                    <div className="mt-4 space-y-3 rounded-lg border border-zinc-700 bg-zinc-900/70 p-3">
+                    <div className="mt-4 space-y-3 rounded-lg border border-sx-border2 bg-sx-card/70 p-3">
                       <div className="space-y-1">
-                        <label className="text-xs uppercase tracking-wide text-zinc-400">Participante SANGEUR</label>
+                        <label className="text-xs uppercase tracking-wide text-sx-muted">Participante SANGEUR</label>
                         <select
                           value={sangeurUserId}
                           onChange={(e) => setSangeurUserId(e.target.value)}
-                          className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                          className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                         >
                           <option value="">Selecione um membro…</option>
                           {game.members.map((m) => (
@@ -479,22 +501,22 @@ export default function HomeGamePage() {
 
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <label className="text-xs uppercase tracking-wide text-zinc-400">Usuário POS</label>
+                          <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
                           <input
                             type="text"
                             value={sangeurUsername}
                             onChange={(e) => setSangeurUsername(e.target.value)}
-                            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                            className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs uppercase tracking-wide text-zinc-400">Senha (opcional)</label>
+                          <label className="text-xs uppercase tracking-wide text-sx-muted">Senha (opcional)</label>
                           <input
                             type="text"
                             value={sangeurPassword}
                             onChange={(e) => setSangeurPassword(e.target.value)}
                             placeholder="Gerada se vazio"
-                            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                            className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                           />
                         </div>
                       </div>
@@ -509,7 +531,7 @@ export default function HomeGamePage() {
                         type="button"
                         onClick={handleEnableSangeur}
                         disabled={sangeurLoading}
-                        className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-bold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+                        className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 px-3 py-2 text-sm font-bold text-sx-cyan hover:bg-sx-cyan/20 disabled:opacity-50"
                       >
                         {sangeurLoading
                           ? 'Salvando…'
@@ -519,29 +541,29 @@ export default function HomeGamePage() {
                       </button>
 
                       {issuedCredential && (
-                        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+                        <div className="rounded-lg border border-sx-cyan/30 bg-sx-cyan/10 px-3 py-2 text-xs text-sx-cyan">
                           {issuedCredential.userName}: <span className="font-mono">{issuedCredential.username}</span> / <span className="font-mono">{issuedCredential.temporaryPassword}</span>
                         </div>
                       )}
 
                       {sangeurAccesses.length > 0 && (
-                        <div className="space-y-2 border-t border-zinc-800 pt-3">
-                          <p className="text-[11px] uppercase tracking-wide text-zinc-500">Acessos cadastrados</p>
+                        <div className="space-y-2 border-t border-sx-border pt-3">
+                          <p className="text-[11px] uppercase tracking-wide text-sx-muted">Acessos cadastrados</p>
                           {sangeurAccesses.map((access) => (
-                            <div key={access.id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs">
+                            <div key={access.id} className="flex items-center justify-between gap-2 rounded-lg border border-sx-border bg-sx-card px-3 py-2 text-xs">
                               <div>
                                 <p className="font-bold text-zinc-200">{access.user.name}</p>
-                                <p className="text-zinc-500 font-mono">{access.username}</p>
+                                <p className="text-sx-muted font-mono">{access.username}</p>
                               </div>
                               <div className="flex items-center gap-1">
-                                <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-700 text-zinc-400'}`}>
+                                <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-sx-cyan/15 text-sx-cyan' : 'bg-sx-border2 text-sx-muted'}`}>
                                   {access.isActive ? 'Ativo' : 'Inativo'}
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => handleResetSangeurPassword(access.userId)}
                                   disabled={sangeurActionUserId === access.userId}
-                                  className="rounded border border-zinc-700 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                                  className="rounded border border-sx-border2 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-sx-input disabled:opacity-50"
                                 >
                                   Reset
                                 </button>
@@ -564,29 +586,27 @@ export default function HomeGamePage() {
                   )}
                 </div>
 
-                <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-800/50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">3. JACKPOT</p>
-                  <p className="mt-1 text-xs text-zinc-500">Esta partida tem JACKPOT?</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3 rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-sx-cyan mb-0.5">3. Jackpot</p>
+                  <p className="text-xs text-sx-muted mb-3">Esta partida tem JACKPOT?</p>
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setNewSessionJackpotEnabled(true)}
-                      className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
-                        newSessionJackpotEnabled
-                          ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                      className={`rounded-xl py-2.5 text-sm font-bold transition-all ${
+                        newSessionJackpotEnabled ? 'btn-sx-primary text-sx-bg' : 'text-sx-muted hover:text-white'
                       }`}
+                      style={!newSessionJackpotEnabled ? { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' } : {}}
                     >
                       Sim
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewSessionJackpotEnabled(false)}
-                      className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
-                        !newSessionJackpotEnabled
-                          ? 'border-yellow-400 bg-yellow-400/15 text-yellow-300'
-                          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-700'
+                      className={`rounded-xl py-2.5 text-sm font-bold transition-all ${
+                        !newSessionJackpotEnabled ? 'btn-sx-primary text-sx-bg' : 'text-sx-muted hover:text-white'
                       }`}
+                      style={newSessionJackpotEnabled ? { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' } : {}}
                     >
                       Não
                     </button>
@@ -594,14 +614,14 @@ export default function HomeGamePage() {
 
                   {newSessionJackpotEnabled && (
                     <div className="mt-3 space-y-1">
-                      <label className="text-xs uppercase tracking-wide text-zinc-400">JACKPOT acumulado (R$)</label>
+                      <label className="text-xs uppercase tracking-wide text-sx-muted">JACKPOT acumulado (R$)</label>
                       <input
                         type="number"
                         min="0"
                         step="0.01"
                         value={jackpotAccumulated}
                         onChange={(e) => setJackpotAccumulated(e.target.value)}
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                        className="w-full rounded-lg border border-sx-border2 bg-sx-card px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                       />
                     </div>
                   )}
@@ -612,11 +632,11 @@ export default function HomeGamePage() {
             {wizardStep === 2 && (
               <div className="mt-4 grid grid-cols-1 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Modalidade</label>
+                  <label className="text-xs text-sx-muted uppercase tracking-wide">Modalidade</label>
                   <select
                     value={pokerVariant}
                     onChange={(e) => setPokerVariant(e.target.value as 'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX')}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                    className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                   >
                     {pokerVariantOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -627,58 +647,54 @@ export default function HomeGamePage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Valor da ficha (R$)</label>
+                  <label className="text-xs text-sx-muted uppercase tracking-wide">Valor da ficha (R$)</label>
                   <input
                     type="number"
                     min="0.01"
                     step="0.01"
                     value={cashChipValue}
                     onChange={(e) => setCashChipValue(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                    className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Small blind (R$)</label>
-                    <input type="number" min="0" step="0.01" value={cashSmallBlind} onChange={(e) => setCashSmallBlind(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
+                    <label className="text-xs text-sx-muted uppercase tracking-wide">Small blind (R$)</label>
+                    <input type="number" min="0" step="0.01" value={cashSmallBlind} onChange={(e) => setCashSmallBlind(e.target.value)} className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Big blind (R$)</label>
-                    <input type="number" min="0.01" step="0.01" value={cashBigBlind} onChange={(e) => setCashBigBlind(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
+                    <label className="text-xs text-sx-muted uppercase tracking-wide">Big blind (R$)</label>
+                    <input type="number" min="0.01" step="0.01" value={cashBigBlind} onChange={(e) => setCashBigBlind(e.target.value)} className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Mínimo entrada (R$)</label>
-                    <input type="number" min="0" step="0.01" value={cashMinimumBuyIn} onChange={(e) => setCashMinimumBuyIn(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
+                    <label className="text-xs text-sx-muted uppercase tracking-wide">Mínimo entrada (R$)</label>
+                    <input type="number" min="0" step="0.01" value={cashMinimumBuyIn} onChange={(e) => setCashMinimumBuyIn(e.target.value)} className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Min. permanência (min)</label>
-                    <input type="number" min="0" step="1" value={cashMinimumStayMinutes} onChange={(e) => setCashMinimumStayMinutes(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
+                    <label className="text-xs text-sx-muted uppercase tracking-wide">Min. permanência (min)</label>
+                    <input type="number" min="0" step="1" value={cashMinimumStayMinutes} onChange={(e) => setCashMinimumStayMinutes(e.target.value)} className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-400 uppercase tracking-wide">Taxa alimentação (R$)</label>
-                    <input type="number" min="0" step="0.01" value={cashFoodFee} onChange={(e) => setCashFoodFee(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none" />
+                    <label className="text-xs text-sx-muted uppercase tracking-wide">Taxa alimentação (R$)</label>
+                    <input type="number" min="0" step="0.01" value={cashFoodFee} onChange={(e) => setCashFoodFee(e.target.value)} className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2 pt-2" style={{ borderTop: '1px solid rgba(0,200,224,0.1)' }}>
               <button
                 type="button"
                 onClick={() => {
-                  if (wizardStep === 2) {
-                    setWizardStep(1)
-                    setCreateFormError(null)
-                  } else {
-                    setShowCreatePicker(false)
-                    setCreateFormError(null)
-                  }
+                  if (wizardStep === 2) { setWizardStep(1); setCreateFormError(null) }
+                  else { setShowCreatePicker(false); setCreateFormError(null) }
                 }}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800"
+                className="rounded-xl px-5 py-2.5 text-sm font-bold text-sx-muted hover:text-white transition-colors"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
               >
                 {wizardStep === 2 ? 'Voltar' : 'Cancelar'}
               </button>
@@ -693,16 +709,16 @@ export default function HomeGamePage() {
                     }
                     setWizardStep(2)
                   }}
-                  className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300"
+                  className="btn-sx-primary rounded-xl px-5 py-2.5 text-sm font-black text-sx-bg"
                 >
-                  Próximo
+                  Próximo →
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={createSession}
                   disabled={creating}
-                  className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+                  className="btn-sx-primary rounded-xl px-5 py-2.5 text-sm font-black text-sx-bg disabled:opacity-50"
                 >
                   {creating ? 'Criando...' : 'Criar Partida'}
                 </button>
@@ -714,7 +730,7 @@ export default function HomeGamePage() {
 
       {confirmCancelSessionId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-zinc-900 p-6">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-sx-card p-6">
             <h3 className="text-lg font-bold text-white">Cancelar partida</h3>
             <p className="mt-2 text-sm text-zinc-300">
               Esta acao vai remover a partida e todos os dados vinculados. Nao podera ser desfeita.
@@ -725,7 +741,7 @@ export default function HomeGamePage() {
                 type="button"
                 onClick={() => setConfirmCancelSessionId(null)}
                 disabled={deletingSessionId === confirmCancelSessionId}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                className="rounded-lg border border-sx-border2 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-sx-input disabled:opacity-50"
               >
                 Voltar
               </button>
@@ -764,9 +780,9 @@ function TournamentsSection({ homeGameId, isHost, router }: {
 
   const statusBadge: Record<string, string> = {
     REGISTRATION: 'text-blue-300 bg-blue-400/10',
-    RUNNING: 'text-green-300 bg-green-400/10',
-    ON_BREAK: 'text-yellow-300 bg-yellow-400/10',
-    FINISHED: 'text-zinc-400 bg-zinc-400/10',
+    RUNNING: 'text-sx-cyan bg-sx-cyan/10',
+    ON_BREAK: 'text-sx-cyan bg-sx-cyan/10',
+    FINISHED: 'text-sx-muted bg-white/5',
     CANCELED: 'text-red-400 bg-red-400/10',
   }
   const statusLabel: Record<string, string> = {
@@ -782,12 +798,12 @@ function TournamentsSection({ homeGameId, isHost, router }: {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold">Torneios</h2>
-          <p className="mt-1 text-xs text-zinc-500">Crie e gerencie torneios com comanda por jogador.</p>
+          <p className="mt-1 text-xs text-sx-muted">Crie e gerencie torneios com comanda por jogador.</p>
         </div>
         {isHost && (
           <button
             onClick={() => router.push(`/tournament/create?homeGameId=${homeGameId}`)}
-            className="bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-4 py-2 rounded-lg text-sm transition-colors"
+            className="btn-sx-primary px-5 py-2 rounded-xl text-sm font-black text-sx-bg"
           >
             + Novo Torneio
           </button>
@@ -795,30 +811,50 @@ function TournamentsSection({ homeGameId, isHost, router }: {
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-zinc-600 text-sm">Carregando...</div>
+        <div className="text-center py-8 text-sx-muted text-sm">Carregando...</div>
       ) : tournaments.length === 0 ? (
-        <div className="text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
+        <div className="text-center py-12 text-sx-muted border border-dashed border-sx-border rounded-xl">
           <p>Nenhum torneio ainda</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {tournaments.map((t) => (
-            <div
-              key={t.id}
-              onClick={() => router.push(`/tournament/${t.id}`)}
-              className="bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 cursor-pointer flex items-center justify-between transition-colors"
-            >
-              <div>
-                <p className="text-sm font-medium">{t.name}</p>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  {t._count?.players ?? 0} jogadores • Buy-in R$ {Number(t.buyInAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </p>
+          {tournaments.map((t) => {
+            const isActive = t.status === 'RUNNING' || t.status === 'REGISTRATION' || t.status === 'ON_BREAK'
+            const barColor = t.status === 'RUNNING' ? '#00C8E0'
+              : t.status === 'REGISTRATION' ? '#60a5fa'
+              : t.status === 'ON_BREAK' ? '#00C8E0'
+              : 'rgba(255,255,255,0.15)'
+            return (
+              <div
+                key={t.id}
+                onClick={() => router.push(`/tournament/${t.id}`)}
+                className="relative rounded-xl overflow-hidden cursor-pointer group transition-all"
+                style={{
+                  background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)',
+                  border: '1px solid rgba(0,200,224,0.12)',
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(0,200,224,0.3)' }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(0,200,224,0.12)' }}
+              >
+                <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: barColor }} />
+                <div className="pl-4 pr-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-white">{t.name}</p>
+                    <p className="text-xs text-sx-muted mt-0.5">
+                      {t._count?.players ?? 0} jogadores • Buy-in R$ {Number(t.buyInAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${statusBadge[t.status] ?? 'text-sx-muted bg-white/5'}`}>
+                      {statusLabel[t.status] ?? t.status}
+                    </span>
+                    <span className="text-sx-muted group-hover:text-sx-cyan transition-colors text-sm">→</span>
+                  </div>
+                </div>
               </div>
-              <span className={`text-xs font-bold px-2 py-1 rounded-full ${statusBadge[t.status] ?? 'text-zinc-400'}`}>
-                {statusLabel[t.status] ?? t.status}
-              </span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

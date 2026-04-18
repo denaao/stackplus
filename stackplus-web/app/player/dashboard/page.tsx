@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
+import AppHeader from '@/components/AppHeader'
 
 interface HomeGameMembership {
   id: string
@@ -37,15 +38,12 @@ export default function PlayerDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <header className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-black text-yellow-400">STACKPLUS</h1>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-zinc-400">{user?.name}</span>
-          <button onClick={() => router.push('/profile')} className="text-sm text-zinc-400 hover:text-yellow-400 transition-colors">Perfil</button>
-          <button onClick={() => { logout(); router.push('/') }} className="text-sm text-zinc-500 hover:text-red-400">Sair</button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-sx-bg">
+      <AppHeader
+        userName={user?.name}
+        onProfile={() => router.push('/profile')}
+        onLogout={() => { logout(); router.push('/') }}
+      />
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-8">
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -53,10 +51,10 @@ export default function PlayerDashboardPage() {
               { label: 'Sessões', value: stats.totalSessions },
               { label: 'Vitórias', value: stats.wins },
               { label: 'Derrotas', value: stats.losses },
-              { label: 'Resultado', value: `R$ ${stats.totalResult.toFixed(2)}`, color: stats.totalResult >= 0 ? 'text-green-400' : 'text-red-400' },
+              { label: 'Resultado', value: `R$ ${stats.totalResult.toFixed(2)}`, color: stats.totalResult >= 0 ? 'text-sx-cyan' : 'text-red-400' },
             ].map((s) => (
-              <div key={s.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                <p className="text-xs text-zinc-500 uppercase tracking-wide">{s.label}</p>
+              <div key={s.label} className="bg-sx-card border border-sx-border rounded-xl p-4">
+                <p className="text-xs text-sx-muted uppercase tracking-wide">{s.label}</p>
                 <p className={`text-xl font-bold mt-1 ${(s as any).color || ''}`}>{s.value}</p>
               </div>
             ))}
@@ -68,8 +66,8 @@ export default function PlayerDashboardPage() {
           <form onSubmit={handleJoin} className="flex gap-3">
             <input value={joinCode} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} maxLength={6}
               placeholder="Código (ex: ABC123)"
-              className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm uppercase font-mono focus:outline-none focus:border-yellow-400" />
-            <button type="submit" className="bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-5 py-3 rounded-lg text-sm">Entrar</button>
+              className="flex-1 bg-sx-card border border-sx-border rounded-lg px-4 py-3 text-sm uppercase font-mono focus:outline-none focus:border-sx-cyan" />
+            <button type="submit" className="bg-sx-cyan hover:bg-sx-cyan-dim text-sx-bg font-bold px-5 py-3 rounded-lg text-sm">Entrar</button>
           </form>
           {joinError && <p className="text-red-400 text-sm mt-2">{joinError}</p>}
         </div>
@@ -77,21 +75,21 @@ export default function PlayerDashboardPage() {
         <div>
           <h2 className="text-lg font-bold mb-4">Meus Home Games</h2>
           {memberships.length === 0 ? (
-            <div className="text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-xl">Entre em um Home Game com o código</div>
+            <div className="text-center py-12 text-sx-muted border border-dashed border-sx-border rounded-xl">Entre em um Home Game com o código</div>
           ) : (
             <div className="space-y-3">
               {memberships.map((m) => {
                 const gameType = m.homeGame.gameType || 'CASH_GAME'
                 return (
-                <div key={m.id} className="bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 transition-colors">
+                <div key={m.id} className="bg-sx-card border border-sx-border hover:border-sx-border2 rounded-xl p-4 transition-colors">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-bold">{m.homeGame.name}</p>
-                    <span className="rounded-full bg-zinc-800 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-zinc-300">
+                    <span className="rounded-full bg-sx-input px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-zinc-300">
                       {gameType === 'CASH_GAME' ? 'Cash Game' : 'Torneio'}
                     </span>
                   </div>
-                  <p className="text-zinc-400 text-sm">{m.homeGame.address}</p>
-                  <p className="text-zinc-500 text-xs mt-1">{m.homeGame.dayOfWeek} • Host: {m.homeGame.host.name}</p>
+                  <p className="text-sx-muted text-sm">{m.homeGame.address}</p>
+                  <p className="text-sx-muted text-xs mt-1">{m.homeGame.dayOfWeek} • Host: {m.homeGame.host.name}</p>
                 </div>
                 )
               })}

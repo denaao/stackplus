@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import { useAuthStore } from '@/store/useStore'
@@ -26,18 +26,12 @@ type StatusFilter = 'OPEN' | 'CLOSED' | 'ALL'
 type BalanceFilter = 'ALL' | 'CREDIT' | 'DEBT'
 
 export default function ComandasPage() {
+  const { id: homeGameId } = useParams<{ id: string }>()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const homeGameId = searchParams.get('homeGameId') ?? ''
-  const playerIdParam = searchParams.get('playerId') ?? ''
-  const statusParam = searchParams.get('status') ?? ''
-  const isHistoryMode = !!playerIdParam
   const { user, logout } = useAuthStore()
 
   const [comandas, setComandas] = useState<Comanda[]>([])
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
-    isHistoryMode ? 'CLOSED' : 'OPEN'
-  )
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('OPEN')
   const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('ALL')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -46,43 +40,25 @@ export default function ComandasPage() {
     if (!homeGameId) return
     setLoading(true)
     const params = new URLSearchParams({ homeGameId })
-    // No modo histórico filtra por status no backend; no normal busca tudo e filtra no frontend
-    if (isHistoryMode) params.set('status', 'CLOSED')
+    if (statusFilter !== 'ALL') params.set('status', statusFilter)
     api.get(`/comanda?${params}`)
-      .then(r => {
-        let data: Comanda[] = r.data
-        if (playerIdParam) {
-          data = data.filter(c => c.player.id === playerIdParam)
-        } else {
-          // Mantém apenas a comanda mais recente por jogador
-          const latest = new Map<string, Comanda>()
-          for (const c of data) {
-            const existing = latest.get(c.player.id)
-            if (!existing || new Date(c.openedAt) > new Date(existing.openedAt)) {
-              latest.set(c.player.id, c)
-            }
-          }
-          data = Array.from(latest.values())
-            .sort((a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime())
-        }
-        setComandas(data)
-      })
+      .then(r => setComandas(r.data))
       .finally(() => setLoading(false))
-  }, [homeGameId, playerIdParam, isHistoryMode])
+  }, [homeGameId, statusFilter])
 
+  const filtered = comandas
+    .filter(c => c.player.name.toLowerCase().includes(search.toLowerCase()))
+    .filter(c => {
+      const b = parseFloat(c.balance)
+      if (balanceFilter === 'CREDIT') return b > 0
+      if (balanceFilter === 'DEBT') return b < 0
+      return true
+    })
+
+  // Totais sobre TODAS as comandas carregadas (ignora filtro de saldo)
   const allBySearch = comandas.filter(c =>
     c.player.name.toLowerCase().includes(search.toLowerCase())
   )
-
-  const filtered = allBySearch.filter(c => {
-    // No modo histórico o filtro de status faz sentido; no normal sempre mostra a última comanda
-    if (isHistoryMode && statusFilter !== 'ALL' && c.status !== statusFilter) return false
-    const b = parseFloat(c.balance)
-    if (balanceFilter === 'CREDIT') return b > 0
-    if (balanceFilter === 'DEBT') return b < 0
-    return true
-  })
-
   const totalPay = allBySearch.filter(c => parseFloat(c.balance) > 0).reduce((s, c) => s + parseFloat(c.balance), 0)
   const totalDebt = allBySearch.filter(c => parseFloat(c.balance) < 0).reduce((s, c) => s + parseFloat(c.balance), 0)
   const countCredit = allBySearch.filter(c => parseFloat(c.balance) > 0).length
@@ -102,24 +78,6 @@ export default function ComandasPage() {
       />
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-4">
-
-        {/* Banner modo histórico */}
-        {isHistoryMode && (
-          <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{
-            background: 'rgba(0,200,224,0.08)',
-            border: '1px solid rgba(0,200,224,0.25)',
-          }}>
-            <div className="text-xs text-sx-cyan font-medium">
-              📋 Histórico de comandas anteriores
-            </div>
-            <button
-              onClick={() => router.back()}
-              className="text-xs text-sx-muted hover:text-white"
-            >
-              ← Voltar
-            </button>
-          </div>
-        )}
 
         {/* Resumo */}
         <div className="rounded-xl px-4 py-4" style={{
@@ -145,8 +103,7 @@ export default function ComandasPage() {
 
         {/* Filtros */}
         <div className="flex gap-2 flex-wrap">
-          {/* Botões de status só aparecem no modo histórico */}
-          {isHistoryMode && (['OPEN', 'CLOSED', 'ALL'] as const).map(f => (
+          {(['OPEN', 'CLOSED', 'ALL'] as const).map(f => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
@@ -228,6 +185,7 @@ export default function ComandasPage() {
                   onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.border = '1px solid rgba(0,200,224,0.3)' }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.border = '1px solid rgba(0,200,224,0.12)' }}
                 >
+                  {/* Barra lateral de saldo */}
                   <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: barColor }} />
                   <div className="pl-4 pr-4 py-3 flex items-center justify-between">
                     <div>

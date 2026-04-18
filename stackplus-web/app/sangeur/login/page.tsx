@@ -37,14 +37,14 @@ export default function SangeurLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-8">
+    <div className="min-h-screen bg-sx-bg px-4 py-8">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-black tracking-tight text-emerald-400">SANGEUR POS</h1>
-          <p className="mt-2 text-sm text-zinc-400">Acesso operacional para venda de fichas na mesa</p>
+          <h1 className="text-4xl font-black tracking-tight text-sx-cyan">SANGEUR POS</h1>
+          <p className="mt-2 text-sm text-sx-muted">Acesso operacional para venda de fichas na mesa</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-sx-border bg-sx-card p-6">
           <h2 className="text-xl font-bold text-zinc-100">Entrar</h2>
 
           {error && (
@@ -54,45 +54,45 @@ export default function SangeurLoginPage() {
           )}
 
           <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-zinc-400">Home Game ID</label>
+            <label className="text-xs uppercase tracking-wide text-sx-muted">Home Game ID</label>
             <input
               type="text"
               required
               value={form.homeGameId}
               onChange={(e) => setForm((prev) => ({ ...prev, homeGameId: e.target.value }))}
               placeholder="UUID do Home Game"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none"
+              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-zinc-400">Usuário POS</label>
+            <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
             <input
               type="text"
               required
               value={form.username}
               onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
               placeholder="usuario da SANGEUR"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none"
+              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-zinc-400">Senha</label>
+            <label className="text-xs uppercase tracking-wide text-sx-muted">Senha</label>
             <input
               type="password"
               required
               value={form.password}
               onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
               placeholder="••••••"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none"
+              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-emerald-500 py-3 font-bold text-zinc-900 transition-colors hover:bg-emerald-400 disabled:opacity-50"
+            className="btn-sx-primary w-full text-sx-bg font-black py-3 rounded-xl text-sm tracking-widest uppercase"
           >
             {loading ? 'Entrando...' : 'Entrar na POS'}
           </button>

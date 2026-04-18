@@ -2,6 +2,7 @@ import { prisma } from '../../lib/prisma'
 import { SangeurMovementType, SangeurPaymentMethod, SangeurPaymentStatus, SangeurShiftStatus, SessionStatus, TransactionType } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import * as AnnapayService from '../banking/annapay.service'
+import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
 
 function toNumber(value: string | number | null | undefined | any) {
   return Number(value || 0)
@@ -485,8 +486,19 @@ export async function registerSale(input: {
     }
   }
 
-  // Transação atômica: cria Transaction (BUYIN/REBUY) + SangeurSale + atualiza PlayerSessionState.
+  // Prepara metadados da integração com comanda (aplicada dentro da mesma transaction abaixo)
+  const comandaGameLabel = shift.session.homeGame?.name ?? shift.homeGameId
+  const paymentTypeMap: Partial<Record<SangeurPaymentMethod, string>> = {
+    [SangeurPaymentMethod.CASH]:    'PAYMENT_CASH',
+    [SangeurPaymentMethod.CARD]:    'PAYMENT_CARD',
+    [SangeurPaymentMethod.PIX_QR]:  'PAYMENT_PIX_SPOT',
+    // VOUCHER: sem item de pagamento imediato (fica pendente)
+  }
+  const comandaPaymentType = paymentTypeMap[input.paymentMethod] ?? null
+
+  // Transação atômica: cria Transaction (BUYIN/REBUY) + SangeurSale + atualiza PlayerSessionState + aplica na comanda.
   // As fichas já são entregues ao jogador agora, por isso a Transaction é criada mesmo para VOUCHER/PIX pendente.
+  // BLOCKING: se a aplicação na comanda falhar (ex.: limite estourado), a venda inteira é revertida.
   const { sale, transaction, playerState } = await prisma.$transaction(async (tx) => {
     const currentState = await tx.playerSessionState.findUnique({
       where: { sessionId_userId: { sessionId: shift.sessionId, userId: sessionUserId } },
@@ -572,10 +584,46 @@ export async function registerSale(input: {
       },
     })
 
+    // Comanda integration — BLOCKING: roda dentro da mesma tx.
+    // Se falhar (ex.: limite de crédito insuficiente), a venda inteira é revertida.
+    const cashType = newTx.type === TransactionType.BUYIN ? 'CASH_BUYIN' : 'CASH_REBUY'
+    const typeLabel = newTx.type === TransactionType.BUYIN ? 'Buy-in' : 'Rebuy'
+    const txDescription = `${typeLabel} (Sangeur) — ${comandaGameLabel}`
+
+    const comanda = await findOrOpenComandaWithTx(tx, {
+      playerId: sessionUserId,
+      homeGameId: shift.homeGameId,
+      openedByUserId: input.userId,
+    })
+
+    await addComandaItemWithTx(tx, {
+      comandaId: comanda.id,
+      type: cashType as any,
+      amount,
+      description: txDescription,
+      sessionId: shift.sessionId,
+      transactionId: newSale.transactionId ?? undefined,
+      createdByUserId: input.userId,
+    })
+
+    if (comandaPaymentType) {
+      const isPix = input.paymentMethod === SangeurPaymentMethod.PIX_QR
+      await addComandaItemWithTx(tx, {
+        comandaId: comanda.id,
+        type: comandaPaymentType as any,
+        amount,
+        description: `Pagamento ${isPix ? 'PIX' : input.paymentMethod} — ${txDescription}`,
+        sessionId: shift.sessionId,
+        transactionId: newSale.transactionId ?? undefined,
+        createdByUserId: input.userId,
+      })
+    }
+
     return { sale: newSale, transaction: newTx, playerState: nextState }
   }, { timeout: 15000, maxWait: 10000 })
 
   const updatedShift = await getShiftByIdForSangeur(input.shiftId, input.userId)
+
   return {
     shift: updatedShift,
     sale,

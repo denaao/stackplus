@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
+import AppHeader from '@/components/AppHeader'
+import { useAuthStore } from '@/store/useStore'
 
 interface BlindLevel {
   level: number
@@ -44,6 +46,7 @@ export default function CreateTournamentPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const homeGameId = searchParams.get('homeGameId') ?? ''
+  const { user, logout } = useAuthStore()
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -76,6 +79,9 @@ export default function CreateTournamentPage() {
   })
   const [customLevels, setCustomLevels] = useState<BlindLevel[]>([])
   const [useCustom, setUseCustom] = useState(false)
+  const [doubleBuyInEnabled, setDoubleBuyInEnabled] = useState(false)
+  const [doubleBuyInBonusChips, setDoubleBuyInBonusChips] = useState('')
+  const [doubleRebuyEnabled, setDoubleRebuyEnabled] = useState(false)
 
   useEffect(() => {
     api.get('/tournaments/blind-templates').then((r) => setTemplates(r.data)).catch(() => {})
@@ -169,6 +175,8 @@ export default function CreateTournamentPage() {
       if (form.lateRegistrationLevel) payload.lateRegistrationLevel = parseInt(form.lateRegistrationLevel)
       if (form.rebuyUntilLevel) payload.rebuyUntilLevel = parseInt(form.rebuyUntilLevel)
       if (form.addonAfterLevel) payload.addonAfterLevel = parseInt(form.addonAfterLevel)
+      if (doubleBuyInEnabled && doubleBuyInBonusChips) payload.doubleBuyInBonusChips = parseInt(doubleBuyInBonusChips)
+      if (doubleRebuyEnabled) payload.doubleRebuyEnabled = true
 
       if (useCustom && customLevels.length > 0) {
         payload.blindLevels = customLevels
@@ -189,11 +197,14 @@ export default function CreateTournamentPage() {
   const label = 'block text-xs text-sx-muted mb-1'
 
   return (
-    <div className="min-h-screen bg-sx-bg text-white p-4 max-w-2xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-sx-muted hover:text-white">←</button>
-        <h1 className="text-xl font-bold">Criar Torneio</h1>
-      </div>
+    <div className="min-h-screen">
+      <AppHeader
+        title="Criar Torneio"
+        onBack={() => homeGameId ? router.push(`/homegame/${homeGameId}/tournaments`) : router.back()}
+        userName={user?.name}
+        onLogout={() => { logout(); router.push('/') }}
+      />
+      <div className="max-w-2xl mx-auto p-4 pt-6">
 
       {error && <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">{error}</div>}
 
@@ -230,8 +241,8 @@ export default function CreateTournamentPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* Básico */}
-        <section className="bg-sx-card rounded-xl p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-sx-cyan">Informações Básicas</h2>
+        <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
+          <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Informações Básicas</h2>
           <div>
             <label className={label}>Nome do torneio *</label>
             <input className={input} value={form.name} onChange={(e) => set('name', e.target.value)} required placeholder="Ex: Torneio Semanal" />
@@ -267,6 +278,44 @@ export default function CreateTournamentPage() {
             </div>
           </div>
 
+          {/* Buy-in Duplo */}
+          <div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-white">Buy-in Duplo <span className="text-white/30 font-normal">(opcional)</span></p>
+                <p className="text-[11px] text-sx-muted mt-0.5">Jogador paga 2× o buy-in e recebe fichas bônus extras.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setDoubleBuyInEnabled((v) => !v); setDoubleBuyInBonusChips('') }}
+                style={{ background: doubleBuyInEnabled ? '#00C8E0' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
+                className="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-all duration-200"
+              >
+                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 mt-0.5 ${doubleBuyInEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            {doubleBuyInEnabled && (
+              <div className="mt-3 rounded-xl p-4" style={{ background: 'rgba(0,200,224,0.05)', border: '1px solid rgba(0,200,224,0.2)' }}>
+                <label className="text-[11px] text-sx-muted uppercase tracking-widest font-medium">Fichas bônus do buy-in duplo</label>
+                <input
+                  className={`mt-1.5 w-full rounded-xl border border-sx-border2 bg-sx-input px-3 py-2.5 text-sm focus:border-sx-cyan focus:outline-none`}
+                  type="number"
+                  min="0"
+                  value={doubleBuyInBonusChips}
+                  onChange={(e) => setDoubleBuyInBonusChips(e.target.value)}
+                  placeholder="Ex: 2500"
+                />
+                <p className="mt-1.5 text-[11px] text-sx-muted">
+                  Fichas normais: <span className="text-white">{form.startingChips || '—'}</span>
+                  {doubleBuyInBonusChips && (
+                    <> · Total duplo: <span className="text-sx-cyan font-bold">{(parseInt(form.startingChips || '0') + parseInt(doubleBuyInBonusChips || '0')).toLocaleString('pt-BR')}</span></>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Rebuy */}
           <div>
             <p className="text-xs font-medium text-sx-muted mb-2">Rebuy <span className="text-white/30 font-normal">(opcional)</span></p>
@@ -295,6 +344,24 @@ export default function CreateTournamentPage() {
               </div>
               <div />
             </div>
+
+            {/* Rebuy Duplo toggle */}
+            {(form.rebuyAmount) && (
+              <div className="flex items-center justify-between mt-2">
+                <div>
+                  <p className="text-xs font-medium text-white">Rebuy Duplo <span className="text-white/30 font-normal">(opcional)</span></p>
+                  <p className="text-[11px] text-sx-muted mt-0.5">Jogador paga 2× o rebuy e 2× a taxa, recebendo 2× as fichas.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDoubleRebuyEnabled((v) => !v)}
+                  style={{ background: doubleRebuyEnabled ? '#00C8E0' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
+                  className="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-all duration-200"
+                >
+                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 mt-0.5 ${doubleRebuyEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Add-on */}
@@ -335,8 +402,8 @@ export default function CreateTournamentPage() {
         </section>
 
         {/* Regras */}
-        <section className="bg-sx-card rounded-xl p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-sx-cyan">Regras</h2>
+        <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
+          <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Regras</h2>
           <div>
             <label className={label}>Late registration até nível</label>
             <input className={input} type="number" value={form.lateRegistrationLevel} onChange={(e) => set('lateRegistrationLevel', e.target.value)} placeholder="Sem limite" />
@@ -344,8 +411,8 @@ export default function CreateTournamentPage() {
         </section>
 
         {/* Timer */}
-        <section className="bg-sx-card rounded-xl p-4 space-y-4">
-          <h2 className="text-sm font-semibold text-sx-cyan">Tempo dos Níveis</h2>
+        <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
+          <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Tempo dos Níveis</h2>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>Tempo de blinds antes do late register (min) *</label>
@@ -393,9 +460,9 @@ export default function CreateTournamentPage() {
         </section>
 
         {/* Blinds */}
-        <section className="bg-sx-card rounded-xl p-4 space-y-4">
+        <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-sx-cyan">Estrutura de Blinds</h2>
+            <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Estrutura de Blinds</h2>
             <button type="button" onClick={addLevel} className="text-xs text-sx-cyan hover:text-white">+ Nível</button>
           </div>
 
@@ -446,7 +513,8 @@ export default function CreateTournamentPage() {
         <button
           type="button"
           onClick={handleSavePreset}
-          className="w-full py-2 bg-sx-input hover:bg-sx-card2 border border-sx-border2 rounded-xl text-sm text-sx-cyan"
+          className="w-full py-2.5 rounded-xl text-sm font-bold text-sx-muted hover:text-white transition-colors"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
         >
           Salvar como modelo
         </button>
@@ -454,11 +522,12 @@ export default function CreateTournamentPage() {
         <button
           type="submit"
           disabled={saving}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold text-sm disabled:opacity-50"
+          className="btn-sx-primary w-full py-3.5 rounded-xl font-black text-sx-bg text-sm disabled:opacity-50"
         >
           {saving ? 'Criando...' : 'Criar Torneio'}
         </button>
       </form>
+      </div>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma'
 import { TransactionType } from '@prisma/client'
+import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
 
 type CashierTransactionType = TransactionType | 'JACKPOT'
 
@@ -12,6 +13,70 @@ interface TransactionInput {
   note?: string
   registeredBy: string
 }
+
+// ─── Comanda helpers ──────────────────────────────────────────────────────────
+
+const CASH_COMANDA_TYPE_MAP: Partial<Record<CashierTransactionType, string>> = {
+  BUYIN:   'CASH_BUYIN',
+  REBUY:   'CASH_REBUY',
+  ADDON:   'CASH_ADDON',
+  CASHOUT: 'CASH_CASHOUT',
+  // JACKPOT: sem tipo na comanda
+}
+
+function extractChargeId(note: string | undefined | null): string | null {
+  if (!note) return null
+  const m = note.match(/\[charge:([^\]]+)\]/)
+  return m ? m[1] : null
+}
+
+async function applyTransactionToComandaTx(tx: any, {
+  homeGameId,
+  playerId,
+  operatorUserId,
+  sessionId,
+  transactionId,
+  cashType,
+  amount,
+  description,
+  chargeId,
+}: {
+  homeGameId: string
+  playerId: string
+  operatorUserId: string
+  sessionId: string
+  transactionId: string
+  cashType: string
+  amount: number
+  description: string
+  chargeId: string | null
+}) {
+  const comanda = await findOrOpenComandaWithTx(tx, { playerId, homeGameId, openedByUserId: operatorUserId })
+
+  await addComandaItemWithTx(tx, {
+    comandaId: comanda.id,
+    type: cashType as any,
+    amount,
+    description,
+    sessionId,
+    transactionId,
+    createdByUserId: operatorUserId,
+  })
+
+  // Se a transação veio com pagamento PIX confirmado, registra o pagamento também
+  if (chargeId) {
+    await addComandaItemWithTx(tx, {
+      comandaId: comanda.id,
+      type: 'PAYMENT_PIX_SPOT' as any,
+      amount,
+      description: `Pagamento PIX — ${description}`,
+      sessionId,
+      createdByUserId: operatorUserId,
+    })
+  }
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
 
 export async function registerTransaction(input: TransactionInput) {
   const session = await prisma.session.findUniqueOrThrow({
@@ -50,6 +115,13 @@ export async function registerTransaction(input: TransactionInput) {
   }
 
   if (state?.hasCashedOut) throw new Error('Jogador já realizou cashout nesta sessão')
+
+  const cashType = CASH_COMANDA_TYPE_MAP[input.type]
+  const typeLabels: Partial<Record<CashierTransactionType, string>> = {
+    BUYIN: 'Buy-in', REBUY: 'Rebuy', ADDON: 'Addon', CASHOUT: 'Cashout',
+  }
+  const comandaDescription = `${typeLabels[input.type] ?? String(input.type)} — ${session.homeGame.name}`
+  const chargeId = extractChargeId(input.note)
 
   const transaction = await prisma.$transaction(async (tx) => {
     const newTx = await tx.transaction.create({
@@ -100,6 +172,23 @@ export async function registerTransaction(input: TransactionInput) {
         where: { sessionId_userId: { sessionId: input.sessionId, userId: input.userId } },
         data: { chipsIn, chipsOut, currentStack, result, hasCashedOut },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      })
+    }
+
+    // Comanda integration — BLOCKING: falha aqui desfaz a transação do caixa.
+    // Se o limite de crédito do jogador não permitir o débito, o operador
+    // precisa registrar pagamento antes OU ajustar o creditLimit da comanda.
+    if (cashType) {
+      await applyTransactionToComandaTx(tx, {
+        homeGameId: session.homeGameId,
+        playerId: input.userId,
+        operatorUserId: input.registeredBy,
+        sessionId: input.sessionId,
+        transactionId: newTx.id,
+        cashType,
+        amount,
+        description: comandaDescription,
+        chargeId,
       })
     }
 

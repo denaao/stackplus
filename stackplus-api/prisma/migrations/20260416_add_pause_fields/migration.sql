@@ -1,0 +1,2 @@
+ALTER TABLE "Tournament" ADD COLUMN "isPaused" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Tournament" ADD COLUMN "pausedAt" TIMESTAMP(3);

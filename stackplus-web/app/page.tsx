@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 
@@ -43,15 +44,34 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-black text-yellow-400 tracking-tight">STACKPLUS</h1>
-          <p className="text-zinc-400 mt-2 text-sm">Home Game Poker Manager</p>
+
+        {/* Branding */}
+        <div className="flex flex-col items-center mb-10 gap-3">
+          <h1
+            className="text-6xl font-black tracking-tight text-sx-cyan text-glow"
+            style={{ letterSpacing: '-0.02em' }}
+          >
+            STACK+
+          </h1>
+          <div className="flex items-center gap-2.5">
+            <span className="text-sx-muted text-[11px] uppercase tracking-[0.18em]">by</span>
+            <Image
+              src="/sx-poker-logo.png"
+              alt="SX Poker"
+              width={90}
+              height={22}
+              priority
+              className="opacity-85"
+            />
+          </div>
+          <p className="text-sx-muted text-sm mt-1 tracking-wide">Home Game Poker Manager</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 space-y-4">
-          <h2 className="text-xl font-bold text-zinc-100">Entrar</h2>
+        {/* Form card */}
+        <div className="card-sx rounded-2xl p-8 space-y-5">
+          <h2 className="text-lg font-bold text-white">Entrar na sua conta</h2>
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">
@@ -59,29 +79,29 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">CPF</label>
+          <div className="space-y-1.5">
+            <label className="text-[11px] text-sx-muted uppercase tracking-widest font-medium">CPF</label>
             <input
               type="text"
               inputMode="numeric"
               required
               value={form.cpf}
               onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 transition-colors"
+              className="w-full bg-sx-input border border-sx-border2 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan transition-colors placeholder:text-sx-muted/50"
               placeholder="000.000.000-00"
               maxLength={14}
               autoComplete="username"
             />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-zinc-400 uppercase tracking-wide">Senha</label>
+          <div className="space-y-1.5">
+            <label className="text-[11px] text-sx-muted uppercase tracking-widest font-medium">Senha</label>
             <input
               type="password"
               required
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 transition-colors"
+              className="w-full bg-sx-input border border-sx-border2 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan transition-colors placeholder:text-sx-muted/50"
               placeholder="••••••"
               autoComplete="current-password"
             />
@@ -90,18 +110,20 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+            onClick={handleSubmit as any}
+            className="btn-sx-primary w-full text-sx-bg font-black py-3.5 rounded-xl text-sm tracking-widest uppercase"
           >
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
 
-          <p className="text-center text-sm text-zinc-500">
+          <p className="text-center text-sm text-sx-muted pt-1">
             Não tem conta?{' '}
-            <a href="/register" className="text-yellow-400 hover:underline">
+            <a href="/register" className="text-sx-cyan hover:underline font-semibold">
               Cadastrar
             </a>
           </p>
-        </form>
+        </div>
+
       </div>
     </div>
   )

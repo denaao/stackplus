@@ -75,6 +75,8 @@ enum ComandaItemType {
   PAYMENT_CARD
   TRANSFER_IN
   TRANSFER_OUT
+  CARRY_IN
+  CARRY_OUT
 }
 
 enum ComandaItemPaymentStatus {
@@ -683,13 +685,20 @@ model Tournament {
   addonTaxAmount             Decimal?         @db.Decimal(10, 2)
   addonTaxChips              Int?
   blindTemplateName          String?
+  doubleBuyInBonusChips      Int?
 
   currentLevel             Int              @default(0)
   levelStartedAt           DateTime?
   isOnBreak                Boolean          @default(false)
   breakStartedAt           DateTime?
+  isPaused                 Boolean          @default(false)
+  pausedAt                 DateTime?
+  dealPayouts              String?
+  payoutStructure          String?
+  doubleRebuyEnabled       Boolean          @default(false)
   prizePool                Decimal          @default(0) @db.Decimal(10, 2)
   totalRake                Decimal          @default(0) @db.Decimal(10, 2)
+  totalTax                 Decimal          @default(0) @db.Decimal(10, 2)
 
   startedAt                DateTime?
   finishedAt               DateTime?

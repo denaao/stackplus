@@ -6,6 +6,8 @@ import api from '@/services/api'
 import { joinSession, leaveSession } from '@/services/socket'
 import { getSocket } from '@/services/socket'
 import { useAuthStore } from '@/store/useStore'
+import AppHeader from '@/components/AppHeader'
+import AppLoading from '@/components/AppLoading'
 
 type PdfFontWeight = 'normal' | 'bold'
 
@@ -837,7 +839,7 @@ export default function SessionManagePage() {
     loadBankBalance()
   }, [session?.id, session?.status, user?.id])
 
-  if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-yellow-400 font-black text-2xl">STACKPLUS</div>
+  if (loading) return <AppLoading />
   if (!session) return null
 
   const gameType = session.gameType || session.homeGame.gameType || 'CASH_GAME'
@@ -894,45 +896,42 @@ export default function SessionManagePage() {
   const canDownloadFinancialPdf = Boolean(financialReport) && !financialHasSkippedItems && !financialHasPendingPayoutApproval
 
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <header className="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.back()} className="text-zinc-400 hover:text-white">←</button>
-        <div className="flex-1">
-          <h1 className="font-bold">{session.homeGame.name}</h1>
-          <p className="text-xs text-zinc-400">Gerenciar Sessão • {pokerVariantLabels[pokerVariant]} • {gameType === 'CASH_GAME' ? 'Cash Game' : 'Torneio'}</p>
-        </div>
-        <div className="flex gap-2">
-          {session.status === 'ACTIVE' && (
-            <>
-              {gameType === 'TOURNAMENT' && (
-                <button onClick={() => window.open(`/tv/${sessionId}`, '_blank')}
-                  className="bg-zinc-700 hover:bg-zinc-600 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors">
-                  📺 TV
-                </button>
-              )}
-              <button onClick={() => setShowFinishConfirmModal(true)} disabled={actionLoading}
-                className="bg-red-500 hover:bg-red-400 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50">
-                Finalizar
+    <div className="min-h-screen bg-sx-bg">
+      <AppHeader
+        title={session.homeGame.name}
+        onBack={() => router.back()}
+        userName={user?.name}
+        onLogout={() => { logout(); router.push('/') }}
+        rightSlot={session.status === 'ACTIVE' ? (
+          <div className="flex gap-2">
+            {gameType === 'TOURNAMENT' && (
+              <button onClick={() => window.open(`/tv/${sessionId}`, '_blank')}
+                className="bg-sx-border2 hover:bg-sx-border2 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors">
+                📺 TV
               </button>
-            </>
-          )}
-        </div>
-      </header>
+            )}
+            <button onClick={() => setShowFinishConfirmModal(true)} disabled={actionLoading}
+              className="bg-red-500 hover:bg-red-400 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50">
+              Finalizar
+            </button>
+          </div>
+        ) : undefined}
+      />
 
-      <main className="max-w-3xl mx-auto px-6 py-8">
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         {pageFeedback && (
-          <div className={`mb-6 rounded-xl border px-4 py-3 text-sm ${pageFeedback.tone === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+          <div className={`rounded-xl border px-4 py-3 text-sm ${pageFeedback.tone === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-sx-cyan/30 bg-sx-cyan/10 text-sx-cyan'}`}>
             {pageFeedback.message}
           </div>
         )}
 
         {isHost && session.status !== 'FINISHED' && (
-          <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.12)' }}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-blue-300">Staff da partida</p>
-                  <p className="mt-1 text-sm text-zinc-300">{session.status === 'WAITING' ? 'Selecione quem faz parte do staff e configure o rakeback.' : 'Gerencie o staff durante a partida.'}</p>
+                  <p className="mt-1 text-sm text-zinc-400">{session.status === 'WAITING' ? 'Selecione quem faz parte do staff e configure o rakeback.' : 'Gerencie o staff durante a partida.'}</p>
                 </div>
                 <button
                   type="button"
@@ -954,17 +953,17 @@ export default function SessionManagePage() {
               )}
             </div>
 
-            <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/5 p-4">
+            <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.2)' }}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-yellow-300">SANGEUR</p>
-                  <p className="mt-1 text-sm text-zinc-300">Gerencie acessos ao caixa móvel da partida.</p>
+                  <p className="text-xs uppercase tracking-wide text-sx-cyan">SANGEUR</p>
+                  <p className="mt-1 text-sm text-zinc-400">Gerencie acessos ao caixa móvel da partida.</p>
                 </div>
                 <button
                   type="button"
                   onClick={openSangeurModal}
                   disabled={sangeurLoading}
-                  className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+                  className="rounded-lg bg-sx-cyan px-3 py-2 text-xs font-bold text-sx-bg hover:bg-sx-cyan-dim disabled:opacity-50"
                 >
                   {sangeurLoading && !showSangeurModal ? 'Carregando...' : `Gerenciar SANGEUR${sangeurAccesses.filter((a) => a.isActive).length ? ` (${sangeurAccesses.filter((a) => a.isActive).length})` : ''}`}
                 </button>
@@ -972,7 +971,7 @@ export default function SessionManagePage() {
               {sangeurAccesses.filter((a) => a.isActive).length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {sangeurAccesses.filter((a) => a.isActive).map((access) => (
-                    <span key={access.id} className="rounded-full bg-yellow-400/15 border border-yellow-400/30 px-3 py-1 text-xs font-medium text-yellow-200">
+                    <span key={access.id} className="rounded-full bg-sx-cyan/15 border border-sx-cyan/30 px-3 py-1 text-xs font-medium text-sx-cyan/70">
                       {access.user.name}
                     </span>
                   ))}
@@ -983,17 +982,17 @@ export default function SessionManagePage() {
         )}
 
         {gameType === 'CASH_GAME' && isHost && session.status !== 'FINISHED' && (
-          <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.12)' }}>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">Participantes da partida</p>
+                <p className="text-xs uppercase tracking-wide text-sx-muted">Participantes da partida</p>
                 <p className="mt-1 text-sm text-zinc-300">Escolha quem do home game vai participar desta sessão de cash game.</p>
               </div>
               <button
                 type="button"
                 onClick={openParticipantsModal}
                 disabled={participantsLoading}
-                className="rounded-lg bg-yellow-400 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50"
+                className="rounded-lg bg-sx-cyan px-3 py-2 text-xs font-bold text-sx-bg hover:bg-sx-cyan-dim disabled:opacity-50"
               >
                 {participantsLoading ? 'Carregando...' : `Escolher participantes${session.participantAssignments.length ? ` (${session.participantAssignments.length})` : ''}`}
               </button>
@@ -1002,7 +1001,7 @@ export default function SessionManagePage() {
             {hasSavedParticipants && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {session.participantAssignments.map((assignment) => (
-                  <span key={assignment.userId} className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200">
+                  <span key={assignment.userId} className="rounded-full border border-sx-cyan/40 bg-sx-cyan/10 px-3 py-1 text-xs font-medium text-sx-cyan/80">
                     {assignment.user.name}
                   </span>
                 ))}
@@ -1012,10 +1011,10 @@ export default function SessionManagePage() {
         )}
 
         {showParticipantsModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-            <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
-              <h3 className="text-lg font-bold">Participantes da Partida</h3>
-              <p className="mt-1 text-sm text-zinc-400">Selecione os jogadores que vão participar desta sessão.</p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}>
+            <div className="w-full max-w-2xl rounded-2xl p-6" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.15)' }}>
+              <h3 className="text-lg font-bold text-white">Participantes da Partida</h3>
+              <p className="mt-1 text-sm text-sx-muted">Selecione os jogadores que vão participar desta sessão.</p>
 
               {participantsModalError && (
                 <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -1028,7 +1027,7 @@ export default function SessionManagePage() {
                   type="button"
                   onClick={() => setSelectedParticipantIds(participantOptions.map((person) => person.id))}
                   disabled={participantsLoading || participantOptions.length === 0}
-                  className="min-w-[128px] rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                  className="min-w-[128px] rounded-lg border border-sx-border2 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-sx-input disabled:opacity-50"
                 >
                   Selecionar todos
                 </button>
@@ -1036,7 +1035,7 @@ export default function SessionManagePage() {
                   type="button"
                   onClick={() => setSelectedParticipantIds([])}
                   disabled={participantsLoading}
-                  className="min-w-[128px] rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                  className="min-w-[128px] rounded-lg border border-sx-border2 px-3 py-2 text-xs font-bold text-zinc-300 hover:bg-sx-input disabled:opacity-50"
                 >
                   Limpar
                 </button>
@@ -1052,14 +1051,14 @@ export default function SessionManagePage() {
                       onClick={() => {
                         setSelectedParticipantIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
                       }}
-                      className={`rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
+                      className={`rounded-lg border-2 p-3 text-left transition-all ${checked ? 'border-sx-cyan bg-sx-cyan/15' : 'border-sx-border2 bg-sx-input/50 hover:border-sx-border2'}`}
                     >
-                      <p className={`text-sm font-medium ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
+                      <p className={`text-sm font-medium ${checked ? 'text-sx-cyan' : 'text-zinc-100'}`}>{person.name}</p>
                     </button>
                   )
                 })}
                 {participantOptions.length === 0 && (
-                  <p className="text-sm text-zinc-500">Nenhuma pessoa cadastrada no home game.</p>
+                  <p className="text-sm text-sx-muted">Nenhuma pessoa cadastrada no home game.</p>
                 )}
               </div>
 
@@ -1067,7 +1066,7 @@ export default function SessionManagePage() {
                 <button
                   type="button"
                   onClick={() => setShowParticipantsModal(false)}
-                  className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
+                  className="rounded-lg border border-sx-border2 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-sx-input transition-colors"
                 >
                   Cancelar
                 </button>
@@ -1075,7 +1074,7 @@ export default function SessionManagePage() {
                   type="button"
                   onClick={saveParticipants}
                   disabled={participantsLoading}
-                  className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 disabled:opacity-50 transition-colors"
+                  className="rounded-lg bg-sx-cyan px-4 py-2 text-sm font-bold text-sx-bg hover:bg-sx-cyan-dim disabled:opacity-50 transition-colors"
                 >
                   {participantsLoading ? 'Salvando...' : 'Salvar participantes'}
                 </button>
@@ -1085,11 +1084,11 @@ export default function SessionManagePage() {
         )}
 
         {gameType === 'CASH_GAME' && session.status === 'ACTIVE' && (
-          <div className="mb-6">
+          <div>
             <button
               onClick={() => router.push(`/cashier/${sessionId}`)}
               disabled={!hasSavedParticipants}
-              className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold px-4 py-3 rounded-lg text-base transition-colors disabled:opacity-50"
+              className="w-full bg-sx-cyan hover:bg-sx-cyan-dim text-sx-bg font-bold px-4 py-3 rounded-xl text-base transition-colors disabled:opacity-50"
             >
               {hasSavedParticipants ? 'Ir para o Caixa' : 'Salve os participantes para liberar o Caixa'}
             </button>
@@ -1097,300 +1096,39 @@ export default function SessionManagePage() {
         )}
 
         {session.status === 'FINISHED' && isHost && (
-          <div className="mb-6 rounded-xl border border-purple-500/25 bg-purple-500/10 p-4">
+          <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.25)' }}>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-purple-200">Liquidação Financeira (Annapay)</p>
-                <p className="mt-1 text-sm text-zinc-300">Gera cobranças PIX para negativos pós-pago e ordens PIX pendentes para positivos.</p>
+                <p className="text-xs uppercase tracking-wide text-sx-cyan">Liquidação</p>
+                <p className="mt-1 text-sm text-zinc-300">Saldos, cobranças PIX e pagamentos agora são gerenciados pela comanda de cada jogador.</p>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={loadBankBalance}
-                  disabled={bankBalanceLoading}
-                  className="rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
-                >
-                  {bankBalanceLoading ? 'Atualizando saldo...' : 'Atualizar saldo'}
-                </button>
-                {financialReport && (
-                  <button
-                    type="button"
-                    onClick={downloadFinancialReportPdf}
-                    disabled={!canDownloadFinancialPdf || pdfLoading}
-                    className="rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {pdfLoading ? 'Gerando PDF...' : 'Baixar PDF da liquidação'}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={generateFinancialReport}
-                  disabled={financialLoading}
-                  className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-50"
-                >
-                  {financialLoading ? 'Gerando...' : 'Gerar relatório financeiro'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => router.push(`/homegame/${session.homeGame.id}/comandas`)}
+                className="rounded-lg bg-sx-cyan px-4 py-2 text-sm font-bold text-sx-bg hover:bg-sx-cyan-dim transition-colors whitespace-nowrap"
+              >
+                Ir para comandas
+              </button>
             </div>
-
-            <div className="mt-4 rounded-lg border border-cyan-500/25 bg-cyan-500/10 p-3">
-              <p className="text-xs uppercase tracking-wide text-cyan-200">Saldo bancário atual</p>
-              {bankBalanceLoading ? (
-                <p className="mt-1 text-sm text-zinc-300">Consultando saldo...</p>
-              ) : bankBalance != null ? (
-                <p className="mt-1 text-lg font-black text-cyan-100">{formatCurrency(bankBalance)}</p>
-              ) : (
-                <p className="mt-1 text-sm text-zinc-300">Saldo indisponível</p>
-              )}
-              {bankBalanceError && <p className="mt-1 text-xs text-red-300">{bankBalanceError}</p>}
-            </div>
-
-            {financialReport?.reconciliation && (
-              <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-bold uppercase tracking-wide text-amber-300">⚠ Conciliação bancária — QR codes confirmados</p>
-                  {financialReport.reconciliation.countNotFound > 0 && (
-                    <span className="rounded-full border border-red-500/40 bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">
-                      {financialReport.reconciliation.countNotFound} não encontrado{financialReport.reconciliation.countNotFound !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-
-                {financialReport.reconciliation.items.length === 0 ? (
-                  <p className="text-xs text-zinc-500">Nenhuma cobrança QR liquidada encontrada para esta sessão.</p>
-                ) : (
-                  <>
-                    <div className="mb-2 grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded border border-emerald-500/20 bg-emerald-500/5 p-2">
-                        <p className="text-zinc-500">Encontrado no extrato</p>
-                        <p className="font-bold text-emerald-300">{financialReport.reconciliation.countFound} · {formatCurrency(financialReport.reconciliation.totalFound)}</p>
-                      </div>
-                      <div className={`rounded border p-2 ${financialReport.reconciliation.countNotFound > 0 ? 'border-red-500/30 bg-red-500/10' : 'border-zinc-700 bg-zinc-900/60'}`}>
-                        <p className="text-zinc-500">Não encontrado</p>
-                        <p className={`font-bold ${financialReport.reconciliation.countNotFound > 0 ? 'text-red-300' : 'text-zinc-400'}`}>
-                          {financialReport.reconciliation.countNotFound} · {formatCurrency(financialReport.reconciliation.totalNotFound)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                      {financialReport.reconciliation.items.map((item) => (
-                        <div
-                          key={item.chargeId}
-                          className={`rounded border px-3 py-2 text-xs ${
-                            item.matchStatus === 'FOUND'
-                              ? 'border-emerald-500/20 bg-emerald-500/5'
-                              : 'border-red-500/30 bg-red-500/10'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-zinc-100">{item.playerName}</p>
-                              <p className="text-zinc-500">
-                                {item.flow === 'PREPAID_PURCHASE' ? 'Compra pré-pago' : 'Liquidação final'} · {formatCurrency(item.amount)}
-                              </p>
-                              {item.matchStatus === 'FOUND' && item.endToEndId && (
-                                <p className="mt-0.5 font-mono text-[10px] text-emerald-400">E2E: {item.endToEndId}</p>
-                              )}
-                              {item.matchStatus === 'NOT_FOUND' && (
-                                <p className="mt-0.5 text-[10px] text-red-300">Confirmado manualmente — não localizado no extrato Annapay</p>
-                              )}
-                            </div>
-                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                              item.matchStatus === 'FOUND'
-                                ? 'bg-emerald-500/20 text-emerald-200'
-                                : 'bg-red-500/20 text-red-200'
-                            }`}>
-                              {item.matchStatus === 'FOUND' ? '✓ Extrato' : '✗ Ausente'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {financialReport.reconciliation.countNotFound > 0 && (
-                      <p className="mt-2 text-[11px] text-amber-200/70">
-                        Pagamentos marcados como recebidos mas não encontrados no extrato do Annapay. Verifique se o pagamento foi feito em outra conta ou se houve confirmação indevida.
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
-            {financialReport && (
-              <div className="mt-4 space-y-4">
-                <div className={`rounded-lg border p-3 text-xs ${canDownloadFinancialPdf ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-zinc-700 bg-zinc-900/60 text-zinc-400'}`}>
-                  {canDownloadFinancialPdf
-                    ? 'Liquidação concluída. O PDF completo desta etapa já pode ser baixado.'
-                    : 'O PDF será liberado quando não houver pendências manuais e todas as ordens PIX tiverem sido enviadas pelo host.'}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
-                    <p className="text-zinc-500">Módulo</p>
-                    <p className="mt-0.5 font-semibold text-zinc-100">{financialReport.financialModule}</p>
-                  </div>
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
-                    <p className="text-zinc-500">Cobranças</p>
-                    <p className="mt-0.5 font-semibold text-zinc-100">{financialReport.summary.chargesCreated}</p>
-                  </div>
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
-                    <p className="text-zinc-500">Pagamentos recebidos</p>
-                    <p className="mt-0.5 font-semibold text-zinc-100">{financialReport.summary.receivedPayments}</p>
-                  </div>
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
-                    <p className="text-zinc-500">Ordens PIX</p>
-                    <p className="mt-0.5 font-semibold text-zinc-100">{financialReport.summary.payoutsCreatedPendingApproval}</p>
-                  </div>
-                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-2.5">
-                    <p className="text-zinc-500">Gerado em</p>
-                    <p className="mt-0.5 font-semibold text-zinc-100">{formatDateTime(financialReport.generatedAt)}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-emerald-300">✅ Pagamentos recebidos pelo host</p>
-                  {financialReport.receivedPayments.length === 0 ? (
-                    <p className="text-sm text-zinc-500">Nenhum pagamento recebido identificado até o momento.</p>
-                  ) : (
-                    financialReport.receivedPayments.map((item) => (
-                      <div key={`received-${item.userId}`} className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <span className="min-w-0 flex-1 truncate font-bold text-zinc-100">{item.name}</span>
-                          <span className="shrink-0 text-base font-black text-emerald-300">+{formatCurrency(Number(item.amount))}</span>
-                          <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-100 whitespace-nowrap">
-                            Pago em: {formatDateTime(item.paidAt)}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Jogadores que devem pagar (negativos) */}
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-red-400">🔴 Devem pagar ao host</p>
-                  {financialReport.financialModule === 'PREPAID' ? (
-                    <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-3 text-sm text-zinc-400">
-                      Home game pré-pago — todos os valores foram cobrados antecipadamente na entrada. Nenhuma cobrança adicional é gerada no fechamento.
-                    </div>
-                  ) : financialReport.charges.length === 0 ? (
-                    <p className="text-sm text-zinc-500">Nenhuma cobrança gerada.</p>
-                  ) : (
-                    financialReport.charges.map((item) => {
-                      const pixCopyPaste = extractPixCopyPaste(item.charge)
-                      const isCopied = copiedChargeId === item.userId
-                      return (
-                        <div key={`charge-${item.userId}`} className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-sm">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="font-bold text-zinc-100">{item.name}</p>
-                              <p className="text-lg font-black text-red-400">-{formatCurrency(Number(item.amount))}</p>
-                            </div>
-                          </div>
-                          {item.skippedReason ? (
-                            <p className="mt-2 text-xs text-red-300">⚠ {item.skippedReason}</p>
-                          ) : pixCopyPaste ? (
-                            <div className="mt-3">
-                              <p className="mb-1 text-xs text-zinc-400">PIX Copia e Cola · válido por 24h</p>
-                              <div className="flex gap-2">
-                                <input readOnly value={pixCopyPaste} className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-300 font-mono" />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(pixCopyPaste)
-                                    setCopiedChargeId(item.userId)
-                                    setTimeout(() => setCopiedChargeId(null), 2000)
-                                  }}
-                                  className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-bold text-zinc-200 hover:bg-zinc-700 whitespace-nowrap"
-                                >
-                                  {isCopied ? '✓ Copiado' : 'Copiar'}
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="mt-2 text-xs text-green-300">Cobrança PIX gerada (sem copia e cola disponível).</p>
-                          )}
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-
-                {/* Jogadores que devem receber (positivos) */}
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-green-400">
-                    🟢 {financialReport.financialModule === 'PREPAID' ? 'Devolvem cashout (pré-pago)' : 'Devem receber do host'}
-                  </p>
-                  {financialReport.financialModule === 'PREPAID' && (
-                    <p className="text-xs text-zinc-500">Valor total do cashout de cada jogador — inclui buy-in devolvido + lucro.</p>
-                  )}
-                  {financialReport.payouts.length === 0 ? (
-                    <p className="text-sm text-zinc-500">Nenhuma ordem de pagamento gerada.</p>
-                  ) : (
-                    financialReport.payouts.map((item) => {
-                      const orderId = extractPixOrderId(item.payoutOrder)
-                      const pixKey = extractPayoutPixKey(item.payoutOrder)
-                      const isApproved = orderId ? approvedPixIds.includes(orderId) : false
-                      return (
-                        <div key={`payout-${item.userId}`} className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-sm">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="font-bold text-zinc-100">{item.name}</p>
-                              <p className="text-lg font-black text-green-400">+{formatCurrency(Number(item.amount))}</p>
-                              {pixKey && <p className="mt-1 text-xs text-zinc-400">Chave PIX: <span className="text-zinc-200 font-mono">{pixKey}</span></p>}
-                            </div>
-                            {!item.skippedReason && (
-                              <div className="text-right">
-                                {isApproved ? (
-                                  <div className="rounded-lg bg-green-900/50 border border-green-500/30 px-3 py-2 text-xs font-bold text-green-300">
-                                    ✓ PIX enviado
-                                  </div>
-                                ) : orderId ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => approvePixOrder(orderId)}
-                                    disabled={approvingPixId === orderId}
-                                    className="rounded-lg bg-green-600 px-4 py-2 text-xs font-bold text-white hover:bg-green-500 disabled:opacity-50"
-                                  >
-                                    {approvingPixId === orderId ? 'Enviando...' : 'Enviar PIX'}
-                                  </button>
-                                ) : (
-                                  <p className="text-xs text-zinc-500">Aguardando confirmação</p>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          {item.skippedReason && (
-                            <p className="mt-2 text-xs text-red-300">⚠ {item.skippedReason}</p>
-                          )}
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         )}
         {gameType === 'TOURNAMENT' && (
-          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+          <div className="rounded-2xl p-4 text-sm text-amber-200" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(245,158,11,0.25)' }}>
             A modalidade torneio ja esta separada no sistema, mas o fluxo operacional especifico de torneio ainda nao foi implementado. Por isso, o caixa de cash game fica desativado aqui.
           </div>
         )}
 
         {session.status === 'WAITING' && isHost && (
-          <div className="mb-6 rounded-xl border border-green-500/30 bg-green-500/10 p-4">
+          <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.25)' }}>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-green-300">Inicio da partida</p>
+                <p className="text-xs uppercase tracking-wide text-sx-cyan">Inicio da partida</p>
                 <p className="mt-1 text-sm text-zinc-300">Inicie a sessao apos finalizar as configuracoes de participantes e staff.</p>
               </div>
               <button
                 onClick={startSession}
                 disabled={actionLoading || !canStartSession}
-                className="rounded-lg bg-green-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-green-400 disabled:opacity-50"
+                className="rounded-lg bg-sx-cyan px-4 py-2 text-sm font-bold text-sx-bg transition-colors hover:bg-sx-cyan-dim disabled:opacity-50"
               >
                 {!canStartSession ? 'Min. 2 participantes' : 'Iniciar'}
               </button>
@@ -1399,39 +1137,46 @@ export default function SessionManagePage() {
         )}
 
         {session.jackpotEnabled !== false && (
-          <div className="mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-            <p className="text-xs uppercase tracking-wide text-emerald-200">Novo valor do JACKPOT do Home Game</p>
-            <p className="mt-1 text-2xl font-black text-emerald-300">{formatCurrency(homeGameJackpotValue)}</p>
-            <p className="mt-1 text-xs text-emerald-100/80">Este valor será usado como JACKPOT atual para as próximas partidas deste Home Game.</p>
+          <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.25)' }}>
+            <p className="text-xs uppercase tracking-wide text-sx-cyan/80">Novo valor do JACKPOT do Home Game</p>
+            <p className="mt-1 text-2xl font-black text-sx-cyan">{formatCurrency(homeGameJackpotValue)}</p>
+            <p className="mt-1 text-xs text-sx-cyan/80">Este valor será usado como JACKPOT atual para as próximas partidas deste Home Game.</p>
           </div>
         )}
 
         <div className="space-y-3">
-          <h2 className="text-lg font-bold">Ranking em Tempo Real</h2>
+          <h2 className="text-xs uppercase tracking-widest text-white/40 font-medium">Ranking em Tempo Real</h2>
           {sortedPlayers.length === 0 ? (
-            <div className="text-center py-12 text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
+            <div className="text-center py-12 text-sx-muted border border-dashed border-sx-border rounded-2xl">
               {gameType === 'CASH_GAME' ? 'Aguardando buy-ins...' : 'Aguardando jogadores...'}
             </div>
           ) : (
             sortedPlayers.map((p, i) => {
               const result = parseFloat(p.result)
               const isPositive = result > 0
+              const isNegative = result < 0
+              const accentColor = isPositive ? 'rgba(0,200,224,0.7)' : isNegative ? 'rgba(239,68,68,0.7)' : 'rgba(0,200,224,0.3)'
               return (
-                <div key={p.userId} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${i === 0 ? 'bg-yellow-400 text-zinc-900' : i === 1 ? 'bg-zinc-400 text-zinc-900' : i === 2 ? 'bg-amber-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                <div key={p.userId} style={{
+                  background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)',
+                  border: `1px solid rgba(0,200,224,0.10)`,
+                  borderLeft: `3px solid ${accentColor}`,
+                  borderRadius: 16,
+                }} className="p-4 flex items-center gap-4">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${i === 0 ? 'bg-sx-cyan text-sx-bg' : i === 1 ? 'bg-zinc-400 text-sx-bg' : i === 2 ? 'bg-amber-600 text-white' : 'bg-sx-input text-sx-muted'}`}>
                     {i + 1}
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold">{p.user.name}</p>
-                    <p className="text-xs text-zinc-400">Stack: {parseFloat(p.currentStack).toLocaleString()} fichas</p>
+                    <p className="font-semibold text-white">{p.user.name}</p>
+                    <p className="text-xs text-sx-muted">Stack: {parseFloat(p.currentStack).toLocaleString()} fichas</p>
                   </div>
                   <div className="text-right">
-                    <p className={`font-bold ${isPositive ? 'text-green-400' : result < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                    <p className={`font-bold tabular-nums ${isPositive ? 'text-sx-cyan' : isNegative ? 'text-red-400' : 'text-sx-muted'}`}>
                       {isPositive ? '+' : ''}R$ {result.toFixed(2)}
                     </p>
-                    <p className="text-xs text-zinc-400">Inv: R$ {parseFloat(p.chipsIn).toFixed(2)}</p>
+                    <p className="text-xs text-sx-muted">Inv: R$ {parseFloat(p.chipsIn).toFixed(2)}</p>
                     {p.hasCashedOut && (
-                      <p className="text-xs text-zinc-400">Cashout: R$ {parseFloat(p.chipsOut).toFixed(2)}</p>
+                      <p className="text-xs text-sx-muted">Cashout: R$ {parseFloat(p.chipsOut).toFixed(2)}</p>
                     )}
                   </div>
                 </div>
@@ -1441,61 +1186,61 @@ export default function SessionManagePage() {
         </div>
 
         {session.staffAssignments.length > 0 && (
-          <div className="mt-6 rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
-            <p className="text-xs uppercase tracking-wide text-blue-200">Staff da partida</p>
+          <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(59,130,246,0.2)' }}>
+            <p className="text-xs uppercase tracking-wide text-blue-300">Staff da partida</p>
             <p className="mt-2 text-sm text-zinc-200">{session.staffAssignments.map((assignment) => assignment.user.name).join(', ')}</p>
           </div>
         )}
         {session.status === 'FINISHED' && sessionRake > 0 && (
-          <div className="mt-6 rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
-            <p className="text-xs uppercase tracking-wide text-amber-200">Divisão do Rakeback</p>
+          <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(245,158,11,0.2)' }}>
+            <p className="text-xs uppercase tracking-wide text-amber-300">Divisão do Rakeback</p>
             <p className="mt-1 text-sm text-zinc-200">Rake registrado: R$ {sessionRake.toFixed(2)}</p>
             <p className="mt-1 text-sm text-zinc-300">Total de rakeback distribuído: R$ {Number(session.totalRakeback || 0).toFixed(2)}</p>
             {staffRakebackWinners.length > 0 ? (
               <div className="mt-3 space-y-2">
                 {staffRakebackWinners.map((item) => (
-                  <div key={item.userId} className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-zinc-900/60 px-3 py-2 text-sm">
+                  <div key={item.userId} className="flex items-center justify-between rounded-xl border border-amber-500/15 bg-black/20 px-3 py-2 text-sm">
                     <div>
                       <span className="text-zinc-100">{item.name}</span>
-                      <p className="text-xs text-zinc-400">{Number(item.percent).toFixed(2)}% do rake</p>
+                      <p className="text-xs text-sx-muted">{Number(item.percent).toFixed(2)}% do rake</p>
                     </div>
                     <span className="font-semibold text-amber-300">R$ {Number(item.amount).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-sm text-zinc-400">Não há rakeback configurado para esta sessão.</p>
+              <p className="mt-2 text-sm text-sx-muted">Não há rakeback configurado para esta sessão.</p>
             )}
           </div>
         )}
         {session.status === 'FINISHED' && sessionCaixinha > 0 && (
-          <div className="mt-6 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
-            <p className="text-xs uppercase tracking-wide text-emerald-200">Divisão da Caixinha</p>
+          <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.2)' }}>
+            <p className="text-xs uppercase tracking-wide text-sx-cyan">Divisão da Caixinha</p>
             <p className="mt-1 text-sm text-zinc-200">Total registrado: R$ {sessionCaixinha.toFixed(2)}</p>
             {staffCaixinhaWinners.length > 0 ? (
               <div className="mt-3 space-y-2">
                 {staffCaixinhaWinners.map((item) => (
-                  <div key={item.userId} className="flex items-center justify-between rounded-lg border border-emerald-500/20 bg-zinc-900/60 px-3 py-2 text-sm">
+                  <div key={item.userId} className="flex items-center justify-between rounded-xl border border-sx-cyan/15 bg-black/20 px-3 py-2 text-sm">
                     <div>
                       <span className="text-zinc-100">{item.name}</span>
-                      {item.pixKey && <p className="text-xs text-zinc-400">PIX{item.pixType ? ` (${item.pixType})` : ''}: {item.pixKey}</p>}
+                      {item.pixKey && <p className="text-xs text-sx-muted">PIX{item.pixType ? ` (${item.pixType})` : ''}: {item.pixKey}</p>}
                     </div>
-                    <span className="font-semibold text-emerald-300">R$ {Number(item.amount).toFixed(2)}</span>
+                    <span className="font-semibold text-green-400">R$ {Number(item.amount).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-sm text-zinc-400">Não há staff selecionado para esta sessão.</p>
+              <p className="mt-2 text-sm text-sx-muted">Não há staff selecionado para esta sessão.</p>
             )}
           </div>
         )}
       </main>
 
       {showStaffModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6">
-            <h3 className="text-lg font-bold">Staff da Partida</h3>
-            <p className="mt-1 text-sm text-zinc-400">Selecione quem faz parte do staff e configure o rakeback.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-2xl rounded-2xl p-6" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.15)' }}>
+            <h3 className="text-lg font-bold text-white">Staff da Partida</h3>
+            <p className="mt-1 text-sm text-sx-muted">Selecione quem faz parte do staff e configure o rakeback.</p>
 
             {staffModalError && (
               <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -1503,7 +1248,7 @@ export default function SessionManagePage() {
               </div>
             )}
 
-            <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Staff</p>
+            <p className="mt-6 text-xs uppercase tracking-widest text-white/40">Staff</p>
             <div className="mt-3 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
                 const checked = selectedStaffIds.includes(person.id)
@@ -1514,17 +1259,17 @@ export default function SessionManagePage() {
                     onClick={() => {
                       setSelectedStaffIds((prev) => checked ? prev.filter((id) => id !== person.id) : [...prev, person.id])
                     }}
-                    className={`rounded-lg border-2 p-2.5 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
+                    className={`rounded-lg border-2 p-2.5 text-left transition-all ${checked ? 'border-sx-cyan bg-sx-cyan/15' : 'border-sx-border2 bg-sx-input/50 hover:border-sx-border2'}`}
                   >
-                    <p className={`text-sm font-medium ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
+                    <p className={`text-sm font-medium ${checked ? 'text-sx-cyan' : 'text-zinc-100'}`}>{person.name}</p>
                   </button>
                 )
               })}
             </div>
 
             {selectedStaffIds.length > 0 && (
-              <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Caixinha</p>
+              <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-3">
+                <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Caixinha</p>
                 <p className="text-sm text-zinc-300 mb-3">A caixinha vai ser dividida em partes iguais entre o staff ou cada um recebe um valor individual?</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -1532,8 +1277,8 @@ export default function SessionManagePage() {
                     onClick={() => setSelectedCaixinhaMode('SPLIT')}
                     className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
                       selectedCaixinhaMode === 'SPLIT'
-                        ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
-                        : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                        ? 'border-sx-cyan bg-sx-cyan/15 text-sx-cyan'
+                        : 'border-sx-border2 bg-sx-card text-zinc-300 hover:bg-sx-input'
                     }`}
                   >
                     Dividir em partes iguais
@@ -1543,14 +1288,14 @@ export default function SessionManagePage() {
                     onClick={() => setSelectedCaixinhaMode('INDIVIDUAL')}
                     className={`rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${
                       selectedCaixinhaMode === 'INDIVIDUAL'
-                        ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
-                        : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                        ? 'border-sx-cyan bg-sx-cyan/15 text-sx-cyan'
+                        : 'border-sx-border2 bg-sx-card text-zinc-300 hover:bg-sx-input'
                     }`}
                   >
                     Individual por staff
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-zinc-500">
+                <p className="mt-2 text-xs text-sx-muted">
                   {selectedCaixinhaMode === 'SPLIT'
                     ? 'Ao encerrar a partida, o host lança o valor total e o sistema divide igualmente.'
                     : 'Ao encerrar a partida, o host lança o valor individual de cada staff.'}
@@ -1558,7 +1303,7 @@ export default function SessionManagePage() {
               </div>
             )}
 
-            <p className="mt-6 text-xs uppercase tracking-wide text-zinc-500">Rakeback (% do rake)</p>
+            <p className="mt-6 text-xs uppercase tracking-widest text-white/40">Rakeback (% do rake)</p>
             <div className="mt-3 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
               {staffOptions.map((person) => {
                 const checked = selectedRakebackIds.includes(person.id)
@@ -1593,11 +1338,11 @@ export default function SessionManagePage() {
                         return next
                       })
                     }}
-                    className={`rounded-lg border-2 p-2.5 text-left transition-all ${checked ? 'border-emerald-500 bg-emerald-500/15' : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'}`}
+                    className={`rounded-lg border-2 p-2.5 text-left transition-all ${checked ? 'border-sx-cyan bg-sx-cyan/15' : 'border-sx-border2 bg-sx-input/50 hover:border-sx-border2'}`}
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <p className={`text-sm font-medium ${checked ? 'text-emerald-300' : 'text-zinc-100'}`}>{person.name}</p>
-                      {checked && <span className="text-xs font-semibold text-emerald-300">{currentPercent.toFixed(0)}%</span>}
+                      <p className={`text-sm font-medium ${checked ? 'text-sx-cyan' : 'text-zinc-100'}`}>{person.name}</p>
+                      {checked && <span className="text-xs font-semibold text-sx-cyan">{currentPercent.toFixed(0)}%</span>}
                     </div>
                   </button>
                 )
@@ -1606,7 +1351,7 @@ export default function SessionManagePage() {
 
             <div className="mt-4 space-y-2">
               {selectedRakebackIds.length === 0 ? (
-                <p className="text-sm text-zinc-400 text-center">Nenhuma pessoa selecionada para rakeback.</p>
+                <p className="text-sm text-sx-muted text-center">Nenhuma pessoa selecionada para rakeback.</p>
               ) : (
                 selectedRakebackIds.map((userId, index) => {
                   const person = staffOptions.find((option) => option.id === userId)
@@ -1629,12 +1374,12 @@ export default function SessionManagePage() {
                   if (!isActive) return null
 
                   return (
-                    <div key={`rakeback-selected-${userId}`} className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3">
+                    <div key={`rakeback-selected-${userId}`} className="rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <p className="font-semibold text-emerald-300">{person.name}</p>
-                        <span className="text-xs text-emerald-200">Editando</span>
+                        <p className="font-semibold text-sx-cyan">{person.name}</p>
+                        <span className="text-xs text-sx-cyan/80">Editando</span>
                       </div>
-                      <label className="text-xs uppercase tracking-wide text-zinc-400 block mb-2">% de Rakeback</label>
+                      <label className="text-xs uppercase tracking-wide text-sx-muted block mb-2">% de Rakeback</label>
                       <select
                         value={selectedRakebackPercent[userId] ?? '0'}
                         onChange={(e) => {
@@ -1656,7 +1401,7 @@ export default function SessionManagePage() {
                           const nextIndex = index + 1
                           setActiveRakebackIndex(nextIndex < selectedRakebackIds.length ? nextIndex : null)
                         }}
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 font-medium"
+                        className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm text-zinc-100 font-medium"
                       >
                         {allowedOptions.map((value) => (
                           <option key={`${userId}-${value}`} value={String(value)}>{value}%</option>
@@ -1668,8 +1413,8 @@ export default function SessionManagePage() {
               )}
             </div>
 
-            <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3 text-sm">
-              <p className="text-zinc-300">Total de rakeback: <span className={selectedStaffTotalPercent > 100 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>{selectedStaffTotalPercent.toFixed(2)}%</span> de 100%</p>
+            <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-3 text-sm">
+              <p className="text-zinc-300">Total de rakeback: <span className={selectedStaffTotalPercent > 100 ? 'text-red-400 font-bold' : 'text-sx-cyan font-bold'}>{selectedStaffTotalPercent.toFixed(2)}%</span> de 100%</p>
             </div>
 
             <div className="mt-6 flex justify-end gap-3">
@@ -1680,7 +1425,7 @@ export default function SessionManagePage() {
                   setActiveRakebackIndex(null)
                   setStaffModalError(null)
                 }}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
+                className="rounded-lg border border-sx-border2 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-sx-input transition-colors"
               >
                 Cancelar
               </button>
@@ -1688,7 +1433,7 @@ export default function SessionManagePage() {
                 type="button"
                 onClick={saveStaff}
                 disabled={staffLoading || selectedStaffTotalPercent > 100}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+                className="rounded-lg bg-sx-cyan px-4 py-2 text-sm font-bold text-sx-bg hover:bg-sx-cyan-dim disabled:opacity-50 transition-colors"
               >
                 {staffLoading ? 'Salvando...' : 'Salvar Staff'}
               </button>
@@ -1698,45 +1443,45 @@ export default function SessionManagePage() {
       )}
 
       {showSangeurModal && session && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-yellow-400/30 bg-zinc-900 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-6" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(0,200,224,0.2)' }}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white">Gerenciar SANGEUR</h3>
-                <p className="mt-1 text-sm text-zinc-400">Habilite, desabilite ou redefina senhas dos acessos ao caixa móvel deste home game.</p>
+                <p className="mt-1 text-sm text-sx-muted">Habilite, desabilite ou redefina senhas dos acessos ao caixa móvel deste home game.</p>
               </div>
               <button
                 type="button"
                 onClick={closeSangeurModal}
-                className="rounded-lg border border-zinc-700 px-3 py-1 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
+                className="rounded-lg border border-sx-border2 px-3 py-1 text-xs font-bold text-zinc-300 hover:bg-sx-input"
               >
                 Fechar
               </button>
             </div>
 
-            <div className="mt-5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-emerald-300">Home Game ID (para login na POS)</p>
+            <div className="mt-5 rounded-xl border border-sx-cyan/30 bg-sx-cyan/5 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-sx-cyan">Home Game ID (para login na POS)</p>
               <div className="mt-2 flex items-center gap-2">
-                <code className="flex-1 truncate rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-zinc-200">{session.homeGame.id}</code>
+                <code className="flex-1 truncate rounded-lg border border-sx-border2 bg-sx-card px-3 py-2 font-mono text-xs text-zinc-200">{session.homeGame.id}</code>
                 <button
                   type="button"
                   onClick={() => copySangeur('homeGameId', session.homeGame.id)}
-                  className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20"
+                  className="rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 px-3 py-2 text-xs font-bold text-sx-cyan hover:bg-sx-cyan/20"
                 >
                   {sangeurCopied === 'homeGameId' ? 'Copiado!' : 'Copiar'}
                 </button>
               </div>
             </div>
 
-            <div className="mt-5 space-y-3 rounded-xl border border-zinc-700 bg-zinc-800/40 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Habilitar novo acesso</p>
+            <div className="mt-5 space-y-3 rounded-xl border border-white/8 bg-black/20 p-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-white/40">Habilitar novo acesso</p>
 
               <div className="space-y-1">
-                <label className="text-xs uppercase tracking-wide text-zinc-400">Participante SANGEUR</label>
+                <label className="text-xs uppercase tracking-wide text-sx-muted">Participante SANGEUR</label>
                 <select
                   value={sangeurUserId}
                   onChange={(e) => setSangeurUserId(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                  className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                 >
                   <option value="">Selecione um membro…</option>
                   {sangeurMembers.map((m) => (
@@ -1747,22 +1492,22 @@ export default function SessionManagePage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-xs uppercase tracking-wide text-zinc-400">Usuário POS</label>
+                  <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
                   <input
                     type="text"
                     value={sangeurUsername}
                     onChange={(e) => setSangeurUsername(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                    className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs uppercase tracking-wide text-zinc-400">Senha (opcional)</label>
+                  <label className="text-xs uppercase tracking-wide text-sx-muted">Senha (opcional)</label>
                   <input
                     type="text"
                     value={sangeurPassword}
                     onChange={(e) => setSangeurPassword(e.target.value)}
                     placeholder="Gerada se vazio"
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-yellow-400 focus:outline-none"
+                    className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                   />
                 </div>
               </div>
@@ -1777,32 +1522,32 @@ export default function SessionManagePage() {
                 type="button"
                 onClick={handleEnableSangeur}
                 disabled={sangeurLoading}
-                className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-bold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+                className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 px-3 py-2 text-sm font-bold text-sx-cyan hover:bg-sx-cyan/20 disabled:opacity-50"
               >
                 {sangeurLoading ? 'Salvando…' : 'Habilitar SANGEUR'}
               </button>
 
               {sangeurIssuedCredential && (
-                <div className="space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
-                  <p className="text-xs font-bold text-emerald-300">Credencial de {sangeurIssuedCredential.userName}</p>
+                <div className="space-y-2 rounded-lg border border-sx-cyan/30 bg-sx-cyan/10 p-3">
+                  <p className="text-xs font-bold text-sx-cyan">Credencial de {sangeurIssuedCredential.userName}</p>
                   <div className="flex items-center gap-2">
-                    <span className="w-16 text-[10px] uppercase tracking-wide text-emerald-200/70">Usuário</span>
-                    <code className="flex-1 truncate rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-200">{sangeurIssuedCredential.username}</code>
+                    <span className="w-16 text-[10px] uppercase tracking-wide text-sx-cyan/70">Usuário</span>
+                    <code className="flex-1 truncate rounded border border-sx-border2 bg-sx-card px-2 py-1 font-mono text-xs text-zinc-200">{sangeurIssuedCredential.username}</code>
                     <button
                       type="button"
                       onClick={() => copySangeur('username', sangeurIssuedCredential.username)}
-                      className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/20"
+                      className="rounded border border-sx-cyan/40 bg-sx-cyan/10 px-2 py-1 text-[11px] font-bold text-sx-cyan hover:bg-sx-cyan/20"
                     >
                       {sangeurCopied === 'username' ? 'Copiado!' : 'Copiar'}
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="w-16 text-[10px] uppercase tracking-wide text-emerald-200/70">Senha</span>
-                    <code className="flex-1 truncate rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-200">{sangeurIssuedCredential.temporaryPassword}</code>
+                    <span className="w-16 text-[10px] uppercase tracking-wide text-sx-cyan/70">Senha</span>
+                    <code className="flex-1 truncate rounded border border-sx-border2 bg-sx-card px-2 py-1 font-mono text-xs text-zinc-200">{sangeurIssuedCredential.temporaryPassword}</code>
                     <button
                       type="button"
                       onClick={() => copySangeur('password', sangeurIssuedCredential.temporaryPassword)}
-                      className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/20"
+                      className="rounded border border-sx-cyan/40 bg-sx-cyan/10 px-2 py-1 text-[11px] font-bold text-sx-cyan hover:bg-sx-cyan/20"
                     >
                       {sangeurCopied === 'password' ? 'Copiado!' : 'Copiar'}
                     </button>
@@ -1812,26 +1557,26 @@ export default function SessionManagePage() {
             </div>
 
             <div className="mt-5">
-              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400 mb-2">Acessos cadastrados</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-2">Acessos cadastrados</p>
               {sangeurAccesses.length === 0 ? (
-                <p className="text-xs text-zinc-500">Nenhum acesso cadastrado ainda.</p>
+                <p className="text-xs text-sx-muted">Nenhum acesso cadastrado ainda.</p>
               ) : (
                 <div className="space-y-2">
                   {sangeurAccesses.map((access) => (
-                    <div key={access.id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs">
+                    <div key={access.id} className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2 text-xs">
                       <div>
                         <p className="font-bold text-zinc-200">{access.user.name}</p>
-                        <p className="text-zinc-500 font-mono">{access.username}</p>
+                        <p className="text-sx-muted font-mono">{access.username}</p>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-700 text-zinc-400'}`}>
+                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-sx-cyan/15 text-sx-cyan' : 'bg-sx-border2 text-sx-muted'}`}>
                           {access.isActive ? 'Ativo' : 'Inativo'}
                         </span>
                         <button
                           type="button"
                           onClick={() => handleResetSangeurPassword(access.userId)}
                           disabled={sangeurActionUserId === access.userId}
-                          className="rounded border border-zinc-700 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                          className="rounded border border-sx-border2 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-sx-input disabled:opacity-50"
                         >
                           Reset
                         </button>
@@ -1856,8 +1601,8 @@ export default function SessionManagePage() {
       )}
 
       {showFinishConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-zinc-900 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)', border: '1px solid rgba(239,68,68,0.3)' }}>
             <h3 className="text-lg font-bold text-white">Finalizar sessao</h3>
             <p className="mt-2 text-sm text-zinc-300">
               Esta acao encerra a sessao e nao podera ser desfeita.
@@ -1868,7 +1613,7 @@ export default function SessionManagePage() {
                 type="button"
                 onClick={() => setShowFinishConfirmModal(false)}
                 disabled={actionLoading}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                className="rounded-lg border border-sx-border2 px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-sx-input disabled:opacity-50"
               >
                 Voltar
               </button>
@@ -1886,4 +1631,5 @@ export default function SessionManagePage() {
       )}
     </div>
   )
+}
 }

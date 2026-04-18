@@ -187,7 +187,7 @@ export default function AnnapayDebugPage() {
                   <p className="text-xs text-zinc-500">Sem retorno ainda</p>
                 ) : (
                   <>
-                    <p className={`text-xs ${item.ok ? 'text-green-400' : 'text-red-400'}`}>
+                    <p className={`text-xs ${item.ok ? 'text-sx-cyan' : 'text-red-400'}`}>
                       {item.ok ? 'OK' : `Erro${item.statusCode ? ` (${item.statusCode})` : ''}`}
                     </p>
                     <p className="text-xs text-zinc-500">{item.at}</p>
@@ -208,7 +208,7 @@ export default function AnnapayDebugPage() {
                 <div key={item.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
                   <div className="mb-2 flex items-center justify-between text-xs">
                     <span className="text-zinc-300 uppercase">{item.source}</span>
-                    <span className={item.ok ? 'text-green-400' : 'text-red-400'}>
+                    <span className={item.ok ? 'text-sx-cyan' : 'text-red-400'}>
                       {item.ok ? 'OK' : `Erro${item.statusCode ? ` (${item.statusCode})` : ''}`}
                     </span>
                   </div>

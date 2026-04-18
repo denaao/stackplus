@@ -788,20 +788,20 @@ export default function SangeurHomePage() {
   if (!token || !sangeur) return null
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-6">
+    <div className="min-h-screen bg-sx-bg px-4 py-6">
       <div className="mx-auto w-full max-w-5xl space-y-5">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className="rounded-xl border border-sx-border bg-sx-card p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-black text-emerald-300">SANGEUR</h1>
-              <p className="mt-1 text-sm text-zinc-400">Home Game: {sangeur.homeGameName}</p>
-              <p className="text-xs text-zinc-500">Usuário: @{sangeur.username} • Operadora: {user?.name}</p>
+              <h1 className="text-2xl font-black text-sx-cyan">SANGEUR</h1>
+              <p className="mt-1 text-sm text-sx-muted">Home Game: {sangeur.homeGameName}</p>
+              <p className="text-xs text-sx-muted">Usuário: @{sangeur.username} • Operadora: {user?.name}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => router.push('/sangeur/pos')}
-                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-300 hover:bg-emerald-500/20"
+                className="rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 px-4 py-2 text-sm font-bold text-sx-cyan hover:bg-sx-cyan/20"
                 title="Versão otimizada para maquininha"
               >
                 Modo POS
@@ -809,7 +809,7 @@ export default function SangeurHomePage() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-200 hover:bg-zinc-800"
+                className="rounded-lg border border-sx-border2 px-4 py-2 text-sm font-bold text-zinc-200 hover:bg-sx-input"
               >
                 Sair
               </button>
@@ -818,7 +818,7 @@ export default function SangeurHomePage() {
         </div>
 
         {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
-        {success && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">{success}</div>}
+        {success && <div className="rounded-lg border border-sx-cyan/30 bg-sx-cyan/10 p-3 text-sm text-sx-cyan">{success}</div>}
 
         {sangeur.mustChangePassword ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
@@ -833,7 +833,7 @@ export default function SangeurHomePage() {
                   required
                   value={passwordForm.currentPassword}
                   onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none"
+                  className="w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
                 />
               </div>
 
@@ -844,7 +844,7 @@ export default function SangeurHomePage() {
                   required
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none"
+                  className="w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
                 />
               </div>
 
@@ -855,14 +855,14 @@ export default function SangeurHomePage() {
                   required
                   value={passwordForm.confirmNewPassword}
                   onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: e.target.value }))}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none"
+                  className="w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-emerald-500 py-3 font-bold text-zinc-900 transition-colors hover:bg-emerald-400 disabled:opacity-50"
+                className="w-full rounded-lg bg-sx-cyan py-3 font-bold text-sx-bg transition-colors hover:bg-sx-cyan disabled:opacity-50"
               >
                 {loading ? 'Atualizando...' : 'Atualizar senha e liberar POS'}
               </button>
@@ -871,20 +871,20 @@ export default function SangeurHomePage() {
         ) : (
           <>
             {!activeShift && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+              <div className="rounded-xl border border-sx-border bg-sx-card p-5">
                 <h2 className="text-lg font-bold">Abrir turno da SANGEUR</h2>
-                <p className="mt-1 text-xs text-zinc-500">Selecione a sessao ativa/aguardando e informe as fichas recebidas do caixa.</p>
+                <p className="mt-1 text-xs text-sx-muted">Selecione a sessao ativa/aguardando e informe as fichas recebidas do caixa.</p>
 
                 {loadingData ? (
-                  <p className="mt-4 text-sm text-zinc-500">Carregando sessoes...</p>
+                  <p className="mt-4 text-sm text-sx-muted">Carregando sessoes...</p>
                 ) : (
                   <form onSubmit={handleOpenShift} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
                     <div className="space-y-1 md:col-span-2">
-                      <label className="text-xs uppercase tracking-wide text-zinc-400">Sessao</label>
+                      <label className="text-xs uppercase tracking-wide text-sx-muted">Sessao</label>
                       <select
                         value={openShiftForm.sessionId}
                         onChange={(e) => setOpenShiftForm((prev) => ({ ...prev, sessionId: e.target.value }))}
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
+                        className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                       >
                         <option value="">Selecione...</option>
                         {sessions.map((session) => (
@@ -896,24 +896,24 @@ export default function SangeurHomePage() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs uppercase tracking-wide text-zinc-400">Fichas iniciais</label>
+                      <label className="text-xs uppercase tracking-wide text-sx-muted">Fichas iniciais</label>
                       <input
                         type="number"
                         min="0"
                         step="0.01"
                         value={openShiftForm.initialChips}
                         onChange={(e) => setOpenShiftForm((prev) => ({ ...prev, initialChips: e.target.value }))}
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
+                        className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs uppercase tracking-wide text-zinc-400">Observacao</label>
+                      <label className="text-xs uppercase tracking-wide text-sx-muted">Observacao</label>
                       <input
                         type="text"
                         value={openShiftForm.note}
                         onChange={(e) => setOpenShiftForm((prev) => ({ ...prev, note: e.target.value }))}
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
+                        className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                         placeholder="Opcional"
                       />
                     </div>
@@ -921,7 +921,7 @@ export default function SangeurHomePage() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="md:col-span-4 rounded-lg bg-emerald-500 py-3 font-bold text-zinc-900 transition-colors hover:bg-emerald-400 disabled:opacity-50"
+                      className="md:col-span-4 rounded-lg bg-sx-cyan py-3 font-bold text-sx-bg transition-colors hover:bg-sx-cyan disabled:opacity-50"
                     >
                       {loading ? 'Abrindo...' : 'Abrir turno'}
                     </button>
@@ -933,40 +933,40 @@ export default function SangeurHomePage() {
             {activeShift && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Fichas iniciais</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-sx-muted">Fichas iniciais</p>
                     <p className="mt-1 text-lg font-black text-zinc-100">{formatChips(activeShift.summary.initialChips)}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Reforco</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-sx-muted">Reforco</p>
                     <p className="mt-1 text-lg font-black text-cyan-300">{formatChips(activeShift.summary.reloadedChips)}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Vendidas</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-sx-muted">Vendidas</p>
                     <p className="mt-1 text-lg font-black text-amber-300">{formatChips(activeShift.summary.soldChips)}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Saldo disponivel</p>
-                    <p className="mt-1 text-lg font-black text-emerald-300">{formatChips(activeShift.summary.availableChips)}</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-sx-muted">Saldo disponivel</p>
+                    <p className="mt-1 text-lg font-black text-sx-cyan">{formatChips(activeShift.summary.availableChips)}</p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Total vendido</p>
+                  <div className="rounded-lg border border-sx-border bg-sx-card p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-sx-muted">Total vendido</p>
                     <p className="mt-1 text-lg font-black text-zinc-100">{formatCurrency(activeShift.summary.totalSalesAmount)}</p>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                <div className="rounded-xl border border-sx-border bg-sx-card p-4">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Jogadores na sessão</h3>
-                    <span className="text-[11px] uppercase tracking-wide text-zinc-500">{isPostpaidSession ? 'Pós-pago • default VALE' : 'Pré-pago'}</span>
+                    <span className="text-[11px] uppercase tracking-wide text-sx-muted">{isPostpaidSession ? 'Pós-pago • default VALE' : 'Pré-pago'}</span>
                   </div>
                   {participantsError && (
                     <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">Erro: {participantsError}</p>
                   )}
                   {loadingParticipants ? (
-                    <p className="mt-3 text-sm text-zinc-500">Carregando jogadores...</p>
+                    <p className="mt-3 text-sm text-sx-muted">Carregando jogadores...</p>
                   ) : participants.players.length === 0 ? (
-                    <p className="mt-3 text-sm text-zinc-500">Nenhum jogador registrado na sessão ainda. Use &quot;Inserir jogador&quot; abaixo.</p>
+                    <p className="mt-3 text-sm text-sx-muted">Nenhum jogador registrado na sessão ainda. Use &quot;Inserir jogador&quot; abaixo.</p>
                   ) : (
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                       {participants.players.map((player) => {
@@ -979,14 +979,14 @@ export default function SangeurHomePage() {
                             disabled={player.hasCashedOut}
                             className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
                               selected
-                                ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100'
+                                ? 'border-sx-cyan bg-sx-cyan/15 text-sx-cyan/70'
                                 : player.hasCashedOut
-                                  ? 'border-zinc-800 bg-zinc-950/50 text-zinc-500 cursor-not-allowed'
-                                  : 'border-zinc-800 bg-zinc-950/60 text-zinc-100 hover:border-emerald-500/40 hover:bg-zinc-900'
+                                  ? 'border-sx-border bg-sx-bg/50 text-sx-muted cursor-not-allowed'
+                                  : 'border-sx-border bg-sx-bg/60 text-zinc-100 hover:border-sx-cyan/40 hover:bg-sx-card'
                             }`}
                           >
                             <p className="font-semibold">{player.name}</p>
-                            <p className="mt-0.5 text-[11px] text-zinc-400">
+                            <p className="mt-0.5 text-[11px] text-sx-muted">
                               Stack: {formatChips(player.currentStack)} • Investido: {formatCurrency(player.chipsIn)}
                               {player.hasCashedOut ? ' • Cashout' : ''}
                             </p>
@@ -997,11 +997,11 @@ export default function SangeurHomePage() {
                   )}
 
                   {participants.candidates.length > 0 && (
-                    <div className="mt-3 flex flex-col gap-2 border-t border-zinc-800 pt-3 sm:flex-row">
+                    <div className="mt-3 flex flex-col gap-2 border-t border-sx-border pt-3 sm:flex-row">
                       <select
                         value={addCandidateId}
                         onChange={(e) => setAddCandidateId(e.target.value)}
-                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
+                        className="flex-1 rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                       >
                         <option value="">Inserir jogador do home game...</option>
                         {participants.candidates.map((c) => (
@@ -1021,10 +1021,10 @@ export default function SangeurHomePage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <form onSubmit={handleRegisterSale} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3">
+                  <form onSubmit={handleRegisterSale} className="rounded-xl border border-sx-border bg-sx-card p-4 space-y-3">
                     <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Registrar venda</h3>
                     {saleForm.sessionUserId ? (
-                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                      <div className="rounded-lg border border-sx-cyan/30 bg-sx-cyan/10 px-3 py-2 text-xs text-sx-cyan/80">
                         Jogador selecionado: <span className="font-semibold">{saleForm.playerName || '—'}</span>
                       </div>
                     ) : (
@@ -1034,12 +1034,12 @@ export default function SangeurHomePage() {
                     )}
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <label className="text-[11px] uppercase tracking-wide text-zinc-500">Fichas</label>
-                        <input type="number" min="0" step="0.01" value={saleForm.chips} onChange={(e) => setSaleForm((prev) => ({ ...prev, chips: e.target.value }))} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
+                        <label className="text-[11px] uppercase tracking-wide text-sx-muted">Fichas</label>
+                        <input type="number" min="0" step="0.01" value={saleForm.chips} onChange={(e) => setSaleForm((prev) => ({ ...prev, chips: e.target.value }))} className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[11px] uppercase tracking-wide text-zinc-500">Pagamento</label>
-                        <select value={saleForm.paymentMethod} onChange={(e) => setSaleForm((prev) => ({ ...prev, paymentMethod: e.target.value as PaymentMethod }))} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none">
+                        <label className="text-[11px] uppercase tracking-wide text-sx-muted">Pagamento</label>
+                        <select value={saleForm.paymentMethod} onChange={(e) => setSaleForm((prev) => ({ ...prev, paymentMethod: e.target.value as PaymentMethod }))} className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none">
                           <option value="PIX_QR">PIX QR</option>
                           <option value="VOUCHER">Vale</option>
                           <option value="CASH">Dinheiro</option>
@@ -1047,23 +1047,23 @@ export default function SangeurHomePage() {
                         </select>
                       </div>
                     </div>
-                    <input type="text" value={saleForm.paymentReference} onChange={(e) => setSaleForm((prev) => ({ ...prev, paymentReference: e.target.value }))} placeholder="Referencia pagamento (opcional)" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
-                    <input type="text" value={saleForm.note} onChange={(e) => setSaleForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Observacao (opcional)" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
-                    <button type="submit" disabled={loading || !saleForm.sessionUserId} className="w-full rounded-lg bg-emerald-500 py-2.5 text-sm font-bold text-zinc-900 hover:bg-emerald-400 disabled:opacity-50">Registrar venda</button>
+                    <input type="text" value={saleForm.paymentReference} onChange={(e) => setSaleForm((prev) => ({ ...prev, paymentReference: e.target.value }))} placeholder="Referencia pagamento (opcional)" className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
+                    <input type="text" value={saleForm.note} onChange={(e) => setSaleForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Observacao (opcional)" className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
+                    <button type="submit" disabled={loading || !saleForm.sessionUserId} className="w-full rounded-lg bg-sx-cyan py-2.5 text-sm font-bold text-sx-bg hover:bg-sx-cyan disabled:opacity-50">Registrar venda</button>
                   </form>
 
                   <div className="space-y-4">
-                    <form onSubmit={handleReload} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3">
+                    <form onSubmit={handleReload} className="rounded-xl border border-sx-border bg-sx-card p-4 space-y-3">
                       <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Reforco do caixa</h3>
-                      <input type="number" min="0" step="0.01" value={reloadForm.chips} onChange={(e) => setReloadForm((prev) => ({ ...prev, chips: e.target.value }))} placeholder="Fichas recebidas" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
-                      <input type="text" value={reloadForm.note} onChange={(e) => setReloadForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Observacao" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
+                      <input type="number" min="0" step="0.01" value={reloadForm.chips} onChange={(e) => setReloadForm((prev) => ({ ...prev, chips: e.target.value }))} placeholder="Fichas recebidas" className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
+                      <input type="text" value={reloadForm.note} onChange={(e) => setReloadForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Observacao" className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
                       <button type="submit" disabled={loading} className="w-full rounded-lg border border-cyan-500/40 bg-cyan-500/10 py-2.5 text-sm font-bold text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50">Registrar reforco</button>
                     </form>
 
-                    <form onSubmit={handleCloseShift} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3">
+                    <form onSubmit={handleCloseShift} className="rounded-xl border border-sx-border bg-sx-card p-4 space-y-3">
                       <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Encerrar turno</h3>
-                      <input type="number" min="0" step="0.01" value={closeForm.returnedChips} onChange={(e) => setCloseForm((prev) => ({ ...prev, returnedChips: e.target.value }))} placeholder="Fichas devolvidas ao caixa" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
-                      <input type="text" value={closeForm.note} onChange={(e) => setCloseForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Observacao de fechamento" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none" />
+                      <input type="number" min="0" step="0.01" value={closeForm.returnedChips} onChange={(e) => setCloseForm((prev) => ({ ...prev, returnedChips: e.target.value }))} placeholder="Fichas devolvidas ao caixa" className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
+                      <input type="text" value={closeForm.note} onChange={(e) => setCloseForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Observacao de fechamento" className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none" />
                       <button type="submit" disabled={loading} className="w-full rounded-lg border border-red-500/40 bg-red-500/10 py-2.5 text-sm font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50">Encerrar turno</button>
                     </form>
                   </div>
@@ -1074,7 +1074,7 @@ export default function SangeurHomePage() {
                     <h3 className="text-sm font-bold uppercase tracking-wide text-amber-200">Vales pendentes</h3>
                     <div className="mt-2 space-y-2">
                       {pendingVoucherGroups.map((group) => (
-                        <div key={group.key} className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-zinc-900/60 p-3 md:flex-row md:items-center md:justify-between">
+                        <div key={group.key} className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-sx-card/60 p-3 md:flex-row md:items-center md:justify-between">
                           <p className="text-sm text-zinc-100">
                             {group.playerName} • {formatChips(group.totalChips)} fichas • {formatCurrency(group.totalAmount)}
                             {group.saleIds.length > 1 ? ` • ${group.saleIds.length} vales` : ''}
@@ -1083,14 +1083,14 @@ export default function SangeurHomePage() {
                             <button
                               type="button"
                               onClick={() => handlePrintVoucher(group.latestSaleId)}
-                              className="rounded-md border border-zinc-500/40 bg-zinc-500/10 px-3 py-1.5 text-xs font-bold text-zinc-200 hover:bg-zinc-500/20"
+                              className="rounded-md border border-sx-border bg-white/5 px-3 py-1.5 text-xs font-bold text-zinc-200 hover:bg-white/10"
                             >
                               Imprimir vale
                             </button>
                             <button
                               type="button"
                               onClick={() => handleSettleVoucherGroup(group.saleIds)}
-                              className="rounded-md border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25"
+                              className="rounded-md border border-sx-cyan/40 bg-sx-cyan/15 px-3 py-1.5 text-xs font-bold text-sx-cyan hover:bg-sx-cyan/25"
                             >
                               Liquidar vale
                             </button>
@@ -1102,22 +1102,22 @@ export default function SangeurHomePage() {
                 )}
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                  <div className="rounded-xl border border-sx-border bg-sx-card p-4">
                     <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Ultimas vendas</h3>
                     <div className="mt-3 space-y-2 max-h-72 overflow-auto pr-1">
                       {activeShift.sales.length === 0 ? (
-                        <p className="text-sm text-zinc-500">Sem vendas registradas.</p>
+                        <p className="text-sm text-sx-muted">Sem vendas registradas.</p>
                       ) : activeShift.sales.map((sale) => (
-                        <div key={sale.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5 text-xs">
+                        <div key={sale.id} className="rounded-lg border border-sx-border bg-sx-bg/60 p-2.5 text-xs">
                           <p className="font-semibold text-zinc-100">{sale.paymentMethod} • {sale.paymentStatus}</p>
-                          <p className="text-zinc-400">{formatChips(sale.chips)} fichas • {formatCurrency(Number(sale.amount))}</p>
-                          {sale.playerName && <p className="text-zinc-500">Jogador: {sale.playerName}</p>}
+                          <p className="text-sx-muted">{formatChips(sale.chips)} fichas • {formatCurrency(Number(sale.amount))}</p>
+                          {sale.playerName && <p className="text-sx-muted">Jogador: {sale.playerName}</p>}
                           {sale.voucherCode && <p className="text-amber-300">Vale: {sale.voucherCode}</p>}
                           {sale.paymentMethod === 'VOUCHER' && (
                             <button
                               type="button"
                               onClick={() => handlePrintVoucher(sale.id)}
-                              className="mt-2 rounded-md border border-zinc-500/40 bg-zinc-500/10 px-2.5 py-1 text-[11px] font-bold text-zinc-200 hover:bg-zinc-500/20"
+                              className="mt-2 rounded-md border border-sx-border bg-white/5 px-2.5 py-1 text-[11px] font-bold text-zinc-200 hover:bg-white/10"
                             >
                               Imprimir vale
                             </button>
@@ -1127,16 +1127,16 @@ export default function SangeurHomePage() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+                  <div className="rounded-xl border border-sx-border bg-sx-card p-4">
                     <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-300">Movimentacoes de fichas</h3>
                     <div className="mt-3 space-y-2 max-h-72 overflow-auto pr-1">
                       {activeShift.movements.length === 0 ? (
-                        <p className="text-sm text-zinc-500">Sem movimentacoes registradas.</p>
+                        <p className="text-sm text-sx-muted">Sem movimentacoes registradas.</p>
                       ) : activeShift.movements.map((movement) => (
-                        <div key={movement.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5 text-xs">
+                        <div key={movement.id} className="rounded-lg border border-sx-border bg-sx-bg/60 p-2.5 text-xs">
                           <p className="font-semibold text-zinc-100">{movement.type}</p>
-                          <p className="text-zinc-400">{formatChips(movement.chips)} fichas</p>
-                          {movement.note && <p className="text-zinc-500">{movement.note}</p>}
+                          <p className="text-sx-muted">{formatChips(movement.chips)} fichas</p>
+                          {movement.note && <p className="text-sx-muted">{movement.note}</p>}
                         </div>
                       ))}
                     </div>
@@ -1151,12 +1151,12 @@ export default function SangeurHomePage() {
       {/* Modal PIX QR */}
       {pixQrModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-4">
+          <div className="max-w-md rounded-2xl border border-sx-border bg-sx-card p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-zinc-100">QR Code PIX</h2>
               <button
                 onClick={() => setPixQrModal(null)}
-                className="text-zinc-400 hover:text-zinc-100"
+                className="text-sx-muted hover:text-zinc-100"
               >
                 ✕
               </button>
@@ -1174,9 +1174,9 @@ export default function SangeurHomePage() {
 
             {pixQrModal.pixCopyPaste && (
               <div className="space-y-2">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">Codigo de copia</p>
+                <p className="text-xs uppercase tracking-wide text-sx-muted">Codigo de copia</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-xs font-mono text-cyan-300 break-all">
+                  <code className="flex-1 rounded-lg bg-sx-input px-3 py-2 text-xs font-mono text-cyan-300 break-all">
                     {pixQrModal.pixCopyPaste}
                   </code>
                   <button
@@ -1184,7 +1184,7 @@ export default function SangeurHomePage() {
                       navigator.clipboard.writeText(pixQrModal.pixCopyPaste)
                       setSuccess('Codigo copiado para a area de transferencia')
                     }}
-                    className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-zinc-900 hover:bg-emerald-400"
+                    className="rounded-lg bg-sx-cyan px-3 py-2 text-xs font-bold text-sx-bg hover:bg-sx-cyan"
                   >
                     Copiar
                   </button>
@@ -1194,7 +1194,7 @@ export default function SangeurHomePage() {
 
             <button
               onClick={() => setPixQrModal(null)}
-              className="w-full rounded-lg bg-zinc-800 py-2.5 text-sm font-bold text-zinc-100 hover:bg-zinc-700"
+              className="w-full rounded-lg bg-sx-input py-2.5 text-sm font-bold text-zinc-100 hover:bg-sx-border2"
             >
               Fechar
             </button>
@@ -1204,45 +1204,45 @@ export default function SangeurHomePage() {
 
       {closingReportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-3xl rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-zinc-100">
+          <div className="w-full max-w-3xl rounded-2xl border border-sx-border bg-sx-card p-5 text-zinc-100">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-black text-emerald-300">Relatorio de Encerramento</h2>
-                <p className="text-xs text-zinc-400">Turno: {closingReportModal.shift.id}</p>
+                <h2 className="text-xl font-black text-sx-cyan">Relatorio de Encerramento</h2>
+                <p className="text-xs text-sx-muted">Turno: {closingReportModal.shift.id}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setClosingReportModal(null)}
-                className="rounded-md border border-zinc-700 px-3 py-1 text-sm hover:bg-zinc-800"
+                className="rounded-md border border-sx-border2 px-3 py-1 text-sm hover:bg-sx-input"
               >
                 Fechar
               </button>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Total vendido</p>
+              <div className="rounded-lg border border-sx-border bg-sx-bg/60 p-3">
+                <p className="text-[11px] uppercase tracking-wide text-sx-muted">Total vendido</p>
                 <p className="mt-1 text-base font-black">{formatCurrency(closingReportModal.finance.totalSalesAmount)}</p>
               </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Pago</p>
-                <p className="mt-1 text-base font-black text-emerald-300">{formatCurrency(closingReportModal.finance.paidAmount)}</p>
+              <div className="rounded-lg border border-sx-border bg-sx-bg/60 p-3">
+                <p className="text-[11px] uppercase tracking-wide text-sx-muted">Pago</p>
+                <p className="mt-1 text-base font-black text-sx-cyan">{formatCurrency(closingReportModal.finance.paidAmount)}</p>
               </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Pendente</p>
+              <div className="rounded-lg border border-sx-border bg-sx-bg/60 p-3">
+                <p className="text-[11px] uppercase tracking-wide text-sx-muted">Pendente</p>
                 <p className="mt-1 text-base font-black text-amber-300">{formatCurrency(closingReportModal.finance.pendingAmount)}</p>
               </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Saldo fichas</p>
+              <div className="rounded-lg border border-sx-border bg-sx-bg/60 p-3">
+                <p className="text-[11px] uppercase tracking-wide text-sx-muted">Saldo fichas</p>
                 <p className="mt-1 text-base font-black text-cyan-300">{formatChips(closingReportModal.inventory.closingBalanceChips)}</p>
               </div>
             </div>
 
-            <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+            <div className="mt-4 rounded-lg border border-sx-border bg-sx-bg/60 p-3">
               <p className="text-xs text-zinc-300">
                 Operador: <span className="font-semibold">{closingReportModal.operator.name || closingReportModal.operator.username}</span> • Sessao: {closingReportModal.session.id}
               </p>
-              <p className="mt-1 text-xs text-zinc-400">
+              <p className="mt-1 text-xs text-sx-muted">
                 Fechado em: {closingReportModal.shift.closedAt ? new Date(closingReportModal.shift.closedAt).toLocaleString('pt-BR') : '-'}
               </p>
             </div>
@@ -1265,7 +1265,7 @@ export default function SangeurHomePage() {
               <button
                 type="button"
                 onClick={() => handlePrintClosingReport(closingReportModal)}
-                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-emerald-400"
+                className="rounded-lg bg-sx-cyan px-4 py-2 text-sm font-bold text-sx-bg hover:bg-sx-cyan"
               >
                 Imprimir relatorio
               </button>

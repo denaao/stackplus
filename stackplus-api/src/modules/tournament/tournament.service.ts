@@ -92,6 +92,8 @@ export async function createTournament({
   addonTaxChips,
   blindTemplateName,
   blindLevels,
+  doubleBuyInBonusChips,
+  doubleRebuyEnabled,
 }: {
   homeGameId: string
   name: string
@@ -117,6 +119,8 @@ export async function createTournament({
   addonTaxChips?: number | null
   blindTemplateName?: string | null
   blindLevels?: BlindLevel[]
+  doubleBuyInBonusChips?: number | null
+  doubleRebuyEnabled?: boolean
 }) {
   // Resolve blind levels: custom > template > default
   let levels = blindLevels
@@ -151,6 +155,8 @@ export async function createTournament({
       addonTaxAmount: addonTaxAmount ?? null,
       addonTaxChips: addonTaxChips ?? null,
       blindTemplateName: blindTemplateName ?? null,
+      doubleBuyInBonusChips: doubleBuyInBonusChips ?? null,
+      doubleRebuyEnabled: doubleRebuyEnabled ?? false,
       blindLevels: levels
         ? {
             create: levels.map((l) => ({
@@ -168,6 +174,85 @@ export async function createTournament({
   })
 
   return tournament
+}
+
+// ─── Update tournament (REGISTRATION only) ───────────────────────────────────
+
+export async function updateTournament(
+  tournamentId: string,
+  data: {
+    name?: string
+    buyInAmount?: number
+    rebuyAmount?: number | null
+    addonAmount?: number | null
+    bountyAmount?: number | null
+    rake?: number
+    startingChips?: number
+    rebuyChips?: number | null
+    addonChips?: number | null
+    lateRegistrationLevel?: number | null
+    rebuyUntilLevel?: number | null
+    addonAfterLevel?: number | null
+    minutesPerLevelPreLateReg?: number
+    minutesPerLevelPostLateReg?: number | null
+    breaks?: { afterLevel: number; durationMinutes: number }[]
+    buyInTaxAmount?: number | null
+    buyInTaxChips?: number | null
+    rebuyTaxAmount?: number | null
+    rebuyTaxChips?: number | null
+    addonTaxAmount?: number | null
+    addonTaxChips?: number | null
+    blindLevels?: BlindLevel[]
+    doubleBuyInBonusChips?: number | null
+    doubleRebuyEnabled?: boolean
+  },
+) {
+  const existing = await db.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { status: true } })
+  if (existing.status !== 'REGISTRATION') {
+    throw new Error('Torneio só pode ser editado durante fase de inscrições')
+  }
+
+  const { blindLevels, breaks, ...rest } = data
+
+  await db.tournament.update({
+    where: { id: tournamentId },
+    data: {
+      ...rest,
+      ...(breaks !== undefined ? { breaks: JSON.stringify(breaks) } : {}),
+      ...(blindLevels !== undefined
+        ? {
+            blindLevels: {
+              deleteMany: {},
+              create: blindLevels.map((l) => ({
+                level: l.level,
+                smallBlind: l.smallBlind,
+                bigBlind: l.bigBlind,
+                ante: l.ante ?? 0,
+              })),
+            },
+          }
+        : {}),
+    },
+  })
+
+  return getTournament(tournamentId)
+}
+
+// ─── Update rebuy/addon limits during RUNNING tournament ─────────────────────
+
+export async function updateLimits(
+  tournamentId: string,
+  data: {
+    rebuyUntilLevel?: number | null
+    addonAfterLevel?: number | null
+  },
+) {
+  const existing = await db.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { status: true } })
+  if (!['REGISTRATION', 'RUNNING', 'ON_BREAK'].includes(existing.status)) {
+    throw new Error('Torneio não está ativo')
+  }
+  await db.tournament.update({ where: { id: tournamentId }, data })
+  return getTournament(tournamentId)
 }
 
 // ─── Get tournament ───────────────────────────────────────────────────────────
@@ -214,11 +299,13 @@ export async function registerPlayer({
   playerId,
   homeGameId,
   registeredByUserId,
+  buyInType = 'NORMAL',
 }: {
   tournamentId: string
   playerId: string
   homeGameId: string
   registeredByUserId: string
+  buyInType?: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
 }) {
   const tournament = await db.tournament.findUniqueOrThrow({
     where: { id: tournamentId },
@@ -228,7 +315,6 @@ export async function registerPlayer({
     throw new Error('Inscrições encerradas')
   }
 
-  // Verifica late registration
   if (
     tournament.status === 'RUNNING' &&
     tournament.lateRegistrationLevel !== null &&
@@ -237,13 +323,11 @@ export async function registerPlayer({
     throw new Error('Período de late registration encerrado')
   }
 
-  // Verifica se já está registrado
   const existing = await db.tournamentPlayer.findUnique({
     where: { tournamentId_playerId: { tournamentId, playerId } },
   })
   if (existing) throw new Error('Jogador já registrado neste torneio')
 
-  // Garante/obtém comanda aberta
   let comanda = await db.comanda.findFirst({
     where: { playerId, homeGameId, status: 'OPEN' },
   })
@@ -256,52 +340,146 @@ export async function registerPlayer({
     })
   }
 
+  const base = Number(tournament.buyInAmount)
+  const taxAmount = Number((tournament as any).buyInTaxAmount ?? 0)
+  const taxChips = Number((tournament as any).buyInTaxChips ?? 0)
+  const bonusChips = Number((tournament as any).doubleBuyInBonusChips ?? 0)
+  const rakeRate = Number(tournament.rake) / 100
+
+  // Calcula valor base (sobre o qual incide o rake), taxa da casa e fichas
+  let baseForRake: number  // valor que entra no prize/rake
+  let taxForHouse: number  // taxa que vai integral para a casa
+  let chips: number
+  let description: string
+
+  if (buyInType === 'DOUBLE') {
+    // 2× base + 2× taxa
+    baseForRake = base * 2
+    taxForHouse = taxAmount * 2
+    chips = (tournament.startingChips + taxChips) * 2 + bonusChips
+    description = `Buy-in Duplo: ${tournament.name}`
+  } else if (buyInType === 'NORMAL_WITH_TAX' && taxAmount > 0) {
+    baseForRake = base
+    taxForHouse = taxAmount
+    chips = tournament.startingChips + taxChips
+    description = `Buy-in + Opcional: ${tournament.name}`
+  } else {
+    baseForRake = base
+    taxForHouse = 0
+    chips = tournament.startingChips
+    description = `Buy-in: ${tournament.name}`
+  }
+
+  const totalCharge = baseForRake + taxForHouse
+  const prizeIncrement = baseForRake * (1 - rakeRate)
+  const rakeIncrement = baseForRake * rakeRate
+
   const tournamentPlayer = await prisma.$transaction(async (tx: any) => {
     const tp = await tx.tournamentPlayer.create({
       data: {
         tournamentId,
         playerId,
         comandaId: comanda!.id,
+        // Buy-in duplo conta como 1 rebuy (fichas extras desde o início)
+        ...(buyInType === 'DOUBLE' ? { rebuysCount: 1 } : {}),
       },
-      include: {
-        player: { select: { id: true, name: true } },
-      },
+      include: { player: { select: { id: true, name: true } } },
     })
 
-    // Lança buy-in na comanda
     const item = await tx.comandaItem.create({
       data: {
         comandaId: comanda!.id,
         type: 'TOURNAMENT_BUYIN',
-        amount: Number(tournament.buyInAmount),
-        description: `Buy-in: ${tournament.name}`,
+        amount: totalCharge,
+        description,
         tournamentId,
         tournamentPlayerId: tp.id,
         createdByUserId: registeredByUserId,
       },
     })
 
-    // Atualiza saldo comanda (débito)
     await tx.comanda.update({
       where: { id: comanda!.id },
-      data: { balance: { decrement: Number(tournament.buyInAmount) } },
+      data: { balance: { decrement: totalCharge } },
     })
 
-    // Atualiza prize pool
-    const rake = Number(tournament.rake) / 100
-    const buyInNet = Number(tournament.buyInAmount) * (1 - rake)
     await tx.tournament.update({
       where: { id: tournamentId },
       data: {
-        prizePool: { increment: buyInNet },
-        totalRake: { increment: Number(tournament.buyInAmount) * rake },
+        prizePool: { increment: prizeIncrement },
+        totalRake: { increment: rakeIncrement },
+        totalTax: { increment: taxForHouse },
       },
     })
 
-    return { ...tp, comandaItem: item }
+    return { ...tp, comandaItem: item, chips, buyInType }
   })
 
   return tournamentPlayer
+}
+
+// ─── Cancel registration ─────────────────────────────────────────────────────
+
+export async function cancelRegistration({
+  tournamentPlayerId,
+  registeredByUserId,
+}: {
+  tournamentPlayerId: string
+  registeredByUserId: string
+}) {
+  const tp = await db.tournamentPlayer.findUniqueOrThrow({
+    where: { id: tournamentPlayerId },
+    include: { tournament: true, comanda: true },
+  })
+
+  if (tp.tournament.status !== 'REGISTRATION') {
+    throw new Error('Só é possível cancelar inscrição antes do torneio iniciar')
+  }
+
+  const buyInItem = await db.comandaItem.findFirst({
+    where: { tournamentPlayerId, type: 'TOURNAMENT_BUYIN' },
+  })
+
+  // Determina quanto era base e quanto era taxa para reverter corretamente
+  const totalCharged = Number(buyInItem?.amount ?? 0)
+  const rakeRate = Number(tp.tournament.rake) / 100
+  const description = (buyInItem as any)?.description ?? ''
+  // Inferir taxa a partir da descrição
+  const wasWithTax = description.includes('Opcional') || description.includes('Duplo')
+  const taxAmount = wasWithTax
+    ? description.includes('Duplo')
+      ? Number((tp.tournament as any).buyInTaxAmount ?? 0)
+      : Number((tp.tournament as any).buyInTaxAmount ?? 0)
+    : 0
+  const baseCharged = totalCharged - taxAmount
+  const prizeToRevert = baseCharged * (1 - rakeRate)
+  const rakeToRevert = baseCharged * rakeRate
+
+  await prisma.$transaction(async (tx: any) => {
+    // Estorna o buy-in na comanda
+    if (buyInItem) {
+      await tx.comanda.update({
+        where: { id: tp.comandaId },
+        data: { balance: { increment: totalCharged } },
+      })
+      await tx.comandaItem.delete({ where: { id: buyInItem.id } })
+    }
+
+    // Reverte prize pool, rake e taxa corretamente
+    await tx.tournament.update({
+      where: { id: tp.tournamentId },
+      data: {
+        prizePool: { decrement: prizeToRevert },
+        totalRake: { decrement: rakeToRevert },
+        totalTax: { decrement: taxAmount },
+      },
+    })
+
+    // Remove o jogador do torneio
+    await tx.tournamentPlayer.delete({ where: { id: tournamentPlayerId } })
+  })
+
+  return { ok: true }
 }
 
 // ─── Rebuy ────────────────────────────────────────────────────────────────────
@@ -309,9 +487,11 @@ export async function registerPlayer({
 export async function registerRebuy({
   tournamentPlayerId,
   registeredByUserId,
+  rebuyType = 'NORMAL',
 }: {
   tournamentPlayerId: string
   registeredByUserId: string
+  rebuyType?: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
 }) {
   const tp = await db.tournamentPlayer.findUniqueOrThrow({
     where: { id: tournamentPlayerId },
@@ -326,18 +506,50 @@ export async function registerRebuy({
     throw new Error('Jogador eliminado ou vencedor')
   }
 
+  const base = Number(tp.tournament.rebuyAmount)
+  const taxUnit = Number((tp.tournament as any).rebuyTaxAmount ?? 0)
+  const taxChipsUnit = Number((tp.tournament as any).rebuyTaxChips ?? 0)
+  const baseChips = tp.tournament.rebuyChips ?? tp.tournament.startingChips
+  const rakeRate = Number(tp.tournament.rake) / 100
+
+  let baseForRake: number
+  let taxForHouse: number
+  let totalChips: number
+  let description: string
+
+  if (rebuyType === 'DOUBLE') {
+    baseForRake = base * 2
+    taxForHouse = taxUnit * 2
+    totalChips = (baseChips + taxChipsUnit) * 2
+    description = `Rebuy Duplo`
+  } else if (rebuyType === 'NORMAL_WITH_TAX' && taxUnit > 0) {
+    baseForRake = base
+    taxForHouse = taxUnit
+    totalChips = baseChips + taxChipsUnit
+    description = `Rebuy + Opcional`
+  } else {
+    baseForRake = base
+    taxForHouse = 0
+    totalChips = baseChips
+    description = `Rebuy`
+  }
+
+  const totalCharge = baseForRake + taxForHouse
+  const prizeIncrement = baseForRake * (1 - rakeRate)
+  const rakeIncrement = baseForRake * rakeRate
+
   return prisma.$transaction(async (tx: any) => {
     const updated = await tx.tournamentPlayer.update({
       where: { id: tournamentPlayerId },
-      data: { rebuysCount: { increment: 1 } },
+      data: { rebuysCount: { increment: rebuyType === 'DOUBLE' ? 2 : 1 } },
     })
 
     await tx.comandaItem.create({
       data: {
         comandaId: tp.comanda.id,
         type: 'TOURNAMENT_REBUY',
-        amount: Number(tp.tournament.rebuyAmount),
-        description: `Rebuy #${updated.rebuysCount}: ${tp.tournament.name}`,
+        amount: totalCharge,
+        description: `${description} #${updated.rebuysCount}: ${tp.tournament.name}`,
         tournamentId: tp.tournamentId,
         tournamentPlayerId,
         createdByUserId: registeredByUserId,
@@ -346,20 +558,174 @@ export async function registerRebuy({
 
     await tx.comanda.update({
       where: { id: tp.comanda.id },
-      data: { balance: { decrement: Number(tp.tournament.rebuyAmount) } },
+      data: { balance: { decrement: totalCharge } },
     })
 
-    const rake = Number(tp.tournament.rake) / 100
-    const rebuyNet = Number(tp.tournament.rebuyAmount) * (1 - rake)
     await tx.tournament.update({
       where: { id: tp.tournamentId },
       data: {
-        prizePool: { increment: rebuyNet },
-        totalRake: { increment: Number(tp.tournament.rebuyAmount) * rake },
+        prizePool: { increment: prizeIncrement },
+        totalRake: { increment: rakeIncrement },
+        totalTax: { increment: taxForHouse },
       },
     })
 
-    return updated
+    return { ...updated, chips: totalChips, rebuyType }
+  })
+}
+
+// ─── Re-entry (eliminado volta ao torneio via rebuy) ─────────────────────────
+
+export async function reEntryPlayer({
+  tournamentPlayerId,
+  reEntryType = 'NORMAL',
+  withAddon = false,
+  registeredByUserId,
+}: {
+  tournamentPlayerId: string
+  reEntryType?: 'NORMAL' | 'DOUBLE'
+  withAddon?: boolean
+  registeredByUserId: string
+}) {
+  const tp = await db.tournamentPlayer.findUniqueOrThrow({
+    where: { id: tournamentPlayerId },
+    include: { tournament: true, comanda: true },
+  })
+
+  if (tp.status !== 'ELIMINATED') throw new Error('Jogador não está eliminado')
+  if (!tp.tournament.rebuyAmount) throw new Error('Torneio não permite re-entrada (sem rebuy)')
+  if (
+    tp.tournament.rebuyUntilLevel !== null &&
+    tp.tournament.currentLevel > tp.tournament.rebuyUntilLevel
+  ) {
+    throw new Error('Período de re-entrada encerrado')
+  }
+
+  const rebuyBase = Number(tp.tournament.rebuyAmount)
+  const rebuyTaxUnit = Number((tp.tournament as any).rebuyTaxAmount ?? 0)
+  const rebuyBaseChips = tp.tournament.rebuyChips ?? tp.tournament.startingChips
+  const rakeRate = Number(tp.tournament.rake) / 100
+
+  const rebuysToAdd = reEntryType === 'DOUBLE' ? 2 : 1
+  const rebuyBaseTotal = rebuyBase * rebuysToAdd
+  const rebuyTaxTotal = rebuyTaxUnit * rebuysToAdd
+  const rebuyTotalCharge = rebuyBaseTotal + rebuyTaxTotal
+  const rebuyTotalChips = rebuyBaseChips * rebuysToAdd
+  const rebuyPrizeIncrement = rebuyBaseTotal * (1 - rakeRate)
+  const rebuyRakeIncrement = rebuyBaseTotal * rakeRate
+
+  // Addon durante re-entrada
+  let addonCharge = 0
+  let addonTotalChips = 0
+  let addonPrizeIncrement = 0
+  let addonRakeIncrement = 0
+  const addonAvailable =
+    withAddon &&
+    !!tp.tournament.addonAmount &&
+    !tp.hasAddon &&
+    (tp.tournament.addonAfterLevel === null || tp.tournament.currentLevel >= tp.tournament.addonAfterLevel)
+
+  if (withAddon && !addonAvailable) {
+    if (tp.hasAddon) throw new Error('Jogador já fez add-on')
+    if (!tp.tournament.addonAmount) throw new Error('Torneio não tem add-on')
+    throw new Error('Add-on ainda não disponível neste nível')
+  }
+
+  if (addonAvailable) {
+    addonCharge = Number(tp.tournament.addonAmount)
+    addonTotalChips = tp.tournament.addonChips ?? tp.tournament.startingChips
+    addonPrizeIncrement = addonCharge * (1 - rakeRate)
+    addonRakeIncrement = addonCharge * rakeRate
+  }
+
+  return prisma.$transaction(async (tx: any) => {
+    // Reverte prêmio automático que possa ter sido creditado ao ser eliminado
+    const prizeItem = await tx.comandaItem.findFirst({
+      where: { tournamentPlayerId, type: 'TOURNAMENT_PRIZE' },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (prizeItem) {
+      const prizeAmt = Number(prizeItem.amount)
+      await tx.comandaItem.delete({ where: { id: prizeItem.id } })
+      await tx.comanda.update({
+        where: { id: tp.comanda.id },
+        data: { balance: { decrement: prizeAmt } },
+      })
+    }
+
+    // Reativa jogador
+    await tx.tournamentPlayer.update({
+      where: { id: tournamentPlayerId },
+      data: {
+        status: 'ACTIVE',
+        position: null,
+        eliminatedAt: null,
+        eliminatedAtLevel: null,
+        eliminatedByPlayerId: null,
+        prizeAmount: null,
+        rebuysCount: { increment: rebuysToAdd },
+        ...(addonAvailable ? { hasAddon: true } : {}),
+      },
+    })
+
+    // Cobra rebuy na comanda
+    await tx.comandaItem.create({
+      data: {
+        comandaId: tp.comanda.id,
+        type: 'TOURNAMENT_REBUY',
+        amount: rebuyTotalCharge,
+        description: reEntryType === 'DOUBLE'
+          ? `Re-entrada Dupla: ${tp.tournament.name}`
+          : `Re-entrada: ${tp.tournament.name}`,
+        tournamentId: tp.tournamentId,
+        tournamentPlayerId,
+        createdByUserId: registeredByUserId,
+      },
+    })
+    await tx.comanda.update({
+      where: { id: tp.comanda.id },
+      data: { balance: { decrement: rebuyTotalCharge } },
+    })
+    await tx.tournament.update({
+      where: { id: tp.tournamentId },
+      data: {
+        prizePool: { increment: rebuyPrizeIncrement },
+        totalRake: { increment: rebuyRakeIncrement },
+        totalTax: { increment: rebuyTaxTotal },
+      },
+    })
+
+    // Cobra addon se solicitado
+    if (addonAvailable && addonCharge > 0) {
+      await tx.comandaItem.create({
+        data: {
+          comandaId: tp.comanda.id,
+          type: 'TOURNAMENT_ADDON',
+          amount: addonCharge,
+          description: `Add-on: ${tp.tournament.name}`,
+          tournamentId: tp.tournamentId,
+          tournamentPlayerId,
+          createdByUserId: registeredByUserId,
+        },
+      })
+      await tx.comanda.update({
+        where: { id: tp.comanda.id },
+        data: { balance: { decrement: addonCharge } },
+      })
+      await tx.tournament.update({
+        where: { id: tp.tournamentId },
+        data: {
+          prizePool: { increment: addonPrizeIncrement },
+          totalRake: { increment: addonRakeIncrement },
+        },
+      })
+    }
+
+    return {
+      chips: rebuyTotalChips + addonTotalChips,
+      reEntryType,
+      withAddon: addonAvailable,
+    }
   })
 }
 
@@ -368,9 +734,11 @@ export async function registerRebuy({
 export async function registerAddon({
   tournamentPlayerId,
   registeredByUserId,
+  withTax = false,
 }: {
   tournamentPlayerId: string
   registeredByUserId: string
+  withTax?: boolean
 }) {
   const tp = await db.tournamentPlayer.findUniqueOrThrow({
     where: { id: tournamentPlayerId },
@@ -383,6 +751,16 @@ export async function registerAddon({
     throw new Error('Add-on ainda não disponível')
   }
 
+  const base = Number(tp.tournament.addonAmount)
+  const taxAmount = withTax ? Number((tp.tournament as any).addonTaxAmount ?? 0) : 0
+  const taxChips = withTax ? Number((tp.tournament as any).addonTaxChips ?? 0) : 0
+  const rakeRate = Number(tp.tournament.rake) / 100
+  const totalCharge = base + taxAmount
+  const totalChips = (tp.tournament.addonChips ?? tp.tournament.startingChips) + taxChips
+  // Rake só sobre o valor base; taxa vai integral para a casa
+  const prizeIncrement = base * (1 - rakeRate)
+  const rakeIncrement = base * rakeRate
+
   return prisma.$transaction(async (tx: any) => {
     const updated = await tx.tournamentPlayer.update({
       where: { id: tournamentPlayerId },
@@ -393,8 +771,10 @@ export async function registerAddon({
       data: {
         comandaId: tp.comanda.id,
         type: 'TOURNAMENT_ADDON',
-        amount: Number(tp.tournament.addonAmount),
-        description: `Add-on: ${tp.tournament.name}`,
+        amount: totalCharge,
+        description: withTax
+          ? `Add-on + Opcional: ${tp.tournament.name}`
+          : `Add-on: ${tp.tournament.name}`,
         tournamentId: tp.tournamentId,
         tournamentPlayerId,
         createdByUserId: registeredByUserId,
@@ -403,20 +783,19 @@ export async function registerAddon({
 
     await tx.comanda.update({
       where: { id: tp.comanda.id },
-      data: { balance: { decrement: Number(tp.tournament.addonAmount) } },
+      data: { balance: { decrement: totalCharge } },
     })
 
-    const rake = Number(tp.tournament.rake) / 100
-    const addonNet = Number(tp.tournament.addonAmount) * (1 - rake)
     await tx.tournament.update({
       where: { id: tp.tournamentId },
       data: {
-        prizePool: { increment: addonNet },
-        totalRake: { increment: Number(tp.tournament.addonAmount) * rake },
+        prizePool: { increment: prizeIncrement },
+        totalRake: { increment: rakeIncrement },
+        totalTax: { increment: taxAmount },
       },
     })
 
-    return updated
+    return { ...updated, chips: totalChips, withTax }
   })
 }
 
@@ -425,12 +804,10 @@ export async function registerAddon({
 export async function eliminatePlayer({
   tournamentPlayerId,
   eliminatedByPlayerId,
-  position,
   registeredByUserId,
 }: {
   tournamentPlayerId: string
   eliminatedByPlayerId?: string | null
-  position?: number
   registeredByUserId: string
 }) {
   const tp = await db.tournamentPlayer.findUniqueOrThrow({
@@ -440,8 +817,45 @@ export async function eliminatePlayer({
 
   if (tp.status === 'ELIMINATED') throw new Error('Jogador já eliminado')
 
+  // Posição = nº de jogadores ainda ativos no momento da eliminação
+  const activeCount = await db.tournamentPlayer.count({
+    where: { tournamentId: tp.tournamentId, status: { in: ['REGISTERED', 'ACTIVE'] } },
+  })
+  const position = activeCount // ex: 6 ativos → eliminado em 6º
+
+  // Calcula se esse position recebe prêmio
+  // Se o torneio tem dealPayouts (acordo de posições), usa esses valores; senão usa calcPayoutSuggestion
+  const totalPlayers = await db.tournamentPlayer.count({ where: { tournamentId: tp.tournamentId } })
+  const prizePool = Number(tp.tournament.prizePool)
+
+  // Estrutura de premiação efetiva:
+  // 1. dealPayouts (acordo explícito com valores) → usa diretamente
+  // 2. payoutStructure (estrutura configurada com percentuais) → calcula valores
+  // 3. fallback: calcPayoutSuggestion
+  let effectivePayouts: { position: number; amount: number }[]
+  if (tp.tournament.dealPayouts) {
+    try {
+      effectivePayouts = JSON.parse(tp.tournament.dealPayouts)
+    } catch {
+      effectivePayouts = calcPayoutSuggestion(prizePool, totalPlayers)
+    }
+  } else if ((tp.tournament as any).payoutStructure) {
+    try {
+      const structure: { position: number; percent: number }[] = JSON.parse((tp.tournament as any).payoutStructure)
+      effectivePayouts = structure.map((s) => ({
+        position: s.position,
+        amount: Math.round(prizePool * s.percent / 100 * 100) / 100,
+      }))
+    } catch {
+      effectivePayouts = calcPayoutSuggestion(prizePool, totalPlayers)
+    }
+  } else {
+    effectivePayouts = calcPayoutSuggestion(prizePool, totalPlayers)
+  }
+  const prizeEntry = effectivePayouts.find((p) => p.position === position)
+
   return prisma.$transaction(async (tx: any) => {
-    // Marca eliminado
+    // Marca eliminado com posição calculada
     const eliminated = await tx.tournamentPlayer.update({
       where: { id: tournamentPlayerId },
       data: {
@@ -449,9 +863,32 @@ export async function eliminatePlayer({
         eliminatedAt: new Date(),
         eliminatedAtLevel: tp.tournament.currentLevel,
         eliminatedByPlayerId: eliminatedByPlayerId ?? null,
-        position: position ?? null,
+        position,
       },
     })
+
+    // Auto-prêmio se posição está na estrutura de pagamento
+    if (prizeEntry && prizeEntry.amount > 0) {
+      await tx.tournamentPlayer.update({
+        where: { id: tournamentPlayerId },
+        data: { prizeAmount: prizeEntry.amount },
+      })
+      await tx.comandaItem.create({
+        data: {
+          comandaId: tp.comanda.id,
+          type: 'TOURNAMENT_PRIZE',
+          amount: prizeEntry.amount,
+          description: `Prêmio ${position}º lugar: ${tp.tournament.name}`,
+          tournamentId: tp.tournamentId,
+          tournamentPlayerId,
+          createdByUserId: registeredByUserId,
+        },
+      })
+      await tx.comanda.update({
+        where: { id: tp.comanda.id },
+        data: { balance: { increment: prizeEntry.amount } },
+      })
+    }
 
     // Bounty: creditado na comanda do eliminador
     if (tp.tournament.bountyAmount && eliminatedByPlayerId) {
@@ -482,7 +919,7 @@ export async function eliminatePlayer({
       }
     }
 
-    // Verifica se restou apenas 1 ativo → finaliza torneio
+    // Verifica se restou apenas 1 ativo → finaliza torneio e premia vencedor
     const activePlayers = await tx.tournamentPlayer.count({
       where: {
         tournamentId: tp.tournamentId,
@@ -492,12 +929,36 @@ export async function eliminatePlayer({
     if (activePlayers <= 1) {
       const winner = await tx.tournamentPlayer.findFirst({
         where: { tournamentId: tp.tournamentId, status: { in: ['REGISTERED', 'ACTIVE'] } },
+        include: { comanda: true },
       })
       if (winner) {
+        const winnerPrize = effectivePayouts.find((p) => p.position === 1)
         await tx.tournamentPlayer.update({
           where: { id: winner.id },
-          data: { status: 'WINNER', position: 1 },
+          data: {
+            status: 'WINNER',
+            position: 1,
+            ...(winnerPrize && winnerPrize.amount > 0 ? { prizeAmount: winnerPrize.amount } : {}),
+          },
         })
+        // Auto-prêmio do vencedor
+        if (winnerPrize && winnerPrize.amount > 0) {
+          await tx.comandaItem.create({
+            data: {
+              comandaId: (winner as any).comanda.id,
+              type: 'TOURNAMENT_PRIZE',
+              amount: winnerPrize.amount,
+              description: `Prêmio 1º lugar: ${tp.tournament.name}`,
+              tournamentId: tp.tournamentId,
+              tournamentPlayerId: winner.id,
+              createdByUserId: registeredByUserId,
+            },
+          })
+          await tx.comanda.update({
+            where: { id: (winner as any).comanda.id },
+            data: { balance: { increment: winnerPrize.amount } },
+          })
+        }
       }
       await tx.tournament.update({
         where: { id: tp.tournamentId },
@@ -568,12 +1029,48 @@ export async function startTournament(tournamentId: string) {
   })
 }
 
+export async function previousLevel(tournamentId: string) {
+  const t = await db.tournament.findUniqueOrThrow({ where: { id: tournamentId } })
+  if (!['RUNNING', 'ON_BREAK'].includes(t.status)) throw new Error('Torneio não está em andamento')
+  if (t.currentLevel <= 1) throw new Error('Já está no primeiro nível')
+
+  return db.tournament.update({
+    where: { id: tournamentId },
+    data: {
+      currentLevel: t.currentLevel - 1,
+      levelStartedAt: new Date(),
+      isOnBreak: false,
+      breakStartedAt: null,
+      isPaused: false,
+      pausedAt: null,
+    },
+  })
+}
+
 export async function advanceLevel(tournamentId: string) {
   const t = await db.tournament.findUniqueOrThrow({
     where: { id: tournamentId },
     include: { blindLevels: { orderBy: { level: 'asc' } } },
   })
   if (t.status !== 'RUNNING') throw new Error('Torneio não está rodando')
+
+  // Se há intervalo agendado após o nível atual, entra em break em vez de avançar
+  const breaks: { afterLevel: number; durationMinutes: number }[] = (() => {
+    try { return JSON.parse(t.breaks ?? '[]') } catch { return [] }
+  })()
+  const breakAfterCurrent = breaks.find((b) => b.afterLevel === t.currentLevel)
+  if (breakAfterCurrent) {
+    return db.tournament.update({
+      where: { id: tournamentId },
+      data: {
+        status: 'ON_BREAK',
+        isOnBreak: true,
+        breakStartedAt: new Date(),
+        isPaused: false,
+        pausedAt: null,
+      },
+    })
+  }
 
   const nextLevel = t.currentLevel + 1
   const maxLevel = t.blindLevels[t.blindLevels.length - 1]?.level ?? nextLevel
@@ -585,6 +1082,8 @@ export async function advanceLevel(tournamentId: string) {
       levelStartedAt: new Date(),
       isOnBreak: false,
       breakStartedAt: null,
+      isPaused: false,
+      pausedAt: null,
     },
   })
 }
@@ -599,6 +1098,8 @@ export async function startBreak(tournamentId: string) {
       status: 'ON_BREAK',
       isOnBreak: true,
       breakStartedAt: new Date(),
+      isPaused: false,
+      pausedAt: null,
     },
   })
 }
@@ -615,8 +1116,38 @@ export async function endBreak(tournamentId: string) {
       breakStartedAt: null,
       currentLevel: { increment: 1 },
       levelStartedAt: new Date(),
+      isPaused: false,
+      pausedAt: null,
     },
   })
+}
+
+export async function pauseTimer(tournamentId: string) {
+  const t = await db.tournament.findUniqueOrThrow({ where: { id: tournamentId } })
+  if (!['RUNNING', 'ON_BREAK'].includes(t.status)) throw new Error('Torneio não está em andamento')
+  if (t.isPaused) throw new Error('Timer já está pausado')
+
+  return db.tournament.update({
+    where: { id: tournamentId },
+    data: { isPaused: true, pausedAt: new Date() },
+  })
+}
+
+export async function resumeTimer(tournamentId: string) {
+  const t = await db.tournament.findUniqueOrThrow({ where: { id: tournamentId } })
+  if (!t.isPaused || !t.pausedAt) throw new Error('Timer não está pausado')
+
+  const pauseDurationMs = Date.now() - t.pausedAt.getTime()
+
+  // Avança o startedAt do nível/break pelo tempo pausado, mantendo o remaining igual
+  const data: Record<string, unknown> = { isPaused: false, pausedAt: null }
+  if (t.isOnBreak && t.breakStartedAt) {
+    data.breakStartedAt = new Date(t.breakStartedAt.getTime() + pauseDurationMs)
+  } else if (t.levelStartedAt) {
+    data.levelStartedAt = new Date(t.levelStartedAt.getTime() + pauseDurationMs)
+  }
+
+  return db.tournament.update({ where: { id: tournamentId }, data })
 }
 
 export async function updateBlindLevels(
@@ -634,6 +1165,69 @@ export async function updateBlindLevels(
       data: { breaks: JSON.stringify(breaks) },
     })
   }
+}
+
+// Salva acordo de posições — redistribui prêmios por colocação sem encerrar o torneio
+// Os jogadores vão receber o valor acordado quando forem eliminados/vencerem
+export async function setDealPayouts(
+  tournamentId: string,
+  payouts: { position: number; amount: number }[],
+) {
+  const t = await db.tournament.findUniqueOrThrow({ where: { id: tournamentId } })
+  if (!['RUNNING', 'ON_BREAK'].includes(t.status)) throw new Error('Torneio não está em andamento')
+  if (!payouts.length) throw new Error('Nenhum pagamento definido')
+  return db.tournament.update({
+    where: { id: tournamentId },
+    data: { dealPayouts: JSON.stringify(payouts) },
+  })
+}
+
+// Salva estrutura de payout configurada no modal (posições + percentuais)
+// Usada pelo clock para exibir a distribuição correta de prêmios
+export async function setPayoutStructure(
+  tournamentId: string,
+  structure: { position: number; percent: number }[],
+) {
+  if (!structure.length) throw new Error('Estrutura vazia')
+  return db.tournament.update({
+    where: { id: tournamentId },
+    data: { payoutStructure: JSON.stringify(structure) },
+  })
+}
+
+// Force-finish por acordo — atribui posições aos jogadores ativos (por prêmio desc) e encerra
+export async function finishByDeal(tournamentId: string) {
+  const t = await db.tournament.findUniqueOrThrow({ where: { id: tournamentId } })
+  if (!['RUNNING', 'ON_BREAK'].includes(t.status)) throw new Error('Torneio não está em andamento')
+
+  const activePlayers = await db.tournamentPlayer.findMany({
+    where: { tournamentId, status: { in: ['REGISTERED', 'ACTIVE'] } },
+  })
+
+  // Ordena por prêmio decrescente: quem recebeu mais → posição mais alta
+  const sorted = [...activePlayers].sort(
+    (a, b) => Number(b.prizeAmount ?? 0) - Number(a.prizeAmount ?? 0)
+  )
+
+  return prisma.$transaction(async (tx: any) => {
+    for (let i = 0; i < sorted.length; i++) {
+      const p = sorted[i]
+      const isWinner = i === 0
+      await tx.tournamentPlayer.update({
+        where: { id: p.id },
+        data: {
+          status: isWinner ? 'WINNER' : 'ELIMINATED',
+          position: i + 1,
+          eliminatedAt: isWinner ? undefined : new Date(),
+          eliminatedAtLevel: isWinner ? undefined : t.currentLevel,
+        },
+      })
+    }
+    return tx.tournament.update({
+      where: { id: tournamentId },
+      data: { status: 'FINISHED', finishedAt: new Date(), isPaused: false, pausedAt: null },
+    })
+  })
 }
 
 export async function cancelTournament(tournamentId: string) {
