@@ -104,7 +104,7 @@ export default function CreateTournamentPage() {
   }
 
   const handleLoadPreset = (preset: Preset) => {
-    setForm(preset.form)
+    setForm(preset.form as typeof form)
     setCustomLevels(preset.customLevels)
     setUseCustom(preset.customLevels.length > 0)
     if (preset.breaks?.length) setBreaks(preset.breaks)
@@ -528,6 +528,9 @@ export default function CreateTournamentPage() {
         </button>
       </form>
       </div>
+    </div>
+  )
+}
     </div>
   )
 }

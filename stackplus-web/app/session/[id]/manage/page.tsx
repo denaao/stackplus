@@ -261,6 +261,7 @@ export default function SessionManagePage() {
   const params = useParams()
   const sessionId = params.id as string
   const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -1626,10 +1627,9 @@ export default function SessionManagePage() {
                 {actionLoading ? 'Finalizando...' : 'Confirmar finalizacao'}
               </button>
             </div>
-          </div>
+</div>
         </div>
       )}
     </div>
   )
-}
 }
