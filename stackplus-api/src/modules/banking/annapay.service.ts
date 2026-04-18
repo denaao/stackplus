@@ -2059,9 +2059,4 @@ function extractEndToEndId(payload: unknown, chargeId: string, amount: number, d
     }
   }
   return null
-}        : null
-      if (e2e) return e2e
-    }
-  }
-  return null
 }
