@@ -531,6 +531,3 @@ export default function CreateTournamentPage() {
     </div>
   )
 }
-    </div>
-  )
-}
