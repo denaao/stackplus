@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
@@ -43,6 +43,14 @@ function savePresets(presets: Preset[]) {
 }
 
 export default function CreateTournamentPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-sx-bg" />}>
+      <CreateTournamentContent />
+    </Suspense>
+  )
+}
+
+function CreateTournamentContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const homeGameId = searchParams.get('homeGameId') ?? ''

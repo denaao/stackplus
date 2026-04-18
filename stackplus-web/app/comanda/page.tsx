@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
@@ -26,6 +26,14 @@ type StatusFilter = 'OPEN' | 'CLOSED' | 'ALL'
 type BalanceFilter = 'ALL' | 'CREDIT' | 'DEBT'
 
 export default function ComandasPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-sx-bg" />}>
+      <ComandasContent />
+    </Suspense>
+  )
+}
+
+function ComandasContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const homeGameId = searchParams.get('homeGameId') ?? ''
