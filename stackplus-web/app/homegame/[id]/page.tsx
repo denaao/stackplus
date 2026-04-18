@@ -20,7 +20,7 @@ interface HomeGame {
   blindsMinutesAfterBreak?: number
   levelsUntilBreak?: number
   host: { id: string; name: string }
-  members: { id: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null; user: { id: string; name: string; email?: string } }[]
+  members: { id: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null; role?: 'PLAYER' | 'HOST'; user: { id: string; name: string; email?: string } }[]
   sangeurAccesses?: SangeurAccess[]
 }
 

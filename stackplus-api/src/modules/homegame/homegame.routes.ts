@@ -108,6 +108,21 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   res.status(204).send()
 })
 
+const setMemberRoleSchema = z.object({
+  role: z.enum(['HOST', 'PLAYER']),
+})
+
+router.patch('/:id/members/:userId/role', authenticate, async (req: AuthRequest, res: Response) => {
+  const data = setMemberRoleSchema.parse(req.body)
+  const result = await HomeGameService.setMemberRole({
+    homeGameId: req.params.id,
+    ownerUserId: req.user!.userId,
+    memberUserId: req.params.userId,
+    role: data.role,
+  })
+  res.json(result)
+})
+
 router.post('/join', authenticate, async (req: AuthRequest, res: Response) => {
   const { joinCode } = z.object({ joinCode: z.string().length(6) }).parse(req.body)
   const game = await HomeGameService.joinHomeGame(req.user!.userId, joinCode.toUpperCase())

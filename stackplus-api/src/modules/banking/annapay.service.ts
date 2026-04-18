@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma'
 import { TransactionType } from '@prisma/client'
 import { randomUUID } from 'crypto'
+import { isHomeGameHost } from '../../lib/homegame-auth'
 
 type PayoutPurposeValue = 'SETTLEMENT' | 'CAIXINHA'
 
@@ -1582,7 +1583,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     },
   })
 
-  if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
   if (session.status !== 'FINISHED') throw new Error('A sessão precisa estar finalizada para gerar o relatório financeiro')
 
   const virtualAccount = resolveVirtualAccount()
@@ -2053,9 +2054,3 @@ function extractEndToEndId(payload: unknown, chargeId: string, amount: number, d
     if (hasChargeRef || (amountMatch && debtorMatch)) {
       const e2e = typeof obj.endToEndId === 'string' ? obj.endToEndId
         : typeof obj.e2eId === 'string' ? obj.e2eId
-        : null
-      if (e2e) return e2e
-    }
-  }
-  return null
-}

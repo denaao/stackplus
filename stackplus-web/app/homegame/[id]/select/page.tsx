@@ -43,6 +43,7 @@ export default function HomeGameSelectPage() {
     { key: 'cash',       label: 'Cash Game', icon: '💵', onClick: () => router.push(`/homegame/${id}`) },
     { key: 'tournament', label: 'Torneio',   icon: '🏆', onClick: () => router.push(`/homegame/${id}/tournaments`) },
     { key: 'comanda',    label: 'Comandas',  icon: '💲', onClick: () => router.push(`/comanda?homeGameId=${id}`) },
+    { key: 'members',    label: 'Membros',   icon: '👥', onClick: () => router.push(`/homegame/${id}/members`) },
   ]
 
   return (

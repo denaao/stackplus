@@ -44,6 +44,11 @@ enum MemberPaymentMode {
   PREPAID
 }
 
+enum MemberRole {
+  PLAYER
+  HOST
+}
+
 enum SessionFinancialPayoutPurpose {
   SETTLEMENT
   CAIXINHA
@@ -272,6 +277,7 @@ model HomeGameMember {
   homeGameId String
   userId     String
   paymentMode MemberPaymentMode?
+  role       MemberRole @default(PLAYER)
   joinedAt   DateTime @default(now())
 
   homeGame HomeGame @relation(fields: [homeGameId], references: [id])

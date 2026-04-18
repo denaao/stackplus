@@ -2,6 +2,7 @@ import { prisma } from '../../lib/prisma'
 import { notifySessionFinishedIfEnabled } from '../whatsapp/evolution.service'
 import { generateSessionFinancialReport } from '../banking/annapay.service'
 import { FinancialModule } from '@prisma/client'
+import { isHomeGameHost } from '../../lib/homegame-auth'
 
 function amountToFixed(value: number) {
   return Number(value.toFixed(2))
@@ -202,6 +203,7 @@ async function getSessionAccessContext(sessionId: string) {
       id: true,
       status: true,
       cashierId: true,
+      homeGameId: true,
       homeGame: {
         select: {
           hostId: true,
@@ -211,13 +213,19 @@ async function getSessionAccessContext(sessionId: string) {
   })
 }
 
-function canAccessPrivateSession(session: Awaited<ReturnType<typeof getSessionAccessContext>>, userId: string) {
-  return session.homeGame.hostId === userId || session.cashierId === userId
+async function canAccessPrivateSession(
+  session: { cashierId: string | null; homeGameId: string },
+  userId: string,
+) {
+  if (session.cashierId === userId) return true
+  return isHomeGameHost(userId, session.homeGameId)
 }
 
 export async function createSession(homeGameId: string, hostId: string, input: CreateSessionInput = {}) {
+  if (!(await isHomeGameHost(hostId, homeGameId))) {
+    throw new Error('Apenas o host pode criar sessões')
+  }
   const game = await prisma.homeGame.findUniqueOrThrow({ where: { id: homeGameId } })
-  if (game.hostId !== hostId) throw new Error('Apenas o host pode criar sessões')
 
   const finalGameType = input.gameType || game.gameType
   const finalFinancialModule = input.financialModule || game.financialModule || FinancialModule.POSTPAID
@@ -279,7 +287,7 @@ export async function startSession(sessionId: string, hostId: string, cashierId?
       participantAssignments: { select: { userId: true } },
     },
   })
-  if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
   if (session.status !== 'WAITING') throw new Error('Sessão já iniciada')
   if (session.gameType === 'CASH_GAME' && session.participantAssignments.length < 2) {
     throw new Error('Selecione pelo menos 2 participantes para iniciar a partida')
@@ -334,7 +342,7 @@ export async function finishSession(
       },
     },
   })
-  if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
   if (session.status !== 'ACTIVE') throw new Error('Sessão não está ativa')
 
   const caixinhaMode = (session as unknown as { caixinhaMode?: string }).caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
@@ -476,12 +484,10 @@ export async function getSessionByIdForOperator(sessionId: string, userId: strin
     include: sessionInclude,
   })
 
-  if (!canAccessPrivateSession({
-    id: session.id,
-    status: session.status,
+  if (!(await canAccessPrivateSession({
     cashierId: session.cashierId,
-    homeGame: { hostId: session.homeGame.hostId },
-  }, userId)) {
+    homeGameId: session.homeGameId,
+  }, userId))) {
     throw new Error('Acesso negado')
   }
 
@@ -506,6 +512,7 @@ export async function canJoinPrivateSession(sessionId: string, userId: string) {
   return canAccessPrivateSession(session, userId)
 }
 
+
 export async function canJoinPublicSession(sessionId: string) {
   const session = await getSessionAccessContext(sessionId)
   return session.status !== 'WAITING'
@@ -524,7 +531,7 @@ export async function getSessionStaffOptions(sessionId: string, hostId: string) 
     },
   })
 
-  if (session.homeGame.hostId !== hostId) {
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) {
     throw new Error('Acesso negado')
   }
 
@@ -559,7 +566,7 @@ export async function updateSessionStaff(
     },
   })
 
-  if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
 
   const allowedIds = new Set<string>([
     session.homeGame.host.id,
@@ -609,7 +616,7 @@ export async function updateSessionRakeback(
     },
   })
 
-  if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
 
   const allowedIds = new Set<string>([
     session.homeGame.host.id,
@@ -662,7 +669,7 @@ export async function updateSessionParticipants(sessionId: string, hostId: strin
     },
   })
 
-  if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
   if (session.status === 'FINISHED') throw new Error('Sessão já finalizada')
 
   const allowedIds = new Set<string>([
@@ -709,7 +716,8 @@ export async function getSessionsByHomeGameForUser(homeGameId: string, userId: s
     },
   })
 
-  if (homeGame.hostId !== userId && homeGame.members.length === 0) {
+  const isHost = await isHomeGameHost(userId, homeGameId)
+  if (!isHost && homeGame.members.length === 0) {
     throw new Error('Acesso negado')
   }
 
@@ -722,7 +730,7 @@ export async function deleteSession(sessionId: string, hostId: string) {
     include: { homeGame: true },
   })
 
-  if (session.homeGame.hostId !== hostId) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
 
   await prisma.$transaction(async (tx) => {
     await tx.prepaidChargePending.deleteMany({ where: { sessionId } })
@@ -733,9 +741,4 @@ export async function deleteSession(sessionId: string, hostId: string) {
     await tx.sangeurShift.deleteMany({ where: { sessionId } })
     await tx.transaction.deleteMany({ where: { sessionId } })
     await tx.playerSessionState.deleteMany({ where: { sessionId } })
-    await tx.sessionStaff.deleteMany({ where: { sessionId } })
-    await tx.sessionRakeback.deleteMany({ where: { sessionId } })
-    await tx.sessionParticipant.deleteMany({ where: { sessionId } })
-    await tx.session.delete({ where: { id: sessionId } })
-  })
-}
+    await t

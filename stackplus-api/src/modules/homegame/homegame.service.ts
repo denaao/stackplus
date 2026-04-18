@@ -3,6 +3,7 @@ import { generateJoinCode } from '../../utils/codeGenerator'
 import { hashPassword } from '../../utils/hash'
 import { FinancialModule, MemberPaymentMode } from '@prisma/client'
 import { randomBytes } from 'crypto'
+import { isHomeGameHost, assertHomeGameHost, assertHomeGameOwner } from '../../lib/homegame-auth'
 
 function generateTempPassword() {
   return randomBytes(6).toString('base64url')
@@ -45,8 +46,15 @@ export async function createHomeGame(hostId: string, data: {
 }
 
 export async function getHostGames(hostId: string) {
+  // Retorna home games em que o usuario eh dono original (hostId)
+  // OU co-host (HomeGameMember com role = HOST).
   return prisma.homeGame.findMany({
-    where: { hostId },
+    where: {
+      OR: [
+        { hostId },
+        { members: { some: { userId: hostId, role: 'HOST' } } },
+      ],
+    },
     include: { _count: { select: { members: true, sessions: true } } },
     orderBy: { createdAt: 'desc' },
   })
@@ -85,7 +93,7 @@ export async function getHomeGameById(id: string) {
 export async function getHomeGameByIdForUser(id: string, userId: string) {
   const game = await getHomeGameById(id)
 
-  const isHost = game.hostId === userId
+  const isHost = await isHomeGameHost(userId, id)
   const isMember = game.members.some((member) => member.userId === userId)
 
   if (!isHost && !isMember) {
@@ -112,7 +120,7 @@ export async function updateFinancialConfig(
     },
   })
 
-  if (game.hostId !== hostId) throw new Error('Acesso negado')
+  await assertHomeGameHost(hostId, homeGameId)
 
   const memberIds = new Set(game.members.map((member) => member.userId))
   for (const item of input.hybridMembers || []) {
@@ -181,9 +189,50 @@ export async function getPlayerGames(userId: string) {
   })
 }
 
+/**
+ * Promove ou rebaixa um membro do home game.
+ * Apenas o DONO ORIGINAL (hostId) pode invocar — co-hosts nao podem promover outros.
+ * O proprio dono nao aparece em HomeGameMember e nao pode ser rebaixado.
+ */
+export async function setMemberRole(input: {
+  homeGameId: string
+  ownerUserId: string   // quem esta fazendo a chamada (tem que ser o dono)
+  memberUserId: string  // quem sera promovido/rebaixado
+  role: 'HOST' | 'PLAYER'
+}) {
+  await assertHomeGameOwner(input.ownerUserId, input.homeGameId)
+
+  const homeGame = await prisma.homeGame.findUniqueOrThrow({
+    where: { id: input.homeGameId },
+    select: { hostId: true },
+  })
+
+  if (input.memberUserId === homeGame.hostId) {
+    throw new Error('O dono original nao pode ter o papel alterado')
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = prisma as any
+  const member = await db.homeGameMember.findUnique({
+    where: { homeGameId_userId: { homeGameId: input.homeGameId, userId: input.memberUserId } },
+    select: { id: true },
+  })
+  if (!member) {
+    throw new Error('Usuario nao e membro deste home game')
+  }
+
+  return db.homeGameMember.update({
+    where: { homeGameId_userId: { homeGameId: input.homeGameId, userId: input.memberUserId } },
+    data: { role: input.role },
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+    },
+  })
+}
+
 export async function deleteHomeGame(homeGameId: string, hostId: string) {
-  const game = await prisma.homeGame.findUniqueOrThrow({ where: { id: homeGameId } })
-  if (game.hostId !== hostId) throw new Error('Acesso negado')
+  // Apenas o dono original pode deletar (co-hosts nao podem).
+  await assertHomeGameOwner(hostId, homeGameId)
 
   await prisma.$transaction(async (tx) => {
     await tx.prepaidChargePending.deleteMany({ where: { session: { homeGameId } } })
@@ -205,8 +254,7 @@ export async function deleteHomeGame(homeGameId: string, hostId: string) {
 }
 
 async function ensureHostAndMember(homeGameId: string, hostId: string, memberUserId: string) {
-  const game = await prisma.homeGame.findUniqueOrThrow({ where: { id: homeGameId } })
-  if (game.hostId !== hostId) throw new Error('Acesso negado')
+  await assertHomeGameHost(hostId, homeGameId)
 
   const member = await prisma.homeGameMember.findUnique({
     where: {
@@ -221,8 +269,7 @@ async function ensureHostAndMember(homeGameId: string, hostId: string, memberUse
 }
 
 export async function listSangeurAccesses(homeGameId: string, hostId: string) {
-  const game = await prisma.homeGame.findUniqueOrThrow({ where: { id: homeGameId } })
-  if (game.hostId !== hostId) throw new Error('Acesso negado')
+  await assertHomeGameHost(hostId, homeGameId)
 
   return prisma.homeGameSangeurAccess.findMany({
     where: { homeGameId },
