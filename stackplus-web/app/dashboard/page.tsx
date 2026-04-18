@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const canManageWhatsApp = true
 
   useEffect(() => {
+    // Roda uma vez no mount. Usar user nas deps causava loop (setAuth → re-render → re-fetch).
     if (!user) { router.push('/'); return }
     api.get('/auth/me')
       .then(({ data }) => { if (token && data?.id && data?.email) setAuth(token, data) })
@@ -54,7 +55,8 @@ export default function DashboardPage() {
       setAsCoHost(data.asCoHost || [])
       setAsPlayer(data.asPlayer || [])
     }).finally(() => setLoading(false))
-  }, [user, token, setAuth])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function mapQrErrorMessage(error: unknown): string {
     const message = typeof error === 'string' ? error : ''
