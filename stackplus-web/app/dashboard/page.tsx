@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const [joinModalOpen, setJoinModalOpen] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [connectingGameId, setConnectingGameId] = useState<string | null>(null)
@@ -72,6 +73,12 @@ export default function DashboardPage() {
   }
 
   function handleLogout() { logout(); router.push('/') }
+
+  function copyJoinCode(code: string) {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 1500)
+  }
 
   async function handleJoinHomeGame(e: React.FormEvent) {
     e.preventDefault()
@@ -287,20 +294,21 @@ export default function DashboardPage() {
                                 </span>
                               </div>
                               <div className="relative flex items-center gap-2">
-                                {isOwner && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs font-mono font-bold px-2 py-1 rounded"
+                                    style={{ background: 'rgba(0,200,224,0.1)', color: '#00C8E0', border: '1px solid rgba(0,200,224,0.2)' }}>
+                                    {game.joinCode}
+                                  </span>
                                   <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleConnectWhatsApp(game) }}
-                                    disabled={connectingGameId === game.id || !canManageWhatsApp}
-                                    className="h-7 rounded-md border border-sx-cyan-dim bg-sx-cyan-deep/40 px-2 text-xs font-semibold text-sx-cyan hover:bg-sx-cyan-deep/50 disabled:opacity-50"
+                                    onClick={(e) => { e.stopPropagation(); copyJoinCode(game.joinCode) }}
+                                    className="h-7 w-7 rounded-md border border-sx-border bg-sx-input text-sx-muted hover:text-sx-cyan hover:border-sx-cyan/40 transition-colors"
+                                    aria-label="Copiar código"
+                                    title={copiedCode === game.joinCode ? 'Copiado!' : 'Copiar código'}
                                   >
-                                    {connectingGameId === game.id ? 'Gerando QR...' : 'WhatsApp'}
+                                    {copiedCode === game.joinCode ? '✓' : '⧉'}
                                   </button>
-                                )}
-                                <span className="text-xs font-mono font-bold px-2 py-1 rounded"
-                                  style={{ background: 'rgba(0,200,224,0.1)', color: '#00C8E0', border: '1px solid rgba(0,200,224,0.2)' }}>
-                                  {game.joinCode}
-                                </span>
+                                </div>
                                 {isOwner && (
                                   <>
                                     <button
@@ -339,6 +347,17 @@ export default function DashboardPage() {
                               <span>🎮 {game._count.sessions} sessões</span>
                               <span>{gameType === 'CASH_GAME' ? `💵 R$ ${game.chipValue}/ficha` : '🏆 Estrutura de torneio'}</span>
                             </div>
+
+                            {isOwner && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleConnectWhatsApp(game) }}
+                                disabled={connectingGameId === game.id || !canManageWhatsApp}
+                                className="mt-4 w-full rounded-lg border border-sx-cyan-dim bg-sx-cyan-deep/30 px-3 py-2 text-sm font-semibold text-sx-cyan hover:bg-sx-cyan-deep/50 disabled:opacity-50 transition-colors"
+                              >
+                                {connectingGameId === game.id ? 'Gerando QR...' : '📱 Conectar WhatsApp do Home Game'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       )
