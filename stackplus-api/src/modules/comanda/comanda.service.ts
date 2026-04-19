@@ -460,10 +460,16 @@ export async function generateComandaPixCharge({
  * Consulta o status do PIX via Annapay usando o paymentReference (chargeId) do item.
  * Se estiver pago, liquida o item (status PAID) automaticamente.
  * Retorna o status atual do item.
+ *
+ * Quando confirma pagamento de PIX de COBRANÇA (PAYMENT_PIX_SPOT/TERM),
+ * adiciona entrada na conta bancária do home game.
  */
 export async function checkComandaItemPixStatus(itemId: string, viewerUserId: string) {
   const item = await db.comandaItem.findUniqueOrThrow({
     where: { id: itemId },
+    include: {
+      comanda: { select: { homeGameId: true } },
+    },
   })
   // Tanto o jogador dono da comanda quanto host/co-host podem consultar.
   await assertComandaAccess(viewerUserId, { comandaId: item.comandaId })
@@ -488,10 +494,102 @@ export async function checkComandaItemPixStatus(itemId: string, viewerUserId: st
       itemId: item.id,
       paymentStatus: 'PAID',
     })
+    // Lança entrada na conta bancária do home game (PIX recebido confirmado).
+    const isPixIn = item.type === 'PAYMENT_PIX_SPOT' || item.type === 'PAYMENT_PIX_TERM'
+    if (isPixIn && item.comanda?.homeGameId) {
+      await recordBankTransaction({
+        homeGameId: item.comanda.homeGameId,
+        direction: 'IN',
+        amount: Number(item.amount),
+        description: `PIX recebido (${item.type})`,
+        comandaItemId: item.id,
+        annapayRef: item.paymentReference ?? null,
+      })
+    }
     return { itemId, status: 'PAID' as const, alreadyPaid: false }
   }
 
   return { itemId, status: 'PENDING' as const, alreadyPaid: false }
+}
+
+/**
+ * Registra uma movimentação na conta bancária virtual do home game
+ * e atualiza o `bankBalance`. Usado por entradas (PIX recebido) e saídas (PIX enviado).
+ */
+/**
+ * Retorna saldo bancário + últimas movimentações do home game.
+ * Qualquer membro autenticado pode ver (incluindo jogador, pra transparência).
+ */
+export async function getHomeGameBank(homeGameId: string, viewerUserId: string, limit = 50) {
+  // Permissão: membro ou host. Jogador comum pode ver o extrato pra auditar.
+  const isManager = await isHomeGameHost(viewerUserId, homeGameId)
+  if (!isManager) {
+    const member = await db.homeGameMember.findUnique({
+      where: { homeGameId_userId: { homeGameId, userId: viewerUserId } },
+      select: { id: true },
+    })
+    const game = await db.homeGame.findUnique({ where: { id: homeGameId }, select: { hostId: true } })
+    if (!member && game?.hostId !== viewerUserId) {
+      throw new Error('Acesso negado')
+    }
+  }
+
+  const [home, transactions] = await Promise.all([
+    db.homeGame.findUniqueOrThrow({
+      where: { id: homeGameId },
+      select: { id: true, name: true, bankBalance: true },
+    }),
+    db.homeGameBankTransaction.findMany({
+      where: { homeGameId },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 200),
+    }),
+  ])
+
+  return {
+    homeGameId: home.id,
+    homeGameName: home.name,
+    balance: Number(home.bankBalance),
+    transactions: transactions.map((t: any) => ({
+      id: t.id,
+      direction: t.direction,
+      amount: Number(t.amount),
+      description: t.description,
+      comandaItemId: t.comandaItemId,
+      annapayRef: t.annapayRef,
+      createdAt: t.createdAt,
+    })),
+  }
+}
+
+async function recordBankTransaction(params: {
+  homeGameId: string
+  direction: 'IN' | 'OUT'
+  amount: number
+  description?: string | null
+  comandaItemId?: string | null
+  annapayRef?: string | null
+}) {
+  await prisma.$transaction(async (tx: any) => {
+    await tx.homeGameBankTransaction.create({
+      data: {
+        homeGameId: params.homeGameId,
+        direction: params.direction,
+        amount: params.amount,
+        description: params.description ?? null,
+        comandaItemId: params.comandaItemId ?? null,
+        annapayRef: params.annapayRef ?? null,
+      },
+    })
+    await tx.homeGame.update({
+      where: { id: params.homeGameId },
+      data: {
+        bankBalance: {
+          [params.direction === 'IN' ? 'increment' : 'decrement']: params.amount,
+        },
+      },
+    })
+  })
 }
 
 /**
@@ -536,6 +634,16 @@ export async function sendComandaPixOut({
   const cpf = (comanda.player.cpf ?? '').replace(/\D/g, '')
   if (!pixKey) throw new Error('Jogador não tem chave PIX cadastrada')
   if (!cpf) throw new Error('Jogador não tem CPF cadastrado')
+
+  // Valida saldo da conta bancária do home game — não pode pagar sem ter dinheiro.
+  const homeGame = await db.homeGame.findUniqueOrThrow({
+    where: { id: comanda.homeGameId },
+    select: { bankBalance: true },
+  })
+  const bankBalance = Number(homeGame.bankBalance)
+  if (bankBalance < amount) {
+    throw new Error(`Sem saldo na conta do home game (atual: R$ ${bankBalance.toFixed(2)}). Aguarde entradas de PIX antes de pagar.`)
+  }
 
   // 1) Cria item PENDING + decrementa balance IMEDIATAMENTE
   const item = await prisma.$transaction(async (tx: any) => {
@@ -582,6 +690,15 @@ export async function sendComandaPixOut({
           paymentStatus: 'PAID',
           paymentReference: typeof orderId === 'string' ? orderId : null,
         },
+      })
+      // Debita a conta bancária do home game — PIX confirmado pelo Annapay.
+      await recordBankTransaction({
+        homeGameId: comanda.homeGameId,
+        direction: 'OUT',
+        amount,
+        description: `PIX enviado para ${playerName}`,
+        comandaItemId: item.id,
+        annapayRef: typeof orderId === 'string' ? orderId : null,
       })
     } catch (err) {
       // PIX falhou — reverte o balance e marca item como CANCELED
@@ -645,6 +762,11 @@ export async function closeCashbox({
       type: true,
       amount: true,
       paymentStatus: true,
+      comanda: {
+        select: {
+          player: { select: { id: true, name: true } },
+        },
+      },
     },
   })
 
@@ -654,7 +776,8 @@ export async function closeCashbox({
       id: true,
       status: true,
       balance: true,
-      player: { select: { name: true } },
+      openedAt: true,
+      player: { select: { id: true, name: true } },
     },
   })
 
@@ -674,17 +797,42 @@ export async function closeCashbox({
     totalPendingPix: 0,
   }
 
+  // Agregações detalhadas
+  const creditsByPlayer = new Map<string, { playerId: string; name: string; amount: number }>()
+  const debitsByPlayer = new Map<string, { playerId: string; name: string; amount: number }>()
+  const paymentsByType = {
+    PAYMENT_CASH: 0,
+    PAYMENT_CARD: 0,
+    PAYMENT_PIX_SPOT: 0,
+    PAYMENT_PIX_TERM: 0,
+  } as Record<string, number>
+
   for (const it of items) {
     const amt = Number(it.amount)
     const type = it.type as string
-    // Pagamentos efetivos (PAID ou null em tipos não-pagamento) somam.
     const effective = it.paymentStatus === 'PAID' || it.paymentStatus === null
-    if (isDebitType(type as ComandaItemType)) totals.totalDebits += amt
-    if (isPaymentType(type as ComandaItemType) || type === 'CASH_CASHOUT' ||
+    const playerId = it.comanda?.player?.id
+    const playerName = it.comanda?.player?.name ?? '—'
+
+    if (isDebitType(type as ComandaItemType)) {
+      totals.totalDebits += amt
+      if (playerId) {
+        const e = debitsByPlayer.get(playerId) ?? { playerId, name: playerName, amount: 0 }
+        e.amount += amt
+        debitsByPlayer.set(playerId, e)
+      }
+    }
+    const isCreditType = isPaymentType(type as ComandaItemType) || type === 'CASH_CASHOUT' ||
         type === 'TRANSFER_IN' || type === 'CARRY_IN' ||
         type === 'STAFF_CAIXINHA' || type === 'STAFF_RAKEBACK' ||
-        type === 'TOURNAMENT_BOUNTY_RECEIVED' || type === 'TOURNAMENT_PRIZE') {
-      if (effective) totals.totalCredits += amt
+        type === 'TOURNAMENT_BOUNTY_RECEIVED' || type === 'TOURNAMENT_PRIZE'
+    if (isCreditType && effective) {
+      totals.totalCredits += amt
+      if (playerId) {
+        const e = creditsByPlayer.get(playerId) ?? { playerId, name: playerName, amount: 0 }
+        e.amount += amt
+        creditsByPlayer.set(playerId, e)
+      }
     }
     if (type === 'PAYMENT_CASH' && effective) totals.totalCash += amt
     if ((type === 'PAYMENT_PIX_SPOT' || type === 'PAYMENT_PIX_TERM') && effective) {
@@ -696,6 +844,10 @@ export async function closeCashbox({
     if (type === 'TRANSFER_OUT' && effective) totals.totalPixOut += amt
     if (type === 'STAFF_CAIXINHA') totals.totalCaixinha += amt
     if (type === 'STAFF_RAKEBACK') totals.totalRakeback += amt
+    if (effective && (type === 'PAYMENT_CASH' || type === 'PAYMENT_CARD' ||
+        type === 'PAYMENT_PIX_SPOT' || type === 'PAYMENT_PIX_TERM')) {
+      paymentsByType[type] = (paymentsByType[type] ?? 0) + amt
+    }
   }
 
   // Rake total agregado direto das sessões finalizadas
@@ -716,6 +868,8 @@ export async function closeCashbox({
   const playersWithDebt = open.filter((c: any) => Number(c.balance) < 0).length
   const playersWithCredit = open.filter((c: any) => Number(c.balance) > 0).length
 
+  const round = (n: number) => Number(n.toFixed(2))
+
   return {
     generatedAt: new Date().toISOString(),
     periodStart: from?.toISOString() ?? null,
@@ -728,6 +882,22 @@ export async function closeCashbox({
     playersWithCredit,
     sessionsCount: sessions,
     tournamentsCount: tournaments,
+    paymentsByType: Object.fromEntries(
+      Object.entries(paymentsByType).map(([k, v]) => [k, round(v as number)]),
+    ),
+    creditsByPlayer: Array.from(creditsByPlayer.values())
+      .map((e) => ({ ...e, amount: round(e.amount) }))
+      .sort((a, b) => b.amount - a.amount),
+    debitsByPlayer: Array.from(debitsByPlayer.values())
+      .map((e) => ({ ...e, amount: round(e.amount) }))
+      .sort((a, b) => b.amount - a.amount),
+    openComandas: open.map((c: any) => ({
+      id: c.id,
+      playerId: c.player.id,
+      playerName: c.player.name,
+      balance: Number(c.balance),
+      openedAt: c.openedAt,
+    })).sort((a: any, b: any) => a.balance - b.balance), // devedores primeiro
     closedComandasDetail: closed.slice(0, 50).map((c: any) => ({
       id: c.id,
       playerName: c.player.name,

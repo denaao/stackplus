@@ -262,6 +262,9 @@ model HomeGame {
   levelsUntilBreak         Int?
   joinCode                 String   @unique
   hostId                   String
+  // Saldo da conta bancária virtual do home game. Atualizado automaticamente
+  // por PIX confirmado no Annapay (entrada) e PIX de saída ao jogador credor.
+  bankBalance              Decimal  @default(0) @db.Decimal(10, 2)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -272,6 +275,29 @@ model HomeGame {
   sessions Session[]
   comandas  Comanda[]
   tournaments Tournament[]
+  bankTransactions HomeGameBankTransaction[]
+}
+
+enum BankTxDirection {
+  IN
+  OUT
+}
+
+model HomeGameBankTransaction {
+  id             String           @id @default(uuid())
+  homeGameId     String
+  direction      BankTxDirection
+  amount         Decimal          @db.Decimal(10, 2)
+  description    String?
+  comandaItemId  String?
+  annapayRef     String?
+  createdAt      DateTime         @default(now())
+
+  homeGame HomeGame @relation(fields: [homeGameId], references: [id])
+
+  @@index([homeGameId])
+  @@index([comandaItemId])
+  @@index([createdAt])
 }
 
 model HomeGameMember {

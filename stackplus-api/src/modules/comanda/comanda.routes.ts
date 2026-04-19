@@ -133,6 +133,14 @@ router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) =>
   res.status(201).json(result)
 })
 
+// GET /comanda/bank?homeGameId=...
+// Saldo bancário e últimas movimentações do home game.
+router.get('/bank', async (req: AuthRequest, res: Response) => {
+  const homeGameId = z.string().uuid().parse(req.query.homeGameId)
+  const result = await ComandaService.getHomeGameBank(homeGameId, req.user!.userId)
+  res.json(result)
+})
+
 // POST /comanda/cashbox/close?homeGameId=...
 // Gera relatório agregado de caixa do home game.
 router.post('/cashbox/close', async (req: AuthRequest, res: Response) => {

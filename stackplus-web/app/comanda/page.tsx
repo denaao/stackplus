@@ -48,7 +48,18 @@ interface CashboxReport {
   playersWithCredit: number
   sessionsCount: number
   tournamentsCount: number
+  paymentsByType: Record<string, number>
+  creditsByPlayer: Array<{ playerId: string; name: string; amount: number }>
+  debitsByPlayer: Array<{ playerId: string; name: string; amount: number }>
+  openComandas: Array<{ id: string; playerId: string; playerName: string; balance: number; openedAt: string }>
   closedComandasDetail?: Array<{ id: string; playerName: string; balance: number; status: string }>
+}
+
+const PAYMENT_TYPE_LABEL: Record<string, string> = {
+  PAYMENT_CASH: 'Dinheiro',
+  PAYMENT_CARD: 'Cartão',
+  PAYMENT_PIX_SPOT: 'PIX (QR)',
+  PAYMENT_PIX_TERM: 'PIX 24h',
 }
 
 export default function ComandasPage() {
@@ -79,6 +90,8 @@ function ComandasContent() {
   const [closingCashbox, setClosingCashbox] = useState(false)
   const [cashboxReport, setCashboxReport] = useState<CashboxReport | null>(null)
   const [cashboxError, setCashboxError] = useState<string | null>(null)
+  const [myRoleInHG, setMyRoleInHG] = useState<'OWNER' | 'COHOST' | 'PLAYER' | null>(null)
+  const [bankBalance, setBankBalance] = useState<number | null>(null)
 
   useEffect(() => {
     if (!homeGameId) return
@@ -107,6 +120,28 @@ function ComandasContent() {
       })
       .finally(() => setLoading(false))
   }, [homeGameId, playerIdParam, isHistoryMode])
+
+  // Descobre o papel do usuário logado neste home game (pra mostrar/esconder "Fechar caixa").
+  useEffect(() => {
+    if (!homeGameId) { setMyRoleInHG(null); return }
+    api.get('/home-games/mine/with-roles')
+      .then(r => {
+        const d = r.data
+        if ((d.asOwner ?? []).some((g: any) => g.id === homeGameId)) setMyRoleInHG('OWNER')
+        else if ((d.asCoHost ?? []).some((g: any) => g.id === homeGameId)) setMyRoleInHG('COHOST')
+        else if ((d.asPlayer ?? []).some((g: any) => g.id === homeGameId)) setMyRoleInHG('PLAYER')
+        else setMyRoleInHG(null)
+      })
+      .catch(() => setMyRoleInHG(null))
+  }, [homeGameId])
+
+  // Saldo bancário do home game.
+  useEffect(() => {
+    if (!homeGameId) { setBankBalance(null); return }
+    api.get(`/comanda/bank?homeGameId=${homeGameId}`)
+      .then(r => setBankBalance(Number(r.data?.balance ?? 0)))
+      .catch(() => setBankBalance(null))
+  }, [homeGameId, comandas.length])
 
   const allBySearch = comandas.filter(c =>
     c.player.name.toLowerCase().includes(search.toLowerCase())
@@ -180,16 +215,22 @@ function ComandasContent() {
           border: '1px solid rgba(0,200,224,0.15)',
           boxShadow: '0 2px 16px rgba(0,0,0,0.4)',
         }}>
-          <div className="grid grid-cols-3 divide-x divide-white/10">
-            <div className="text-center pr-4">
+          <div className="grid grid-cols-4 divide-x divide-white/10">
+            <div className="text-center pr-3">
               <div className="text-xs text-sx-muted mb-1">Total</div>
               <div className="font-bold text-sm text-white">{allBySearch.length}</div>
             </div>
-            <div className="text-center px-4">
+            <div className="text-center px-3">
+              <div className="text-xs text-sx-muted mb-1">Saldo bancário</div>
+              <div className={`font-bold text-sm ${bankBalance == null ? 'text-sx-muted' : bankBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {bankBalance == null ? '—' : fmtBalance(bankBalance)}
+              </div>
+            </div>
+            <div className="text-center px-3">
               <div className="text-xs text-sx-muted mb-1">Total a pagar</div>
               <div className="font-bold text-sm text-sx-cyan">{fmtBalance(totalPay)}</div>
             </div>
-            <div className="text-center pl-4">
+            <div className="text-center pl-3">
               <div className="text-xs text-sx-muted mb-1">A receber</div>
               <div className="font-bold text-sm text-red-400">{fmtBalance(Math.abs(totalDebt))}</div>
             </div>
@@ -242,7 +283,7 @@ function ComandasContent() {
             Fechadas
           </button>
 
-          {homeGameId && !isHistoryMode && (
+          {homeGameId && !isHistoryMode && (user?.role === 'ADMIN' || myRoleInHG === 'OWNER' || myRoleInHG === 'COHOST') && (
             <button
               onClick={() => setShowCloseCashboxModal(true)}
               className="ml-auto px-4 py-1.5 rounded-lg text-xs font-bold transition-all"
@@ -440,6 +481,93 @@ function ComandasContent() {
                 {cashboxReport.comandasStillOpen > 0 && (
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
                     ⚠ Ainda há {cashboxReport.comandasStillOpen} comandas em aberto. Saldo consolidado das comandas abertas: {fmtBalance(cashboxReport.openBalancesTotal)} ({cashboxReport.playersWithCredit} credor · {cashboxReport.playersWithDebt} devedor).
+                  </div>
+                )}
+
+                {/* Pagamentos por espécie */}
+                {Object.values(cashboxReport.paymentsByType).some(v => v > 0) && (
+                  <div>
+                    <h4 className="text-xs uppercase tracking-widest text-sx-muted mb-2">Pagamentos por espécie</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {Object.entries(cashboxReport.paymentsByType).map(([type, amount]) => (
+                        <div key={type} className="rounded-lg border border-sx-border2 bg-sx-input p-3 flex items-center justify-between">
+                          <span className="text-xs text-sx-muted">{PAYMENT_TYPE_LABEL[type] ?? type}</span>
+                          <span className="text-white font-bold">{fmtBalance(amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Entradas por jogador */}
+                {cashboxReport.creditsByPlayer.length > 0 && (
+                  <div>
+                    <h4 className="text-xs uppercase tracking-widest text-sx-muted mb-2">Entradas por jogador</h4>
+                    <div className="rounded-lg border border-sx-border2 overflow-hidden max-h-56 overflow-y-auto">
+                      {cashboxReport.creditsByPlayer.map((e, i) => (
+                        <div key={e.playerId} className={`${i % 2 === 0 ? 'bg-sx-card' : 'bg-sx-input'} px-3 py-2 flex items-center justify-between text-sm`}>
+                          <span className="text-zinc-200 truncate">{e.name}</span>
+                          <span className="text-green-400 font-bold">{fmtBalance(e.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Saídas por jogador */}
+                {cashboxReport.debitsByPlayer.length > 0 && (
+                  <div>
+                    <h4 className="text-xs uppercase tracking-widest text-sx-muted mb-2">Saídas por jogador</h4>
+                    <div className="rounded-lg border border-sx-border2 overflow-hidden max-h-56 overflow-y-auto">
+                      {cashboxReport.debitsByPlayer.map((e, i) => (
+                        <div key={e.playerId} className={`${i % 2 === 0 ? 'bg-sx-card' : 'bg-sx-input'} px-3 py-2 flex items-center justify-between text-sm`}>
+                          <span className="text-zinc-200 truncate">{e.name}</span>
+                          <span className="text-red-400 font-bold">{fmtBalance(e.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Comandas em aberto com ações */}
+                {cashboxReport.openComandas.length > 0 && (
+                  <div>
+                    <h4 className="text-xs uppercase tracking-widest text-sx-muted mb-2">Comandas em aberto</h4>
+                    <div className="rounded-lg border border-sx-border2 overflow-hidden divide-y divide-sx-border2/40 max-h-72 overflow-y-auto">
+                      {cashboxReport.openComandas.map((c) => (
+                        <div key={c.id} className="bg-sx-card px-3 py-2.5 flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-zinc-100 truncate">{c.playerName}</div>
+                            <div className={`text-xs ${c.balance < 0 ? 'text-red-400' : c.balance > 0 ? 'text-green-400' : 'text-sx-muted'}`}>
+                              Saldo: {fmtBalance(c.balance)}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/comanda/${c.id}`)}
+                            className="px-2 py-1 text-[11px] font-bold rounded border border-sx-cyan/40 bg-sx-cyan/10 text-sx-cyan hover:bg-sx-cyan/20"
+                          >
+                            Ir pra comanda
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!confirm(`Fechar a comanda de ${c.playerName}?`)) return
+                              try {
+                                await api.post(`/comanda/${c.id}/close`)
+                                // Re-gera relatório pra refletir mudança
+                                handleCloseCashbox()
+                              } catch (err: any) {
+                                alert(err?.response?.data?.error ?? err?.message ?? 'Falha ao fechar comanda')
+                              }
+                            }}
+                            className="px-2 py-1 text-[11px] font-bold rounded border border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                          >
+                            Fechar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
