@@ -999,7 +999,6 @@ export default function CashierPage() {
                   {typeButtons.map((t) => {
                     const isDisabled =
                       (t === 'BUYIN' && hasExistingBuyIn && !selectedPlayerState?.hasCashedOut) ||
-                      (t === 'CASHOUT' && (!hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut))) ||
                       (t === 'REBUY' && (!hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut))) ||
                       (t === 'JACKPOT' && (!isJackpotEnabled || !hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut)))
                     const cfg = typeConfig[t]
