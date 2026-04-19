@@ -70,8 +70,21 @@ export default function DashboardPage() {
   }
 
   function isMissingInstanceError(error: unknown): boolean {
-    const message = (typeof error === 'string' ? error : '').toLowerCase()
-    return message.includes('does not exist') || message.includes('nao existe') || message.includes('não existe') || message.includes('not found')
+    // Axios error pode vir como objeto ou string. Extrai mensagem de todas as formas possíveis.
+    const e = error as any
+    const candidates = [
+      typeof error === 'string' ? error : '',
+      e?.message,
+      e?.response?.data?.error,
+      e?.response?.data?.message,
+      // Annapay/Evolution às vezes retorna stringified JSON
+      typeof e?.response?.data === 'string' ? e.response.data : '',
+    ]
+    const message = candidates.filter(Boolean).join(' ').toLowerCase()
+    return message.includes('does not exist')
+      || message.includes('nao existe')
+      || message.includes('não existe')
+      || message.includes('not found')
   }
 
   function handleLogout() { logout(); router.push('/') }
