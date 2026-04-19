@@ -156,6 +156,32 @@ export async function loginSangeur(homeGameId: string, username: string, passwor
   }
 }
 
+/**
+ * Troca a senha do próprio usuário logado. Exige a senha atual pra confirmar.
+ */
+export async function changeUserPassword(input: {
+  userId: string
+  currentPassword: string
+  newPassword: string
+}) {
+  if (input.newPassword.length < 6) {
+    throw new Error('Nova senha deve ter pelo menos 6 caracteres')
+  }
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: input.userId },
+    select: { passwordHash: true },
+  })
+  const ok = await comparePassword(input.currentPassword, user.passwordHash)
+  if (!ok) throw new Error('Senha atual inválida')
+
+  const newHash = await hashPassword(input.newPassword)
+  await prisma.user.update({
+    where: { id: input.userId },
+    data: { passwordHash: newHash },
+  })
+  return { success: true }
+}
+
 export async function changeSangeurPassword(input: {
   userId: string
   homeGameId: string

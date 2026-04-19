@@ -807,6 +807,24 @@ export async function closeCashbox({
     PAYMENT_PIX_TERM: 0,
   } as Record<string, number>
 
+  // Quem pagou via cada método (jogadores para o home game)
+  const cashByPlayer = new Map<string, { playerId: string; name: string; amount: number }>()
+  const cardByPlayer = new Map<string, { playerId: string; name: string; amount: number }>()
+  const pixInByPlayer = new Map<string, { playerId: string; name: string; amount: number }>()
+  // Quem recebeu PIX do home game (TRANSFER_OUT)
+  const pixOutByPlayer = new Map<string, { playerId: string; name: string; amount: number }>()
+
+  function bumpByPlayer(
+    map: Map<string, { playerId: string; name: string; amount: number }>,
+    playerId: string,
+    playerName: string,
+    amt: number,
+  ) {
+    const e = map.get(playerId) ?? { playerId, name: playerName, amount: 0 }
+    e.amount += amt
+    map.set(playerId, e)
+  }
+
   for (const it of items) {
     const amt = Number(it.amount)
     const type = it.type as string
@@ -834,14 +852,24 @@ export async function closeCashbox({
         creditsByPlayer.set(playerId, e)
       }
     }
-    if (type === 'PAYMENT_CASH' && effective) totals.totalCash += amt
+    if (type === 'PAYMENT_CASH' && effective) {
+      totals.totalCash += amt
+      if (playerId) bumpByPlayer(cashByPlayer, playerId, playerName, amt)
+    }
     if ((type === 'PAYMENT_PIX_SPOT' || type === 'PAYMENT_PIX_TERM') && effective) {
       totals.totalPixIn += amt
+      if (playerId) bumpByPlayer(pixInByPlayer, playerId, playerName, amt)
     }
     if ((type === 'PAYMENT_PIX_SPOT' || type === 'PAYMENT_PIX_TERM') && it.paymentStatus === 'PENDING') {
       totals.totalPendingPix += amt
     }
-    if (type === 'TRANSFER_OUT' && effective) totals.totalPixOut += amt
+    if (type === 'TRANSFER_OUT' && effective) {
+      totals.totalPixOut += amt
+      if (playerId) bumpByPlayer(pixOutByPlayer, playerId, playerName, amt)
+    }
+    if (type === 'PAYMENT_CARD' && effective && playerId) {
+      bumpByPlayer(cardByPlayer, playerId, playerName, amt)
+    }
     if (type === 'STAFF_CAIXINHA') totals.totalCaixinha += amt
     if (type === 'STAFF_RAKEBACK') totals.totalRakeback += amt
     if (effective && (type === 'PAYMENT_CASH' || type === 'PAYMENT_CARD' ||
@@ -885,6 +913,18 @@ export async function closeCashbox({
     paymentsByType: Object.fromEntries(
       Object.entries(paymentsByType).map(([k, v]) => [k, round(v as number)]),
     ),
+    cashByPlayer: Array.from(cashByPlayer.values())
+      .map((e) => ({ ...e, amount: round(e.amount) }))
+      .sort((a, b) => b.amount - a.amount),
+    cardByPlayer: Array.from(cardByPlayer.values())
+      .map((e) => ({ ...e, amount: round(e.amount) }))
+      .sort((a, b) => b.amount - a.amount),
+    pixInByPlayer: Array.from(pixInByPlayer.values())
+      .map((e) => ({ ...e, amount: round(e.amount) }))
+      .sort((a, b) => b.amount - a.amount),
+    pixOutByPlayer: Array.from(pixOutByPlayer.values())
+      .map((e) => ({ ...e, amount: round(e.amount) }))
+      .sort((a, b) => b.amount - a.amount),
     creditsByPlayer: Array.from(creditsByPlayer.values())
       .map((e) => ({ ...e, amount: round(e.amount) }))
       .sort((a, b) => b.amount - a.amount),

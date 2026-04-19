@@ -49,6 +49,10 @@ interface CashboxReport {
   sessionsCount: number
   tournamentsCount: number
   paymentsByType: Record<string, number>
+  cashByPlayer: Array<{ playerId: string; name: string; amount: number }>
+  cardByPlayer: Array<{ playerId: string; name: string; amount: number }>
+  pixInByPlayer: Array<{ playerId: string; name: string; amount: number }>
+  pixOutByPlayer: Array<{ playerId: string; name: string; amount: number }>
   creditsByPlayer: Array<{ playerId: string; name: string; amount: number }>
   debitsByPlayer: Array<{ playerId: string; name: string; amount: number }>
   openComandas: Array<{ id: string; playerId: string; playerName: string; balance: number; openedAt: string }>
@@ -215,23 +219,23 @@ function ComandasContent() {
           border: '1px solid rgba(0,200,224,0.15)',
           boxShadow: '0 2px 16px rgba(0,0,0,0.4)',
         }}>
-          <div className="grid grid-cols-4 divide-x divide-white/10">
-            <div className="text-center pr-3">
-              <div className="text-xs text-sx-muted mb-1">Total</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-0 sm:divide-x sm:divide-white/10">
+            <div className="text-center sm:pr-3">
+              <div className="text-[10px] sm:text-xs text-sx-muted mb-1">Total</div>
               <div className="font-bold text-sm text-white">{allBySearch.length}</div>
             </div>
-            <div className="text-center px-3">
-              <div className="text-xs text-sx-muted mb-1">Saldo bancário</div>
+            <div className="text-center sm:px-3">
+              <div className="text-[10px] sm:text-xs text-sx-muted mb-1">Saldo bancário</div>
               <div className={`font-bold text-sm ${bankBalance == null ? 'text-sx-muted' : bankBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {bankBalance == null ? '—' : fmtBalance(bankBalance)}
               </div>
             </div>
-            <div className="text-center px-3">
-              <div className="text-xs text-sx-muted mb-1">Total a pagar</div>
+            <div className="text-center sm:px-3">
+              <div className="text-[10px] sm:text-xs text-sx-muted mb-1">Total a pagar</div>
               <div className="font-bold text-sm text-sx-cyan">{fmtBalance(totalPay)}</div>
             </div>
-            <div className="text-center pl-3">
-              <div className="text-xs text-sx-muted mb-1">A receber</div>
+            <div className="text-center sm:pl-3">
+              <div className="text-[10px] sm:text-xs text-sx-muted mb-1">A receber</div>
               <div className="font-bold text-sm text-red-400">{fmtBalance(Math.abs(totalDebt))}</div>
             </div>
           </div>
@@ -499,32 +503,61 @@ function ComandasContent() {
                   </div>
                 )}
 
-                {/* Entradas por jogador */}
-                {cashboxReport.creditsByPlayer.length > 0 && (
-                  <div>
-                    <h4 className="text-xs uppercase tracking-widest text-sx-muted mb-2">Entradas por jogador</h4>
-                    <div className="rounded-lg border border-sx-border2 overflow-hidden max-h-56 overflow-y-auto">
-                      {cashboxReport.creditsByPlayer.map((e, i) => (
+                {/* Detalhamento por jogador e método de pagamento */}
+                {([
+                  { key: 'cash', label: '💵 Pagamentos em dinheiro', list: cashboxReport.cashByPlayer, color: 'text-white' },
+                  { key: 'card', label: '💳 Pagamentos no cartão',   list: cashboxReport.cardByPlayer, color: 'text-white' },
+                  { key: 'pixIn', label: '📱 PIX recebidos',          list: cashboxReport.pixInByPlayer, color: 'text-sx-cyan' },
+                  { key: 'pixOut', label: '↗ PIX enviados',           list: cashboxReport.pixOutByPlayer, color: 'text-sx-cyan-dim' },
+                ] as const).filter(s => s.list.length > 0).map(section => (
+                  <div key={section.key}>
+                    <h4 className="text-xs uppercase tracking-widest text-sx-muted mb-2">{section.label}</h4>
+                    <div className="rounded-lg border border-sx-border2 overflow-hidden max-h-52 overflow-y-auto">
+                      {section.list.map((e, i) => (
                         <div key={e.playerId} className={`${i % 2 === 0 ? 'bg-sx-card' : 'bg-sx-input'} px-3 py-2 flex items-center justify-between text-sm`}>
                           <span className="text-zinc-200 truncate">{e.name}</span>
-                          <span className="text-green-400 font-bold">{fmtBalance(e.amount)}</span>
+                          <span className={`font-bold tabular-nums ${section.color}`}>{fmtBalance(e.amount)}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
+                ))}
 
-                {/* Saídas por jogador */}
-                {cashboxReport.debitsByPlayer.length > 0 && (
+                {/* Entradas e saídas por jogador — tabela consolidada */}
+                {(cashboxReport.creditsByPlayer.length > 0 || cashboxReport.debitsByPlayer.length > 0) && (
                   <div>
-                    <h4 className="text-xs uppercase tracking-widest text-sx-muted mb-2">Saídas por jogador</h4>
-                    <div className="rounded-lg border border-sx-border2 overflow-hidden max-h-56 overflow-y-auto">
-                      {cashboxReport.debitsByPlayer.map((e, i) => (
-                        <div key={e.playerId} className={`${i % 2 === 0 ? 'bg-sx-card' : 'bg-sx-input'} px-3 py-2 flex items-center justify-between text-sm`}>
-                          <span className="text-zinc-200 truncate">{e.name}</span>
-                          <span className="text-red-400 font-bold">{fmtBalance(e.amount)}</span>
-                        </div>
-                      ))}
+                    <h4 className="text-xs uppercase tracking-widest text-sx-muted mb-2">Movimentações por jogador</h4>
+                    <div className="rounded-lg border border-sx-border2 overflow-hidden max-h-72 overflow-y-auto">
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-3 py-2 text-[10px] uppercase tracking-wider text-sx-muted bg-sx-input/40 border-b border-sx-border2">
+                        <span>Nome</span>
+                        <span className="text-right">Entradas</span>
+                        <span className="text-right">Saídas</span>
+                      </div>
+                      {(() => {
+                        const map = new Map<string, { name: string; credit: number; debit: number }>()
+                        for (const e of cashboxReport.creditsByPlayer) {
+                          map.set(e.playerId, { name: e.name, credit: e.amount, debit: 0 })
+                        }
+                        for (const e of cashboxReport.debitsByPlayer) {
+                          const cur = map.get(e.playerId) ?? { name: e.name, credit: 0, debit: 0 }
+                          cur.debit = e.amount
+                          map.set(e.playerId, cur)
+                        }
+                        const rows = Array.from(map.entries())
+                          .map(([playerId, v]) => ({ playerId, ...v }))
+                          .sort((a, b) => (b.credit + b.debit) - (a.credit + a.debit))
+                        return rows.map((r, i) => (
+                          <div key={r.playerId} className={`${i % 2 === 0 ? 'bg-sx-card' : 'bg-sx-input'} grid grid-cols-[1fr_auto_auto] gap-x-4 px-3 py-2 text-sm`}>
+                            <span className="text-zinc-200 truncate">{r.name}</span>
+                            <span className={`text-right font-bold tabular-nums ${r.credit > 0 ? 'text-green-400' : 'text-sx-muted/50'}`}>
+                              {r.credit > 0 ? fmtBalance(r.credit) : '—'}
+                            </span>
+                            <span className={`text-right font-bold tabular-nums ${r.debit > 0 ? 'text-red-400' : 'text-sx-muted/50'}`}>
+                              {r.debit > 0 ? fmtBalance(r.debit) : '—'}
+                            </span>
+                          </div>
+                        ))
+                      })()}
                     </div>
                   </div>
                 )}

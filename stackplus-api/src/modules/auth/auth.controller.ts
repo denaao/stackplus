@@ -189,6 +189,21 @@ export async function updateMe(req: AuthRequest, res: Response): Promise<void> {
   res.json(user)
 }
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6).max(120),
+})
+
+export async function changePassword(req: AuthRequest, res: Response): Promise<void> {
+  const data = changePasswordSchema.parse(req.body)
+  const result = await AuthService.changeUserPassword({
+    userId: req.user!.userId,
+    currentPassword: data.currentPassword,
+    newPassword: data.newPassword,
+  })
+  res.json(result)
+}
+
 export async function changeSangeurPassword(req: AuthRequest, res: Response): Promise<void> {
   const data = sangeurChangePasswordSchema.parse(req.body)
   const result = await AuthService.changeSangeurPassword({

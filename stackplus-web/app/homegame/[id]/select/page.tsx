@@ -52,15 +52,6 @@ export default function HomeGameSelectPage() {
         onBack={() => router.push('/dashboard')}
         userName={user?.name}
         onLogout={handleLogout}
-        rightSlot={
-          <button
-            onClick={() => router.push(`/homegame/${id}`)}
-            className="text-sx-muted hover:text-white transition-colors text-sm"
-            title="Gerenciar home game"
-          >
-            ⚙️
-          </button>
-        }
       />
 
       <main className="max-w-lg mx-auto px-4 py-10">
@@ -70,15 +61,7 @@ export default function HomeGameSelectPage() {
           <h1 className="text-3xl font-black text-white mb-1">{game.name}</h1>
           <div className="flex items-center justify-center gap-3 text-sm text-sx-muted">
             <span>📍 {game.address}</span>
-            <span className="text-sx-border2">·</span>
-            <span>🕐 {game.dayOfWeek} às {game.startTime}</span>
           </div>
-          {game._count && (
-            <div className="flex items-center justify-center gap-4 mt-3 text-xs text-sx-muted">
-              <span>👥 {game._count.members} membros</span>
-              <span>🎮 {game._count.sessions} sessões</span>
-            </div>
-          )}
         </div>
 
         {/* Action selection */}

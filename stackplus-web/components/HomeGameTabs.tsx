@@ -53,14 +53,14 @@ export default function HomeGameTabs({ homeGameId, active }: HomeGameTabsProps) 
               key={tab.key}
               type="button"
               onClick={tab.onClick}
-              className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 text-sm font-bold transition-all border-b-2 ${
+              className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 py-2.5 sm:py-3 text-xs sm:text-sm font-bold transition-all border-b-2 ${
                 isActive
                   ? 'text-sx-cyan border-sx-cyan bg-sx-cyan/5'
                   : 'text-sx-muted border-transparent hover:text-white hover:bg-white/[0.03]'
               }`}
               style={isActive ? { boxShadow: 'inset 0 -1px 0 rgba(0,200,224,0.4)' } : undefined}
             >
-              <span className="text-base">{tab.icon}</span>
+              <span className="text-sm sm:text-base">{tab.icon}</span>
               <span>{tab.label}</span>
             </button>
           )

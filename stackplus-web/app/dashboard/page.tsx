@@ -32,6 +32,12 @@ export default function DashboardPage() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [pwdModalOpen, setPwdModalOpen] = useState(false)
+  const [pwdCurrent, setPwdCurrent] = useState('')
+  const [pwdNew, setPwdNew] = useState('')
+  const [pwdConfirm, setPwdConfirm] = useState('')
+  const [pwdSaving, setPwdSaving] = useState(false)
+  const [pwdMsg, setPwdMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     // Roda uma vez no mount. Usar user nas deps causava loop (setAuth → re-render → re-fetch).
@@ -48,6 +54,24 @@ export default function DashboardPage() {
   }, [])
 
   function handleLogout() { logout(); router.push('/') }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setPwdMsg(null)
+    if (pwdNew.length < 6) { setPwdMsg({ tone: 'error', text: 'Nova senha deve ter ao menos 6 caracteres.' }); return }
+    if (pwdNew !== pwdConfirm) { setPwdMsg({ tone: 'error', text: 'Confirmação não bate com a nova senha.' }); return }
+    setPwdSaving(true)
+    try {
+      await api.put('/auth/password', { currentPassword: pwdCurrent, newPassword: pwdNew })
+      setPwdMsg({ tone: 'ok', text: 'Senha trocada com sucesso.' })
+      setPwdCurrent(''); setPwdNew(''); setPwdConfirm('')
+      setTimeout(() => { setPwdModalOpen(false); setPwdMsg(null) }, 1500)
+    } catch (err: any) {
+      setPwdMsg({ tone: 'error', text: err?.response?.data?.error ?? (typeof err === 'string' ? err : 'Falha ao trocar senha') })
+    } finally {
+      setPwdSaving(false)
+    }
+  }
 
   function copyJoinCode(code: string) {
     navigator.clipboard.writeText(code)
@@ -118,8 +142,17 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-sx-bg">
       <AppHeader
         userName={user?.name}
-        onProfile={() => router.push('/profile')}
         onLogout={handleLogout}
+        rightSlot={
+          <button
+            type="button"
+            onClick={() => { setPwdMsg(null); setPwdCurrent(''); setPwdNew(''); setPwdConfirm(''); setPwdModalOpen(true) }}
+            className="text-sx-muted hover:text-sx-cyan transition-colors text-lg"
+            title="Trocar senha"
+          >
+            ⚙️
+          </button>
+        }
       />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -265,6 +298,71 @@ export default function DashboardPage() {
       </main>
 
       {/* Join Home Game modal */}
+      {/* Modal: Trocar senha */}
+      {pwdModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !pwdSaving && setPwdModalOpen(false)}>
+          <div className="w-full max-w-sm rounded-xl border border-sx-border2 bg-sx-card p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-white">Trocar senha</h3>
+              <button
+                onClick={() => !pwdSaving && setPwdModalOpen(false)}
+                disabled={pwdSaving}
+                className="text-white/40 hover:text-white disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div>
+                <label className="text-[11px] text-sx-muted uppercase tracking-widest">Senha atual</label>
+                <input
+                  type="password"
+                  value={pwdCurrent}
+                  onChange={(e) => setPwdCurrent(e.target.value)}
+                  required
+                  autoFocus
+                  className="w-full mt-1 rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-sx-muted uppercase tracking-widest">Nova senha</label>
+                <input
+                  type="password"
+                  value={pwdNew}
+                  onChange={(e) => setPwdNew(e.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full mt-1 rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-sx-muted uppercase tracking-widest">Confirmar nova senha</label>
+                <input
+                  type="password"
+                  value={pwdConfirm}
+                  onChange={(e) => setPwdConfirm(e.target.value)}
+                  required
+                  minLength={6}
+                  className="w-full mt-1 rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan"
+                />
+              </div>
+              {pwdMsg && (
+                <div className={`rounded-lg px-3 py-2 text-xs ${pwdMsg.tone === 'ok' ? 'bg-sx-cyan/10 border border-sx-cyan/30 text-sx-cyan' : 'bg-red-500/10 border border-red-500/30 text-red-300'}`}>
+                  {pwdMsg.text}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={pwdSaving}
+                className="w-full rounded-lg bg-sx-cyan hover:bg-sx-cyan-dim text-sx-bg font-bold py-2.5 disabled:opacity-50"
+              >
+                {pwdSaving ? 'Salvando...' : 'Salvar nova senha'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {joinModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setJoinModalOpen(false)}>
           <div className="w-full max-w-sm rounded-xl border border-sx-border2 bg-sx-card p-5" onClick={(e) => e.stopPropagation()}>
