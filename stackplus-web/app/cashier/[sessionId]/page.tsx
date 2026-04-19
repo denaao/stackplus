@@ -901,12 +901,9 @@ export default function CashierPage() {
 
       <main style={{ maxWidth: '768px', margin: '0 auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-        {/* Global feedback */}
+        {/* Global feedback (apenas erros — sucesso aparece dentro do card da acao) */}
         {error && (
           <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '10px', padding: '10px 14px', fontSize: '13px' }}>{error}</div>
-        )}
-        {success && (
-          <div style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.3)', color: '#86efac', borderRadius: '10px', padding: '10px 14px', fontSize: '13px' }}>{success}</div>
         )}
 
         {/* === ENCERRAMENTO (todos cashearam) === */}
@@ -1040,6 +1037,12 @@ export default function CashierPage() {
               >
                 {loading ? 'Registrando...' : 'Registrar'}
               </button>
+
+              {success && (
+                <div style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.3)', color: '#86efac', borderRadius: '10px', padding: '10px 14px', fontSize: '13px', textAlign: 'center' }}>
+                  {success}
+                </div>
+              )}
             </form>
           </div>
         )}
