@@ -428,7 +428,15 @@ export async function checkComandaItemPixStatus(itemId: string) {
 /**
  * Envia um PIX real (via Annapay) ao jogador usando a chave PIX cadastrada dele,
  * e registra a transferência como item TRANSFER_OUT na comanda.
- * Usado quando o jogador tem saldo credor e o host quer pagar o valor em PIX.
+ *
+ * ESTRATÉGIA — processamento em background:
+ * 1. Valida saldo + chave PIX (rápido)
+ * 2. Cria item TRANSFER_OUT com paymentStatus PENDING e decrementa balance (rápido)
+ * 3. Retorna imediatamente pro frontend
+ * 4. Em background (setImmediate), chama o Annapay; se sucesso atualiza item pra PAID,
+ *    se falha reverte o balance e marca item como CANCELED.
+ *
+ * Dessa forma o host não precisa esperar o banco responder pra liberar a UI.
  */
 export async function sendComandaPixOut({
   comandaId,
@@ -456,38 +464,10 @@ export async function sendComandaPixOut({
 
   const pixKey = (comanda.player.pixKey ?? '').trim()
   const cpf = (comanda.player.cpf ?? '').replace(/\D/g, '')
-  if (!pixKey) {
-    throw new Error('Jogador não tem chave PIX cadastrada')
-  }
-  if (!cpf) {
-    throw new Error('Jogador não tem CPF cadastrado')
-  }
+  if (!pixKey) throw new Error('Jogador não tem chave PIX cadastrada')
+  if (!cpf) throw new Error('Jogador não tem CPF cadastrado')
 
-  // Faz o PIX real via Annapay
-  let payoutOrder: unknown
-  try {
-    payoutOrder = await createPix({
-      valor: amount,
-      descricao: `PIX para ${comanda.player.name}`,
-      destinatario: {
-        tipo: 'CHAVE',
-        chave: pixKey,
-        cpfCnpjRecebedor: cpf,
-      },
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Falha ao enviar PIX via Annapay'
-    throw new Error(`Falha no envio do PIX: ${msg}`)
-  }
-
-  // Extrai o ID da ordem PIX (se vier)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orderId = (payoutOrder as any)?.id
-    ?? (payoutOrder as any)?.data?.id
-    ?? (payoutOrder as any)?.pixId
-    ?? null
-
-  // Registra o item TRANSFER_OUT na comanda — agora que o PIX foi aceito pelo Annapay.
+  // 1) Cria item PENDING + decrementa balance IMEDIATAMENTE
   const item = await prisma.$transaction(async (tx: any) => {
     const created = await tx.comandaItem.create({
       data: {
@@ -495,7 +475,7 @@ export async function sendComandaPixOut({
         type: 'TRANSFER_OUT',
         amount,
         description: `PIX enviado ao jogador (${pixKey})`,
-        paymentReference: typeof orderId === 'string' ? orderId : null,
+        paymentStatus: 'PENDING',
         createdByUserId,
       },
     })
@@ -506,11 +486,57 @@ export async function sendComandaPixOut({
     return created
   })
 
-  return {
-    item,
-    payoutOrderId: orderId,
-    payoutOrder,
-  }
+  // 2) Dispara chamada Annapay em background — não bloqueia a resposta.
+  const playerName = comanda.player.name
+  setImmediate(async () => {
+    try {
+      const payoutOrder = await createPix({
+        valor: amount,
+        descricao: `PIX para ${playerName}`,
+        destinatario: {
+          tipo: 'CHAVE',
+          chave: pixKey,
+          cpfCnpjRecebedor: cpf,
+        },
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orderId = (payoutOrder as any)?.id
+        ?? (payoutOrder as any)?.data?.id
+        ?? (payoutOrder as any)?.pixId
+        ?? null
+
+      await db.comandaItem.update({
+        where: { id: item.id },
+        data: {
+          paymentStatus: 'PAID',
+          paymentReference: typeof orderId === 'string' ? orderId : null,
+        },
+      })
+    } catch (err) {
+      // PIX falhou — reverte o balance e marca item como CANCELED
+      console.error(`[comanda pix-out] Falha no envio do PIX (item ${item.id}):`, err)
+      try {
+        await prisma.$transaction(async (tx: any) => {
+          await tx.comandaItem.update({
+            where: { id: item.id },
+            data: {
+              paymentStatus: 'CANCELED',
+              description: `[Falha no envio] PIX para ${playerName}`,
+            },
+          })
+          await tx.comanda.update({
+            where: { id: comandaId },
+            data: { balance: { increment: amount } },
+          })
+        })
+      } catch (rollbackErr) {
+        console.error(`[comanda pix-out] Falha ao reverter item ${item.id}:`, rollbackErr)
+      }
+    }
+  })
+
+  return { item }
 }
 
 // ─── Close ────────────────────────────────────────────────────────────────────

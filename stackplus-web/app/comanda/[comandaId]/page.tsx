@@ -253,15 +253,27 @@ export default function ComandaDetailPage() {
     setSendingPix(true)
     setError(null)
     try {
-      // Chama o endpoint que realmente envia o PIX via Annapay (e só então registra o item).
-      await api.post(`/comanda/${comandaId}/pix-out`, {
-        amount: parseFloat(pixAmount),
-      })
+      // Backend processa em background — retorna rápido com item PENDING.
+      await api.post(
+        `/comanda/${comandaId}/pix-out`,
+        { amount: parseFloat(pixAmount) },
+        { timeout: 10000 },
+      )
       setShowSendPix(false)
       setPixAmount('')
       load()
+      // Recarrega depois de 4s e 10s pra capturar a mudança de PENDING→PAID do background.
+      setTimeout(() => load(), 4000)
+      setTimeout(() => load(), 10000)
     } catch (e: any) {
-      setError(typeof e === 'string' ? e : 'Não foi possível enviar o PIX. Verifique se o jogador tem chave PIX cadastrada.')
+      // Extrai mensagem do backend (axios error) ou fallback genérico.
+      const msg = e?.response?.data?.error
+        ?? e?.response?.data?.message
+        ?? (e?.code === 'ECONNABORTED' ? 'O banco não respondeu a tempo (timeout 35s). Tente de novo.' : null)
+        ?? (typeof e === 'string' ? e : null)
+        ?? e?.message
+        ?? 'Não foi possível enviar o PIX. Verifique se o jogador tem chave PIX cadastrada.'
+      setError(msg)
     } finally {
       setSendingPix(false)
     }
