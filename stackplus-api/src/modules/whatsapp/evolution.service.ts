@@ -285,6 +285,11 @@ export async function setupEvolutionInstance(hostId: string, input?: { phoneNumb
   }
 }
 
+function isInstanceMissingError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase()
+  return msg.includes('does not exist') || msg.includes('not found') || msg.includes('nao existe') || msg.includes('não existe')
+}
+
 export async function connectEvolutionInstance(hostId: string) {
   const instanceName = resolveInstanceName({ hostId })
 
@@ -305,13 +310,39 @@ export async function connectEvolutionInstance(hostId: string) {
         // Some Evolution setups return restart error when disconnected; connect call below can still recover.
       }
     }
-  } catch {
-    // If restart pre-check fails, continue with connect and let Evolution response drive the error.
+  } catch (err) {
+    // Se a instância não existe, cria do zero e já retorna o connect sobre a nova.
+    if (isInstanceMissingError(err)) {
+      await setupEvolutionInstance(hostId)
+      const response = await evolutionRequest(`/instance/connect/${encodeURIComponent(instanceName)}`, {
+        method: 'GET',
+      })
+      await upsertLocalInstance(instanceName, {
+        status: mapStatus(extractConnectionState(response) || 'connecting'),
+        qrCodeBase64: extractQrCodeBase64(response),
+        lastError: null,
+      })
+      return response
+    }
+    // Outros erros no restart pre-check: continua e deixa o connect abaixo lidar.
   }
 
-  const response = await evolutionRequest(`/instance/connect/${encodeURIComponent(instanceName)}`, {
-    method: 'GET',
-  })
+  let response: unknown
+  try {
+    response = await evolutionRequest(`/instance/connect/${encodeURIComponent(instanceName)}`, {
+      method: 'GET',
+    })
+  } catch (err) {
+    // Última linha de defesa — se connect falhar por instância inexistente, cria e tenta mais uma vez.
+    if (isInstanceMissingError(err)) {
+      await setupEvolutionInstance(hostId)
+      response = await evolutionRequest(`/instance/connect/${encodeURIComponent(instanceName)}`, {
+        method: 'GET',
+      })
+    } else {
+      throw err
+    }
+  }
 
   await upsertLocalInstance(instanceName, {
     status: mapStatus(extractConnectionState(response) || 'connecting'),
