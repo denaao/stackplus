@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
+import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
 
 interface Tournament {
@@ -82,6 +83,7 @@ export default function TournamentsListPage() {
         userName={user?.name}
         onLogout={handleLogout}
       />
+      <HomeGameTabs homeGameId={id} active="TOURNAMENTS" />
 
       <main className="max-w-3xl mx-auto px-4 py-8">
 

@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
+import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
 
 interface ComandaItem {
@@ -265,6 +266,7 @@ export default function ComandaDetailPage() {
         userName={user?.name}
         onLogout={() => { logout(); router.push('/') }}
       />
+      <HomeGameTabs homeGameId={comanda.homeGameId} active="COMANDAS" />
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-4">
 

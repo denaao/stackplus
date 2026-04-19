@@ -6,6 +6,7 @@ import api from '@/services/api'
 import { joinSession, leaveSession, getSocket } from '@/services/socket'
 import { useAuthStore } from '@/store/useStore'
 import AppHeader from '@/components/AppHeader'
+import HomeGameTabs from '@/components/HomeGameTabs'
 
 interface Member { id: string; name: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null }
 interface PlayerState {
@@ -898,6 +899,7 @@ export default function CashierPage() {
           </div>
         ) : undefined}
       />
+      {session?.homeGame?.id && <HomeGameTabs homeGameId={session.homeGame.id} active="CASH" />}
 
       <main style={{ maxWidth: '768px', margin: '0 auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 

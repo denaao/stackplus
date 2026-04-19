@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
+import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
 
 interface Comanda {
@@ -108,6 +109,7 @@ function ComandasContent() {
         userName={user?.name}
         onLogout={() => { logout(); router.push('/') }}
       />
+      {homeGameId && <HomeGameTabs homeGameId={homeGameId} active="COMANDAS" />}
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-4">
 

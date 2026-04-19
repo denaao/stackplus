@@ -6,6 +6,7 @@ import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
+import HomeGameTabs from '@/components/HomeGameTabs'
 
 interface HomeGame {
   id: string; name: string; address: string; dayOfWeek: string
@@ -315,6 +316,7 @@ export default function HomeGamePage() {
           </span>
         }
       />
+      <HomeGameTabs homeGameId={id} active="CASH" />
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-8">
         {pageFeedback && (
