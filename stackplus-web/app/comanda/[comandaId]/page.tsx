@@ -116,8 +116,30 @@ export default function ComandaDetailPage() {
   const [pixCopied, setPixCopied] = useState(false)
   const [pixPaidConfirmed, setPixPaidConfirmed] = useState(false)
 
-  const load = () => {
-    api.get(`/comanda/${comandaId}`).then(r => setComanda(r.data)).finally(() => setLoading(false))
+  const load = async () => {
+    try {
+      const { data } = await api.get(`/comanda/${comandaId}`)
+      setComanda(data)
+      // Verifica automaticamente se os PIX pendentes foram pagos.
+      const pendingPixItems = (data.items ?? []).filter(
+        (i: any) => i.paymentStatus === 'PENDING' &&
+          (i.type === 'PAYMENT_PIX_SPOT' || i.type === 'PAYMENT_PIX_TERM'),
+      )
+      if (pendingPixItems.length > 0) {
+        const results = await Promise.all(
+          pendingPixItems.map((i: any) =>
+            api.get(`/comanda/items/${i.id}/pix-status`).then(r => r.data).catch(() => null),
+          ),
+        )
+        // Se algum mudou de status, recarrega pra pegar os balances/paymentStatus atualizados.
+        if (results.some((r) => r && r.status !== 'PENDING')) {
+          const refreshed = await api.get(`/comanda/${comandaId}`)
+          setComanda(refreshed.data)
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [comandaId])
@@ -289,14 +311,6 @@ export default function ComandaDetailPage() {
           </div>
           {comanda.status === 'OPEN' && (
             <div className="flex gap-2 flex-wrap justify-end">
-              {balance > 0 && (
-                <button
-                  onClick={() => { setPixAmount(balance.toFixed(2)); setShowSendPix(true) }}
-                  className="px-3 py-1.5 bg-sx-cyan/20 hover:bg-sx-cyan/30 border border-sx-cyan/40 rounded-lg text-xs font-medium text-sx-cyan"
-                >
-                  Enviar PIX ↗
-                </button>
-              )}
               <button
                 onClick={() => {
                 if (balance < 0) setPaymentAmount(Math.abs(balance).toFixed(2))
@@ -359,6 +373,19 @@ export default function ComandaDetailPage() {
               </button>
             </div>
           )}
+
+          {/* Botão Enviar PIX — só quando comanda aberta e jogador tem saldo credor */}
+          {comanda.status === 'OPEN' && balance > 0 && (
+            <div className="mt-4 pt-4 border-t border-sx-border">
+              <button
+                type="button"
+                onClick={() => { setPixAmount(balance.toFixed(2)); setShowSendPix(true) }}
+                className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 hover:bg-sx-cyan/20 px-3 py-2.5 text-sm font-bold text-sx-cyan"
+              >
+                ↗ Enviar PIX ao jogador
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Extrato */}
@@ -400,9 +427,11 @@ export default function ComandaDetailPage() {
                               ) : null}
                               {new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                               {item.paymentStatus && (
-                                <span className={` · ${
-                                  item.paymentStatus === 'PAID' ? 'text-sx-cyan'
-                                  : item.paymentStatus === 'PENDING' ? 'text-yellow-500'
+                                <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] font-semibold ${
+                                  item.paymentStatus === 'PAID' ? 'bg-sx-cyan/15 text-sx-cyan'
+                                  : item.paymentStatus === 'PENDING' ? 'bg-yellow-500/15 text-yellow-400'
+                                  : item.paymentStatus === 'EXPIRED' ? 'bg-white/5 text-white/40'
+                                  : item.paymentStatus === 'CANCELED' ? 'bg-red-500/10 text-red-400'
                                   : 'text-white/40'
                                 }`}>
                                   {paymentStatusLabel[item.paymentStatus]}
@@ -411,18 +440,6 @@ export default function ComandaDetailPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            {item.paymentStatus === 'PENDING' && (
-                              <button
-                                onClick={async () => {
-                                  await api.patch(`/comanda/items/${item.id}/settle`, { paymentStatus: 'PAID' })
-                                  load()
-                                }}
-                                className="px-2 py-1 text-xs font-semibold rounded-lg"
-                                style={{ background: 'rgba(0,200,224,0.15)', border: '1px solid rgba(0,200,224,0.3)', color: '#00C8E0' }}
-                              >
-                                ✓ Confirmar
-                              </button>
-                            )}
                             <div className={`text-sm font-bold tabular-nums ${amountColor}`}>
                               {sign} {fmtMoney(item.amount)}
                             </div>

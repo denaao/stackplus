@@ -267,6 +267,11 @@ export default function CashierPage() {
   const [success, setSuccess] = useState('')
   const [showEndModal, setShowEndModal] = useState(false)
   const [endForm, setEndForm] = useState({ rake: '', caixinha: '', jackpotArrecadado: '' })
+  // Modal de cashout direto por card do jogador
+  const [cashoutPlayer, setCashoutPlayer] = useState<PlayerState | null>(null)
+  const [cashoutChips, setCashoutChips] = useState('')
+  const [cashoutLoading, setCashoutLoading] = useState(false)
+  const [cashoutError, setCashoutError] = useState<string | null>(null)
   const [caixinhaByStaff, setCaixinhaByStaff] = useState<Record<string, string>>({})
   const [showPrepaidModal, setShowPrepaidModal] = useState(false)
   const [prepaidChargeResult, setPrepaidChargeResult] = useState<PrepaidChargeResult | null>(null)
@@ -480,6 +485,36 @@ export default function CashierPage() {
       setError(typeof err === 'string' ? err : 'Erro ao registrar')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleCashoutSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!cashoutPlayer) return
+    const parsedChips = parseInt(cashoutChips || '0', 10)
+    if (Number.isNaN(parsedChips) || parsedChips < 0) {
+      setCashoutError('Informe uma quantidade de fichas válida (>= 0)')
+      return
+    }
+    const amount = Number((parsedChips * chipValue).toFixed(2))
+    setCashoutLoading(true)
+    setCashoutError(null)
+    try {
+      const { data } = await api.post('/cashier/transaction', {
+        sessionId,
+        userId: cashoutPlayer.userId,
+        type: 'CASHOUT',
+        amount,
+        chips: parsedChips,
+      })
+      applyRegisterResult(data as CashierRegisterResponse)
+      await refreshCashierSnapshot()
+      setCashoutPlayer(null)
+      setCashoutChips('')
+    } catch (err: any) {
+      setCashoutError(typeof err === 'string' ? err : 'Erro ao registrar cashout')
+    } finally {
+      setCashoutLoading(false)
     }
   }
 
@@ -867,10 +902,10 @@ export default function CashierPage() {
     )
   }
 
-  // Type button config
+  // Type button config — Cashout agora é feito via botão no card de cada jogador.
   const typeButtons = (isJackpotEnabled
-    ? (['BUYIN', 'REBUY', 'CASHOUT', 'JACKPOT'] as const)
-    : (['BUYIN', 'REBUY', 'CASHOUT'] as const))
+    ? (['BUYIN', 'REBUY', 'JACKPOT'] as const)
+    : (['BUYIN', 'REBUY'] as const))
 
   const typeConfig: Record<string, { label: string; activeGrad: string; activeBorder: string; idleColor: string }> = {
     BUYIN:  { label: 'Buy-in',  activeGrad: 'linear-gradient(135deg,#006070,#003848)', activeBorder: '#00C8E0', idleColor: 'rgba(0,200,224,0.15)' },
@@ -1102,6 +1137,28 @@ export default function CashierPage() {
                           </div>
                         </div>
 
+                        {/* Botão Cashout direto (só quando jogador ainda ativo) */}
+                        {!p.hasCashedOut && (
+                          <button
+                            type="button"
+                            onClick={() => { setCashoutPlayer(p); setCashoutChips(String(p.currentStack || 0)); setCashoutError(null) }}
+                            style={{
+                              width: '100%',
+                              marginBottom: '10px',
+                              background: 'linear-gradient(135deg,#7f1d1d,#450a0a)',
+                              border: '1px solid rgba(248,113,113,0.4)',
+                              borderRadius: '8px',
+                              color: '#f87171',
+                              fontWeight: 700,
+                              fontSize: '13px',
+                              padding: '8px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Cashout
+                          </button>
+                        )}
+
                         {/* Stats row */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
                           <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '8px 10px' }}>
@@ -1169,6 +1226,74 @@ export default function CashierPage() {
         )}
 
       </main>
+
+      {/* === MODAL CASHOUT === */}
+      {cashoutPlayer && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px' }}>
+          <div style={{ background: 'linear-gradient(180deg,#0C2238 0%,#071828 100%)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: '16px', width: '100%', maxWidth: '420px', padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <h3 style={{ fontWeight: 700, fontSize: '17px', color: '#fff', margin: 0 }}>Cashout</h3>
+              <button
+                type="button"
+                onClick={() => { setCashoutPlayer(null); setCashoutChips(''); setCashoutError(null) }}
+                style={{ background: 'transparent', border: 'none', color: '#4A7A90', fontSize: '18px', cursor: 'pointer' }}
+                aria-label="Fechar"
+              >
+                ✕
+              </button>
+            </div>
+            <p style={{ fontSize: '13px', color: '#4A7A90', margin: '0 0 16px' }}>
+              {cashoutPlayer.user?.name || 'Jogador'} — stack atual <span style={{ color: '#00C8E0', fontWeight: 700 }}>{formatChips(cashoutPlayer.currentStack)}</span> fichas
+            </p>
+
+            <form onSubmit={handleCashoutSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
+                  Fichas de saída
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cashoutChips}
+                  onChange={(e) => setCashoutChips(e.target.value)}
+                  autoFocus
+                  style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(248,113,113,0.3)', borderRadius: '10px', padding: '12px 14px', fontSize: '18px', color: '#fff', outline: 'none', boxSizing: 'border-box', fontWeight: 700 }}
+                />
+                {cashoutChips && (
+                  <p style={{ fontSize: '12px', color: '#4A7A90', marginTop: '6px' }}>
+                    ≈ {formatCurrency(parseInt(cashoutChips || '0', 10) * chipValue)}
+                  </p>
+                )}
+              </div>
+
+              {cashoutError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '10px', padding: '10px 14px', fontSize: '13px' }}>
+                  {cashoutError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={cashoutLoading}
+                style={{
+                  width: '100%',
+                  background: cashoutLoading ? 'rgba(248,113,113,0.3)' : 'linear-gradient(135deg,#7f1d1d,#450a0a)',
+                  border: '1px solid rgba(248,113,113,0.5)',
+                  borderRadius: '10px',
+                  color: cashoutLoading ? '#4A7A90' : '#f87171',
+                  fontWeight: 700,
+                  fontSize: '15px',
+                  padding: '13px',
+                  cursor: cashoutLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {cashoutLoading ? 'Registrando...' : 'Confirmar cashout'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* === MODAL ENCERRAMENTO === */}
       {showEndModal && (
