@@ -3,6 +3,7 @@ import { notifySessionFinishedIfEnabled } from '../whatsapp/evolution.service'
 import { generateSessionFinancialReport } from '../banking/annapay.service'
 import { FinancialModule } from '@prisma/client'
 import { isHomeGameHost } from '../../lib/homegame-auth'
+import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
 
 function amountToFixed(value: number) {
   return Number(value.toFixed(2))
@@ -430,6 +431,58 @@ export async function finishSession(
       await tx.sessionStaff.updateMany({
         where: { sessionId },
         data: { caixinhaAmount: null },
+      })
+    }
+
+    // ─── Crédito de caixinha e rakeback nas comandas dos staff ────────────────
+    // Caixinha: cada staff recebe sua parcela (split igual ou individual) como crédito.
+    // Rakeback: cada beneficiário recebe seu % do rake como crédito.
+    const staffCaixinhaPerUser = new Map<string, number>()
+    if (session.staffAssignments.length > 0 && caixinha > 0) {
+      if (caixinhaMode === 'INDIVIDUAL') {
+        for (const s of session.staffAssignments) {
+          const amount = caixinhaByStaffMap.get(s.userId) ?? 0
+          if (amount > 0) staffCaixinhaPerUser.set(s.userId, amountToFixed(amount))
+        }
+      } else {
+        const per = amountToFixed(caixinha / session.staffAssignments.length)
+        for (const s of session.staffAssignments) {
+          if (per > 0) staffCaixinhaPerUser.set(s.userId, per)
+        }
+      }
+    }
+
+    for (const [userId, amount] of staffCaixinhaPerUser) {
+      const comanda = await findOrOpenComandaWithTx(tx, {
+        playerId: userId,
+        homeGameId: session.homeGameId,
+        openedByUserId: hostId,
+      })
+      await addComandaItemWithTx(tx, {
+        comandaId: comanda.id,
+        type: 'STAFF_CAIXINHA' as any,
+        amount,
+        description: `Caixinha — ${session.homeGame.name}`,
+        sessionId,
+        createdByUserId: hostId,
+      })
+    }
+
+    for (const [userId, amount] of Object.entries(rakebackByUserId)) {
+      const value = Number(amount)
+      if (value <= 0) continue
+      const comanda = await findOrOpenComandaWithTx(tx, {
+        playerId: userId,
+        homeGameId: session.homeGameId,
+        openedByUserId: hostId,
+      })
+      await addComandaItemWithTx(tx, {
+        comandaId: comanda.id,
+        type: 'STAFF_RAKEBACK' as any,
+        amount: amountToFixed(value),
+        description: `Rakeback — ${session.homeGame.name}`,
+        sessionId,
+        createdByUserId: hostId,
       })
     }
 

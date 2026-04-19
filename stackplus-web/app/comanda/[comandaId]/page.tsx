@@ -52,12 +52,15 @@ const typeLabel: Record<string, string> = {
   TRANSFER_OUT: 'Transferência enviada',
   CARRY_IN: 'Saldo transportado (crédito)',
   CARRY_OUT: 'Saldo transportado (débito)',
+  STAFF_CAIXINHA: 'Caixinha (staff)',
+  STAFF_RAKEBACK: 'Rakeback (staff)',
 }
 
 const typeIsCredit = (t: string) => [
   'CASH_CASHOUT', 'TOURNAMENT_BOUNTY_RECEIVED', 'TOURNAMENT_PRIZE',
   'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'PAYMENT_CASH', 'PAYMENT_CARD',
   'TRANSFER_IN', 'CARRY_IN',
+  'STAFF_CAIXINHA', 'STAFF_RAKEBACK',
 ].includes(t)
 
 const typeIsDebit = (t: string) => [

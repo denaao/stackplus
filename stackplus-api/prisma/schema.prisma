@@ -82,6 +82,8 @@ enum ComandaItemType {
   TRANSFER_OUT
   CARRY_IN
   CARRY_OUT
+  STAFF_CAIXINHA
+  STAFF_RAKEBACK
 }
 
 enum ComandaItemPaymentStatus {

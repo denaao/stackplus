@@ -10,6 +10,7 @@ type ComandaItemType =
   | 'PAYMENT_PIX_SPOT' | 'PAYMENT_PIX_TERM' | 'PAYMENT_CASH' | 'PAYMENT_CARD'
   | 'TRANSFER_IN' | 'TRANSFER_OUT'
   | 'CARRY_IN' | 'CARRY_OUT'
+  | 'STAFF_CAIXINHA' | 'STAFF_RAKEBACK'
 type ComandaItemPaymentStatus = 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELED'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
