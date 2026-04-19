@@ -133,6 +133,24 @@ router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) =>
   res.status(201).json(result)
 })
 
+// POST /comanda/cashbox/close?homeGameId=...
+// Gera relatório agregado de caixa do home game.
+router.post('/cashbox/close', async (req: AuthRequest, res: Response) => {
+  const data = z.object({
+    homeGameId: z.string().uuid(),
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  }).parse(req.body)
+
+  const result = await ComandaService.closeCashbox({
+    homeGameId: data.homeGameId,
+    viewerUserId: req.user!.userId,
+    from: data.from ? new Date(data.from) : undefined,
+    to: data.to ? new Date(data.to) : undefined,
+  })
+  res.json(result)
+})
+
 // POST /comanda/:comandaId/close
 router.post('/:comandaId/close', async (req: AuthRequest, res: Response) => {
   const comanda = await ComandaService.closeComanda({

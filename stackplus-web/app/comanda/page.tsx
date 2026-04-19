@@ -26,6 +26,31 @@ function fmtBalance(n: string | number) {
 type StatusFilter = 'OPEN' | 'CLOSED' | 'ALL'
 type BalanceFilter = 'ALL' | 'CREDIT' | 'DEBT'
 
+interface CashboxReport {
+  generatedAt: string
+  periodStart: string | null
+  periodEnd: string | null
+  totals: {
+    totalDebits: number
+    totalCredits: number
+    totalCash: number
+    totalPixIn: number
+    totalPixOut: number
+    totalRake: number
+    totalCaixinha: number
+    totalRakeback: number
+    totalPendingPix: number
+  }
+  comandasClosed: number
+  comandasStillOpen: number
+  openBalancesTotal: number
+  playersWithDebt: number
+  playersWithCredit: number
+  sessionsCount: number
+  tournamentsCount: number
+  closedComandasDetail?: Array<{ id: string; playerName: string; balance: number; status: string }>
+}
+
 export default function ComandasPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-sx-bg" />}>
@@ -50,6 +75,10 @@ function ComandasContent() {
   const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('ALL')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [showCloseCashboxModal, setShowCloseCashboxModal] = useState(false)
+  const [closingCashbox, setClosingCashbox] = useState(false)
+  const [cashboxReport, setCashboxReport] = useState<CashboxReport | null>(null)
+  const [cashboxError, setCashboxError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!homeGameId) return
@@ -84,8 +113,8 @@ function ComandasContent() {
   )
 
   const filtered = allBySearch.filter(c => {
-    // No modo histórico o filtro de status faz sentido; no normal sempre mostra a última comanda
-    if (isHistoryMode && statusFilter !== 'ALL' && c.status !== statusFilter) return false
+    // Filtro de status aplicável em qualquer modo
+    if (statusFilter !== 'ALL' && c.status !== statusFilter) return false
     const b = parseFloat(c.balance)
     if (balanceFilter === 'CREDIT') return b > 0
     if (balanceFilter === 'DEBT') return b < 0
@@ -99,6 +128,20 @@ function ComandasContent() {
 
   function toggleBalance(f: BalanceFilter) {
     setBalanceFilter(prev => prev === f ? 'ALL' : f)
+  }
+
+  async function handleCloseCashbox() {
+    if (!homeGameId) return
+    setClosingCashbox(true)
+    setCashboxError(null)
+    try {
+      const { data } = await api.post('/comanda/cashbox/close', { homeGameId })
+      setCashboxReport(data)
+    } catch (err: any) {
+      setCashboxError(err?.response?.data?.error ?? err?.message ?? 'Erro ao fechar caixa')
+    } finally {
+      setClosingCashbox(false)
+    }
   }
 
   return (
@@ -154,22 +197,7 @@ function ComandasContent() {
         </div>
 
         {/* Filtros */}
-        <div className="flex gap-2 flex-wrap">
-          {/* Botões de status só aparecem no modo histórico */}
-          {isHistoryMode && (['OPEN', 'CLOSED', 'ALL'] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => setStatusFilter(f)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all border"
-              style={statusFilter === f
-                ? { background: 'rgba(0,200,224,0.15)', border: '1px solid rgba(0,200,224,0.4)', color: '#00C8E0' }
-                : { background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' }
-              }
-            >
-              {f === 'OPEN' ? 'Abertas' : f === 'CLOSED' ? 'Fechadas' : 'Todas'}
-            </button>
-          ))}
-
+        <div className="flex gap-2 flex-wrap items-center">
           <button
             onClick={() => toggleBalance('CREDIT')}
             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all border"
@@ -191,6 +219,39 @@ function ComandasContent() {
           >
             Em débito ({countDebt})
           </button>
+
+          <button
+            onClick={() => setStatusFilter(statusFilter === 'OPEN' ? 'ALL' : 'OPEN')}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all border"
+            style={statusFilter === 'OPEN'
+              ? { background: 'rgba(0,200,224,0.15)', border: '1px solid rgba(0,200,224,0.4)', color: '#00C8E0' }
+              : { background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' }
+            }
+          >
+            Abertas
+          </button>
+
+          <button
+            onClick={() => setStatusFilter(statusFilter === 'CLOSED' ? 'ALL' : 'CLOSED')}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all border"
+            style={statusFilter === 'CLOSED'
+              ? { background: 'rgba(74,122,144,0.2)', border: '1px solid rgba(74,122,144,0.4)', color: '#a8c5d1' }
+              : { background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' }
+            }
+          >
+            Fechadas
+          </button>
+
+          {homeGameId && !isHistoryMode && (
+            <button
+              onClick={() => setShowCloseCashboxModal(true)}
+              className="ml-auto px-4 py-1.5 rounded-lg text-xs font-bold transition-all"
+              style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', color: '#fbbf24' }}
+              title="Gera relatório com todas as entradas e saídas e fecha as comandas abertas"
+            >
+              🔒 Fechar caixa
+            </button>
+          )}
         </div>
 
         {/* Busca */}
@@ -266,6 +327,126 @@ function ComandasContent() {
         )}
 
       </main>
+
+      {/* Modal: confirmar + relatório de Fechar caixa */}
+      {showCloseCashboxModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+          onClick={() => { if (!closingCashbox) { setShowCloseCashboxModal(false); setCashboxReport(null); setCashboxError(null) } }}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-sx-card border border-sx-border2 p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">
+                {cashboxReport ? 'Relatório de caixa' : 'Fechar caixa'}
+              </h3>
+              <button
+                onClick={() => { setShowCloseCashboxModal(false); setCashboxReport(null); setCashboxError(null) }}
+                disabled={closingCashbox}
+                className="text-white/40 hover:text-white disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {!cashboxReport && !cashboxError && (
+              <>
+                <p className="text-sm text-sx-muted">
+                  Vai gerar um relatório consolidado com todas as entradas e saídas financeiras de sessões, torneios e comandas deste home game.
+                </p>
+                <button
+                  onClick={handleCloseCashbox}
+                  disabled={closingCashbox}
+                  className="w-full rounded-lg bg-amber-500 hover:bg-amber-400 text-sx-bg font-bold py-2.5 disabled:opacity-50"
+                >
+                  {closingCashbox ? 'Gerando...' : '🔒 Gerar relatório'}
+                </button>
+              </>
+            )}
+
+            {cashboxError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {cashboxError}
+              </div>
+            )}
+
+            {cashboxReport && (
+              <div className="space-y-4">
+                <p className="text-xs text-sx-muted">
+                  Gerado em {new Date(cashboxReport.generatedAt).toLocaleString('pt-BR')}
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Entradas (créditos)</div>
+                    <div className="text-green-400 font-bold">{fmtBalance(cashboxReport.totals.totalCredits)}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Saídas (débitos)</div>
+                    <div className="text-red-400 font-bold">{fmtBalance(cashboxReport.totals.totalDebits)}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Dinheiro</div>
+                    <div className="text-white font-bold">{fmtBalance(cashboxReport.totals.totalCash)}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">PIX recebido</div>
+                    <div className="text-sx-cyan font-bold">{fmtBalance(cashboxReport.totals.totalPixIn)}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">PIX enviado</div>
+                    <div className="text-sx-cyan-dim font-bold">{fmtBalance(cashboxReport.totals.totalPixOut)}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">PIX pendente</div>
+                    <div className="text-yellow-400 font-bold">{fmtBalance(cashboxReport.totals.totalPendingPix)}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Rake</div>
+                    <div className="text-white font-bold">{fmtBalance(cashboxReport.totals.totalRake)}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Caixinha</div>
+                    <div className="text-white font-bold">{fmtBalance(cashboxReport.totals.totalCaixinha)}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3 col-span-2">
+                    <div className="text-xs text-sx-muted">Rakeback distribuído</div>
+                    <div className="text-white font-bold">{fmtBalance(cashboxReport.totals.totalRakeback)}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Sessões (cash)</div>
+                    <div className="text-white font-bold">{cashboxReport.sessionsCount}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Torneios</div>
+                    <div className="text-white font-bold">{cashboxReport.tournamentsCount}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Comandas fechadas</div>
+                    <div className="text-white font-bold">{cashboxReport.comandasClosed}</div>
+                  </div>
+                  <div className="rounded-lg border border-sx-border2 bg-sx-input p-3">
+                    <div className="text-xs text-sx-muted">Comandas em aberto</div>
+                    <div className="text-white font-bold">{cashboxReport.comandasStillOpen}</div>
+                  </div>
+                </div>
+
+                {cashboxReport.comandasStillOpen > 0 && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                    ⚠ Ainda há {cashboxReport.comandasStillOpen} comandas em aberto. Saldo consolidado das comandas abertas: {fmtBalance(cashboxReport.openBalancesTotal)} ({cashboxReport.playersWithCredit} credor · {cashboxReport.playersWithDebt} devedor).
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

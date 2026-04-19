@@ -609,6 +609,134 @@ export async function sendComandaPixOut({
   return { item }
 }
 
+// ─── Fechar caixa (relatório agregado do home game) ──────────────────────────
+/**
+ * Gera relatório agregado de todas atividades financeiras do home game.
+ * Inclui totais de débitos/créditos, cash recebido, PIX entrada/saída, rake,
+ * caixinha, rakeback e saldos pendentes. Não fecha comandas automaticamente —
+ * retorna status pra host decidir (se quiser fechar comandas zeradas, fazer via UI).
+ *
+ * Filtros opcionais: `from`/`to` pra limitar ao período (por default, todo histórico).
+ */
+export async function closeCashbox({
+  homeGameId,
+  viewerUserId,
+  from,
+  to,
+}: {
+  homeGameId: string
+  viewerUserId: string
+  from?: Date
+  to?: Date
+}) {
+  const isManager = await isHomeGameHost(viewerUserId, homeGameId)
+  if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode fechar o caixa')
+
+  const itemWhere: any = { comanda: { homeGameId } }
+  if (from || to) {
+    itemWhere.createdAt = {}
+    if (from) itemWhere.createdAt.gte = from
+    if (to) itemWhere.createdAt.lte = to
+  }
+
+  const items = await db.comandaItem.findMany({
+    where: itemWhere,
+    select: {
+      type: true,
+      amount: true,
+      paymentStatus: true,
+    },
+  })
+
+  const comandas = await db.comanda.findMany({
+    where: { homeGameId },
+    select: {
+      id: true,
+      status: true,
+      balance: true,
+      player: { select: { name: true } },
+    },
+  })
+
+  const sessions = await db.session.count({ where: { homeGameId } })
+  const tournaments = await db.tournament.count({ where: { homeGameId } })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totals: any = {
+    totalDebits: 0,
+    totalCredits: 0,
+    totalCash: 0,
+    totalPixIn: 0,
+    totalPixOut: 0,
+    totalRake: 0,
+    totalCaixinha: 0,
+    totalRakeback: 0,
+    totalPendingPix: 0,
+  }
+
+  for (const it of items) {
+    const amt = Number(it.amount)
+    const type = it.type as string
+    // Pagamentos efetivos (PAID ou null em tipos não-pagamento) somam.
+    const effective = it.paymentStatus === 'PAID' || it.paymentStatus === null
+    if (isDebitType(type as ComandaItemType)) totals.totalDebits += amt
+    if (isPaymentType(type as ComandaItemType) || type === 'CASH_CASHOUT' ||
+        type === 'TRANSFER_IN' || type === 'CARRY_IN' ||
+        type === 'STAFF_CAIXINHA' || type === 'STAFF_RAKEBACK' ||
+        type === 'TOURNAMENT_BOUNTY_RECEIVED' || type === 'TOURNAMENT_PRIZE') {
+      if (effective) totals.totalCredits += amt
+    }
+    if (type === 'PAYMENT_CASH' && effective) totals.totalCash += amt
+    if ((type === 'PAYMENT_PIX_SPOT' || type === 'PAYMENT_PIX_TERM') && effective) {
+      totals.totalPixIn += amt
+    }
+    if ((type === 'PAYMENT_PIX_SPOT' || type === 'PAYMENT_PIX_TERM') && it.paymentStatus === 'PENDING') {
+      totals.totalPendingPix += amt
+    }
+    if (type === 'TRANSFER_OUT' && effective) totals.totalPixOut += amt
+    if (type === 'STAFF_CAIXINHA') totals.totalCaixinha += amt
+    if (type === 'STAFF_RAKEBACK') totals.totalRakeback += amt
+  }
+
+  // Rake total agregado direto das sessões finalizadas
+  const finishedSessions = await db.session.findMany({
+    where: { homeGameId, status: 'FINISHED' },
+    select: { rake: true },
+  })
+  totals.totalRake = finishedSessions.reduce((sum: number, s: any) => sum + Number(s.rake || 0), 0)
+
+  // Round money
+  for (const k of Object.keys(totals)) {
+    totals[k] = Number(totals[k].toFixed(2))
+  }
+
+  const open = comandas.filter((c: any) => c.status === 'OPEN')
+  const closed = comandas.filter((c: any) => c.status === 'CLOSED')
+  const openBalancesTotal = open.reduce((s: number, c: any) => s + Number(c.balance), 0)
+  const playersWithDebt = open.filter((c: any) => Number(c.balance) < 0).length
+  const playersWithCredit = open.filter((c: any) => Number(c.balance) > 0).length
+
+  return {
+    generatedAt: new Date().toISOString(),
+    periodStart: from?.toISOString() ?? null,
+    periodEnd: to?.toISOString() ?? null,
+    totals,
+    comandasClosed: closed.length,
+    comandasStillOpen: open.length,
+    openBalancesTotal: Number(openBalancesTotal.toFixed(2)),
+    playersWithDebt,
+    playersWithCredit,
+    sessionsCount: sessions,
+    tournamentsCount: tournaments,
+    closedComandasDetail: closed.slice(0, 50).map((c: any) => ({
+      id: c.id,
+      playerName: c.player.name,
+      balance: Number(c.balance),
+      status: c.status,
+    })),
+  }
+}
+
 // ─── Close ────────────────────────────────────────────────────────────────────
 
 export async function closeComanda({
