@@ -20,6 +20,14 @@ export async function connectInstance(req: AuthRequest, res: Response) {
   res.json(result)
 }
 
+export async function resetInstance(req: AuthRequest, res: Response) {
+  const hostId = req.user?.userId
+  if (!hostId) return res.status(401).json({ error: 'Token não fornecido' })
+
+  const result = await EvolutionService.resetEvolutionInstance(hostId)
+  res.json(result)
+}
+
 export async function instanceStatus(req: AuthRequest, res: Response) {
   const hostId = req.user?.userId
   if (!hostId) return res.status(401).json({ error: 'Token não fornecido' })

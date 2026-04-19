@@ -20,6 +20,7 @@ router.post('/setup', authenticate, async (req, res) => {
 
 router.get('/connect', authenticate, EvolutionController.connectInstance)
 router.get('/status', authenticate, EvolutionController.instanceStatus)
+router.post('/reset', authenticate, EvolutionController.resetInstance)
 
 router.post('/send-test', authenticate, async (req, res) => {
   req.body = z.object({

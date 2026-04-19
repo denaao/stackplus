@@ -447,6 +447,26 @@ export default function DashboardPage() {
                 <button type="button" onClick={handleRefreshQr} disabled={qrRefreshing} className="w-full rounded-md border border-sx-border bg-sx-input px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-sx-card2 disabled:opacity-60">
                   {qrRefreshing ? 'Atualizando QR...' : 'Atualizar QR code'}
                 </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setQrError(null); setQrImage(null); setQrConnected(false)
+                    setQrStatusMessage('Resetando instância e gerando novo QR...')
+                    try {
+                      await api.post('/whatsapp/evolution/reset')
+                      const r = await api.get('/whatsapp/evolution/connect')
+                      const qr = extractQrCodeBase64(r.data)
+                      if (qr) { setQrImage(qr); setQrStatusMessage('QR code gerado após reset. Escaneie no celular.') }
+                      else setQrError('Não foi possível gerar QR após reset.')
+                    } catch (err) {
+                      setQrError(mapQrErrorMessage(err))
+                    }
+                  }}
+                  className="w-full rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300/80 hover:text-red-200 hover:bg-red-950/50"
+                  title="Deleta a instância na Evolution API e cria uma nova — use se o scan não completar a conexão"
+                >
+                  🔄 Resetar instância (se o scan não conectar)
+                </button>
                 <p className="text-xs text-sx-muted">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.</p>
               </div>
             ) : (

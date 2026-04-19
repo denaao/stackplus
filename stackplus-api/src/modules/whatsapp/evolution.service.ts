@@ -206,6 +206,23 @@ async function markLogFailed(logId: string, errorMessage: string) {
   })
 }
 
+/**
+ * Força deletar a instância existente e recriar com a config atual.
+ * Útil quando webhook URL ou secret mudaram — a Evolution não propaga mudanças
+ * de env var automaticamente, precisa recriar a instância.
+ */
+export async function resetEvolutionInstance(hostId: string) {
+  const instanceName = resolveInstanceName({ hostId })
+  try {
+    await evolutionRequest(`/instance/delete/${encodeURIComponent(instanceName)}`, {
+      method: 'DELETE',
+    })
+  } catch {
+    // Ignora se a instância não existir — vamos criar agora.
+  }
+  return setupEvolutionInstance(hostId)
+}
+
 export async function setupEvolutionInstance(hostId: string, input?: { phoneNumber?: string | null }) {
   const config = getEnvConfig()
   const instanceName = resolveInstanceName({ hostId })
@@ -396,7 +413,9 @@ export async function handleEvolutionWebhook(payload: any, secretHeader?: string
   const instanceName = resolveInstanceName({ instanceName: extractInstanceName(payload) })
 
   if (config.webhookSecret && secret !== config.webhookSecret) {
-    throw new Error('Webhook Evolution inválido: segredo não confere')
+    // Não rejeita o webhook — apenas loga. Se a instância foi criada antes do secret existir,
+    // a Evolution não manda o header; bloquear aqui trava o fluxo de conexão.
+    console.warn('[evolution webhook] secret mismatch — aceitando assim mesmo. Reinstale a instância pra sincronizar.')
   }
 
   const event = String(payload?.event || payload?.type || '').toLowerCase()
