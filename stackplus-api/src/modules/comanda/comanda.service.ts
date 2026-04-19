@@ -474,8 +474,26 @@ export async function checkComandaItemPixStatus(itemId: string, viewerUserId: st
   // Tanto o jogador dono da comanda quanto host/co-host podem consultar.
   await assertComandaAccess(viewerUserId, { comandaId: item.comandaId })
 
-  // Se já está liquidado ou cancelado, não consulta de novo.
+  // Se já está liquidado, verifica se a bank transaction correspondente existe.
+  // Isso cobre items que foram marcados PAID antes do sistema de conta bancária existir.
   if (item.paymentStatus === 'PAID') {
+    const isPixIn = item.type === 'PAYMENT_PIX_SPOT' || item.type === 'PAYMENT_PIX_TERM'
+    if (isPixIn && item.comanda?.homeGameId) {
+      const existingBankTx = await db.homeGameBankTransaction.findFirst({
+        where: { comandaItemId: item.id },
+        select: { id: true },
+      })
+      if (!existingBankTx) {
+        await recordBankTransaction({
+          homeGameId: item.comanda.homeGameId,
+          direction: 'IN',
+          amount: Number(item.amount),
+          description: `PIX recebido (${item.type}) — reconciliação`,
+          comandaItemId: item.id,
+          annapayRef: item.paymentReference ?? null,
+        })
+      }
+    }
     return { itemId, status: 'PAID' as const, alreadyPaid: true }
   }
   if (item.paymentStatus === 'EXPIRED' || item.paymentStatus === 'CANCELED') {
@@ -516,6 +534,56 @@ export async function checkComandaItemPixStatus(itemId: string, viewerUserId: st
  * Registra uma movimentação na conta bancária virtual do home game
  * e atualiza o `bankBalance`. Usado por entradas (PIX recebido) e saídas (PIX enviado).
  */
+/**
+ * Reconcilia o saldo bancário do home game: varre items PIX já pagos que ainda
+ * não têm bank transaction correspondente e gera os lançamentos retroativos.
+ * Também reconcilia TRANSFER_OUT confirmados (PAID) sem bank tx.
+ */
+export async function reconcileHomeGameBank(homeGameId: string, viewerUserId: string) {
+  const isManager = await isHomeGameHost(viewerUserId, homeGameId)
+  if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode reconciliar')
+
+  const items = await db.comandaItem.findMany({
+    where: {
+      comanda: { homeGameId },
+      paymentStatus: 'PAID',
+      type: { in: ['PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'TRANSFER_OUT'] },
+    },
+    select: { id: true, type: true, amount: true, paymentReference: true },
+  })
+
+  const existingTxs = await db.homeGameBankTransaction.findMany({
+    where: { homeGameId, comandaItemId: { in: items.map((i: any) => i.id) } },
+    select: { comandaItemId: true },
+  })
+  const existingSet = new Set(existingTxs.map((t: any) => t.comandaItemId))
+
+  let created = 0
+  for (const it of items) {
+    if (existingSet.has(it.id)) continue
+    const direction = it.type === 'TRANSFER_OUT' ? 'OUT' : 'IN'
+    await recordBankTransaction({
+      homeGameId,
+      direction,
+      amount: Number(it.amount),
+      description: `${direction === 'IN' ? 'PIX recebido' : 'PIX enviado'} (${it.type}) — reconciliação`,
+      comandaItemId: it.id,
+      annapayRef: it.paymentReference ?? null,
+    })
+    created += 1
+  }
+
+  const home = await db.homeGame.findUniqueOrThrow({
+    where: { id: homeGameId },
+    select: { bankBalance: true },
+  })
+
+  return {
+    reconciledCount: created,
+    newBalance: Number(home.bankBalance),
+  }
+}
+
 /**
  * Retorna saldo bancário + últimas movimentações do home game.
  * Qualquer membro autenticado pode ver (incluindo jogador, pra transparência).

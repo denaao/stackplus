@@ -141,6 +141,14 @@ router.get('/bank', async (req: AuthRequest, res: Response) => {
   res.json(result)
 })
 
+// POST /comanda/bank/reconcile
+// Varre items PAID sem bank tx correspondente e cria lançamentos retroativos.
+router.post('/bank/reconcile', async (req: AuthRequest, res: Response) => {
+  const { homeGameId } = z.object({ homeGameId: z.string().uuid() }).parse(req.body)
+  const result = await ComandaService.reconcileHomeGameBank(homeGameId, req.user!.userId)
+  res.json(result)
+})
+
 // POST /comanda/cashbox/close?homeGameId=...
 // Gera relatório agregado de caixa do home game.
 router.post('/cashbox/close', async (req: AuthRequest, res: Response) => {
