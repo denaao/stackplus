@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma'
+import { createNormalizedCob } from '../banking/annapay.service'
 
 // Types defined locally until `npx prisma generate` is run with the new schema
 type ComandaMode = 'PREPAID' | 'POSTPAID'
@@ -311,6 +312,80 @@ export async function settleComandaPaymentItem({
 
     return updated
   })
+}
+
+// ─── Gerar PIX ───────────────────────────────────────────────────────────────
+/**
+ * Gera uma cobrança PIX via Annapay e cria o item correspondente na comanda.
+ * type 'SPOT'  -> PAYMENT_PIX_SPOT, expiração curta (5 min), normalmente pago na hora via QR.
+ * type 'TERM'  -> PAYMENT_PIX_TERM, expiração 24h, para pagamento diferido via copia e cola.
+ */
+export async function generateComandaPixCharge({
+  comandaId,
+  amount,
+  kind,
+  createdByUserId,
+}: {
+  comandaId: string
+  amount: number
+  kind: 'SPOT' | 'TERM'
+  createdByUserId: string
+}) {
+  if (amount <= 0) throw new Error('Valor deve ser maior que zero')
+
+  const comanda = await db.comanda.findUniqueOrThrow({
+    where: { id: comandaId },
+    include: {
+      player: { select: { id: true, name: true, cpf: true } },
+    },
+  })
+  if (comanda.status === 'CLOSED') throw new Error('Comanda já está fechada')
+
+  const expiracao = kind === 'TERM' ? 86400 : 300
+  const solicitacao = kind === 'TERM'
+    ? `Pagamento comanda (24h) — ${comanda.player.name}`
+    : `Pagamento comanda (spot) — ${comanda.player.name}`
+
+  const cob = await createNormalizedCob({
+    calendario: { expiracao },
+    devedor: {
+      cpf: comanda.player.cpf ?? undefined,
+      nome: comanda.player.name,
+    },
+    valor: { original: amount.toFixed(2) },
+    solicitacaoPagador: solicitacao,
+  })
+
+  const type: ComandaItemType = kind === 'SPOT' ? 'PAYMENT_PIX_SPOT' : 'PAYMENT_PIX_TERM'
+
+  // Cria o item via addComandaItem (que ja atualiza balance como PENDING).
+  const created = await prisma.$transaction(async (tx: any) => {
+    const item = await tx.comandaItem.create({
+      data: {
+        comandaId,
+        type,
+        amount,
+        description: solicitacao,
+        paymentStatus: 'PENDING',
+        paymentReference: cob.id ?? null,
+        paymentVirtualAccount: cob.virtualAccount ?? null,
+        createdByUserId,
+      },
+    })
+    await tx.comanda.update({
+      where: { id: comandaId },
+      data: { balance: { increment: amount } },
+    })
+    return item
+  })
+
+  return {
+    item: created,
+    pixCopyPaste: cob.pixCopyPaste ?? null,
+    qrCodeBase64: cob.qrCodeBase64 ?? null,
+    chargeId: cob.id ?? null,
+    expiresIn: expiracao,
+  }
 }
 
 // ─── Close ────────────────────────────────────────────────────────────────────

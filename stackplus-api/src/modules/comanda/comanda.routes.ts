@@ -88,6 +88,23 @@ router.patch('/items/:itemId/settle', async (req: AuthRequest, res: Response) =>
   res.json(item)
 })
 
+// POST /comanda/:comandaId/pix-charge
+// Gera cobrança PIX (QR ou 24h) via Annapay e registra item PENDING na comanda.
+router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) => {
+  const data = z.object({
+    amount: z.number().positive(),
+    kind: z.enum(['SPOT', 'TERM']),
+  }).parse(req.body)
+
+  const result = await ComandaService.generateComandaPixCharge({
+    comandaId: req.params.comandaId,
+    amount: data.amount,
+    kind: data.kind,
+    createdByUserId: req.user!.userId,
+  })
+  res.status(201).json(result)
+})
+
 // POST /comanda/:comandaId/close
 router.post('/:comandaId/close', async (req: AuthRequest, res: Response) => {
   const comanda = await ComandaService.closeComanda({

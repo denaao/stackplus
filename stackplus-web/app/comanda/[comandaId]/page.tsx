@@ -102,6 +102,16 @@ export default function ComandaDetailPage() {
   const [showSendPix, setShowSendPix] = useState(false)
   const [pixAmount, setPixAmount] = useState('')
   const [sendingPix, setSendingPix] = useState(false)
+  // Cobrança PIX (QR / copia-e-cola) via Annapay
+  const [pixChargeKind, setPixChargeKind] = useState<'SPOT' | 'TERM' | null>(null)
+  const [pixChargeLoading, setPixChargeLoading] = useState<'SPOT' | 'TERM' | null>(null)
+  const [pixChargeResult, setPixChargeResult] = useState<{
+    kind: 'SPOT' | 'TERM'
+    qrCodeBase64: string | null
+    pixCopyPaste: string | null
+    amount: number
+  } | null>(null)
+  const [pixCopied, setPixCopied] = useState(false)
 
   const load = () => {
     api.get(`/comanda/${comandaId}`).then(r => setComanda(r.data)).finally(() => setLoading(false))
@@ -140,6 +150,38 @@ export default function ComandaDetailPage() {
       setError(e.toString())
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleGeneratePixCharge = async (kind: 'SPOT' | 'TERM') => {
+    if (!comanda) return
+    const currentBalance = parseFloat(comanda.balance)
+    const debit = currentBalance < 0 ? Math.abs(currentBalance) : 0
+    if (debit <= 0) {
+      setError('Sem saldo devedor para cobrar')
+      return
+    }
+    setPixChargeLoading(kind)
+    setPixChargeKind(kind)
+    setError(null)
+    setPixCopied(false)
+    try {
+      const { data } = await api.post(`/comanda/${comandaId}/pix-charge`, {
+        amount: debit,
+        kind,
+      })
+      setPixChargeResult({
+        kind,
+        qrCodeBase64: data.qrCodeBase64 ?? null,
+        pixCopyPaste: data.pixCopyPaste ?? null,
+        amount: debit,
+      })
+      load()
+    } catch (e: any) {
+      setError(typeof e === 'string' ? e : 'Falha ao gerar cobrança PIX')
+      setPixChargeKind(null)
+    } finally {
+      setPixChargeLoading(null)
     }
   }
 
@@ -256,6 +298,28 @@ export default function ComandaDetailPage() {
               <div className="text-sm font-semibold text-green-400">+ {fmtMoney(totalCredits)}</div>
             </div>
           </div>
+
+          {/* Botões de cobrança PIX — só quando comanda aberta e saldo devedor */}
+          {comanda.status === 'OPEN' && balance < 0 && (
+            <div className="mt-4 pt-4 border-t border-sx-border grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleGeneratePixCharge('SPOT')}
+                disabled={pixChargeLoading !== null}
+                className="rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 hover:bg-sx-cyan/20 px-3 py-2.5 text-sm font-bold text-sx-cyan disabled:opacity-50"
+              >
+                {pixChargeLoading === 'SPOT' ? 'Gerando...' : '📱 Gerar PIX (QR)'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleGeneratePixCharge('TERM')}
+                disabled={pixChargeLoading !== null}
+                className="rounded-lg border border-sx-cyan-dim/40 bg-sx-cyan-dim/10 hover:bg-sx-cyan-dim/20 px-3 py-2.5 text-sm font-bold text-sx-cyan-dim disabled:opacity-50"
+              >
+                {pixChargeLoading === 'TERM' ? 'Gerando...' : '📋 Gerar PIX 24h (copia e cola)'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Extrato */}
@@ -380,6 +444,67 @@ export default function ComandaDetailPage() {
             >
               {sendingPix ? 'Registrando...' : 'Confirmar envio'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal resultado cobrança PIX */}
+      {pixChargeResult && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" style={{ backdropFilter: 'blur(4px)' }}>
+          <div className="bg-sx-card border border-sx-border rounded-2xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-white">
+                {pixChargeResult.kind === 'SPOT' ? 'PIX — QR Code' : 'PIX 24h — Copia e Cola'}
+              </h3>
+              <button
+                onClick={() => { setPixChargeResult(null); setPixChargeKind(null); setPixCopied(false) }}
+                className="text-white/40 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-sx-muted">
+              Valor: <span className="font-bold text-white">{fmtMoney(pixChargeResult.amount)}</span>
+              {pixChargeResult.kind === 'TERM' && ' · válido por 24h'}
+              {pixChargeResult.kind === 'SPOT' && ' · válido por 5 minutos'}
+            </p>
+
+            {pixChargeResult.qrCodeBase64 && (
+              <div className="rounded-lg bg-white p-3">
+                <img src={pixChargeResult.qrCodeBase64} alt="QR Code PIX" className="w-full h-auto" />
+              </div>
+            )}
+
+            {pixChargeResult.pixCopyPaste && (
+              <div className="space-y-2">
+                <p className="text-xs text-white/40 uppercase tracking-wide">PIX Copia e Cola</p>
+                <textarea
+                  readOnly
+                  value={pixChargeResult.pixCopyPaste}
+                  className="w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono h-20 resize-none"
+                  onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pixChargeResult.pixCopyPaste) {
+                      navigator.clipboard.writeText(pixChargeResult.pixCopyPaste)
+                      setPixCopied(true)
+                      setTimeout(() => setPixCopied(false), 1500)
+                    }
+                  }}
+                  className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 hover:bg-sx-cyan/20 px-3 py-2 text-sm font-bold text-sx-cyan"
+                >
+                  {pixCopied ? '✓ Copiado!' : 'Copiar PIX'}
+                </button>
+              </div>
+            )}
+
+            {!pixChargeResult.qrCodeBase64 && !pixChargeResult.pixCopyPaste && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                Cobrança gerada, mas QR/copia-e-cola não retornou. Verifique o extrato Annapay.
+              </div>
+            )}
           </div>
         </div>
       )}
