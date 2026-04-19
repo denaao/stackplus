@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import api from '@/services/api'
@@ -17,9 +17,19 @@ function maskCpf(value: string) {
 export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
+  const user = useAuthStore((s) => s.user)
   const [form, setForm] = useState({ cpf: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Se já está logado, redireciona direto pro destino certo em vez de mostrar o login.
+  useEffect(() => {
+    if (!user) return
+    const role = user.role
+    if (role === 'ADMIN') router.replace('/admin/dashboard')
+    else if (role === 'CASHIER') router.replace('/cashier/select')
+    else router.replace('/dashboard')
+  }, [user, router])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
