@@ -540,47 +540,60 @@ export async function checkComandaItemPixStatus(itemId: string, viewerUserId: st
  * Também reconcilia TRANSFER_OUT confirmados (PAID) sem bank tx.
  */
 export async function reconcileHomeGameBank(homeGameId: string, viewerUserId: string) {
-  const isManager = await isHomeGameHost(viewerUserId, homeGameId)
-  if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode reconciliar')
+  console.log('[reconcile] start', { homeGameId, viewerUserId })
+  try {
+    const isManager = await isHomeGameHost(viewerUserId, homeGameId)
+    console.log('[reconcile] isManager?', isManager)
+    if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode reconciliar')
 
-  const items = await db.comandaItem.findMany({
-    where: {
-      comanda: { homeGameId },
-      paymentStatus: 'PAID',
-      type: { in: ['PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'TRANSFER_OUT'] },
-    },
-    select: { id: true, type: true, amount: true, paymentReference: true },
-  })
-
-  const existingTxs = await db.homeGameBankTransaction.findMany({
-    where: { homeGameId, comandaItemId: { in: items.map((i: any) => i.id) } },
-    select: { comandaItemId: true },
-  })
-  const existingSet = new Set(existingTxs.map((t: any) => t.comandaItemId))
-
-  let created = 0
-  for (const it of items) {
-    if (existingSet.has(it.id)) continue
-    const direction = it.type === 'TRANSFER_OUT' ? 'OUT' : 'IN'
-    await recordBankTransaction({
-      homeGameId,
-      direction,
-      amount: Number(it.amount),
-      description: `${direction === 'IN' ? 'PIX recebido' : 'PIX enviado'} (${it.type}) — reconciliação`,
-      comandaItemId: it.id,
-      annapayRef: it.paymentReference ?? null,
+    const items = await db.comandaItem.findMany({
+      where: {
+        comanda: { homeGameId },
+        paymentStatus: 'PAID',
+        type: { in: ['PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'TRANSFER_OUT'] },
+      },
+      select: { id: true, type: true, amount: true, paymentReference: true },
     })
-    created += 1
-  }
+    console.log('[reconcile] items to check:', items.length)
 
-  const home = await db.homeGame.findUniqueOrThrow({
-    where: { id: homeGameId },
-    select: { bankBalance: true },
-  })
+    const existingTxs = items.length > 0
+      ? await db.homeGameBankTransaction.findMany({
+          where: { homeGameId, comandaItemId: { in: items.map((i: any) => i.id) } },
+          select: { comandaItemId: true },
+        })
+      : []
+    const existingSet = new Set(existingTxs.map((t: any) => t.comandaItemId))
+    console.log('[reconcile] existing bank txs:', existingTxs.length)
 
-  return {
-    reconciledCount: created,
-    newBalance: Number(home.bankBalance),
+    let created = 0
+    for (const it of items) {
+      if (existingSet.has(it.id)) continue
+      const direction = it.type === 'TRANSFER_OUT' ? 'OUT' : 'IN'
+      console.log('[reconcile] creating bank tx', { itemId: it.id, direction, amount: Number(it.amount) })
+      await recordBankTransaction({
+        homeGameId,
+        direction,
+        amount: Number(it.amount),
+        description: `${direction === 'IN' ? 'PIX recebido' : 'PIX enviado'} (${it.type}) — reconciliação`,
+        comandaItemId: it.id,
+        annapayRef: it.paymentReference ?? null,
+      })
+      created += 1
+    }
+
+    const home = await db.homeGame.findUniqueOrThrow({
+      where: { id: homeGameId },
+      select: { bankBalance: true },
+    })
+
+    console.log('[reconcile] done', { created, newBalance: Number(home.bankBalance) })
+    return {
+      reconciledCount: created,
+      newBalance: Number(home.bankBalance),
+    }
+  } catch (err) {
+    console.error('[reconcile] ERROR:', err instanceof Error ? err.stack : err)
+    throw err
   }
 }
 
