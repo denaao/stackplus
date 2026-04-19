@@ -409,6 +409,24 @@ function ComandasContent() {
                 >
                   {closingCashbox ? 'Gerando...' : '🔒 Gerar relatório'}
                 </button>
+                <button
+                  onClick={async () => {
+                    if (!homeGameId) return
+                    try {
+                      const { data } = await api.post('/comanda/bank/reconcile', { homeGameId })
+                      alert(`Reconciliação OK. Lançamentos criados: ${data.reconciledCount}. Novo saldo: R$ ${Number(data.newBalance).toFixed(2)}`)
+                      // Atualiza o saldo mostrado no card
+                      const r = await api.get(`/comanda/bank?homeGameId=${homeGameId}`)
+                      setBankBalance(Number(r.data?.balance ?? 0))
+                    } catch (err: any) {
+                      alert(err?.response?.data?.error ?? err?.message ?? 'Falha ao reconciliar')
+                    }
+                  }}
+                  className="w-full rounded-lg border border-sx-border2 bg-sx-input hover:bg-sx-card2 text-sx-muted hover:text-white text-sm py-2"
+                  title="Cria lançamentos retroativos pra PIX confirmados antes do saldo bancário existir"
+                >
+                  🔁 Reconciliar saldo bancário
+                </button>
               </>
             )}
 
