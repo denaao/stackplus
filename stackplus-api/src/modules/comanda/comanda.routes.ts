@@ -95,6 +95,21 @@ router.get('/items/:itemId/pix-status', async (req: AuthRequest, res: Response) 
   res.json(result)
 })
 
+// POST /comanda/:comandaId/pix-out
+// Envia PIX real via Annapay ao jogador usando a chave PIX dele, e registra TRANSFER_OUT.
+router.post('/:comandaId/pix-out', async (req: AuthRequest, res: Response) => {
+  const data = z.object({
+    amount: z.number().positive(),
+  }).parse(req.body)
+
+  const result = await ComandaService.sendComandaPixOut({
+    comandaId: req.params.comandaId,
+    amount: data.amount,
+    createdByUserId: req.user!.userId,
+  })
+  res.status(201).json(result)
+})
+
 // POST /comanda/:comandaId/pix-charge
 // Gera cobrança PIX (QR ou 24h) via Annapay e registra item PENDING na comanda.
 router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) => {

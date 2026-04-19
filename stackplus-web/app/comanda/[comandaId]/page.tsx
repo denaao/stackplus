@@ -253,16 +253,15 @@ export default function ComandaDetailPage() {
     setSendingPix(true)
     setError(null)
     try {
-      await api.post(`/comanda/${comandaId}/items`, {
-        type: 'TRANSFER_OUT',
+      // Chama o endpoint que realmente envia o PIX via Annapay (e só então registra o item).
+      await api.post(`/comanda/${comandaId}/pix-out`, {
         amount: parseFloat(pixAmount),
-        description: 'PIX enviado ao jogador',
       })
       setShowSendPix(false)
       setPixAmount('')
       load()
     } catch (e: any) {
-      setError(e.toString())
+      setError(typeof e === 'string' ? e : 'Não foi possível enviar o PIX. Verifique se o jogador tem chave PIX cadastrada.')
     } finally {
       setSendingPix(false)
     }

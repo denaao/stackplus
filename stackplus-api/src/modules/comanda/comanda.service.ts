@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma'
-import { createNormalizedCob, checkPixChargeIsPaid } from '../banking/annapay.service'
+import { createNormalizedCob, checkPixChargeIsPaid, createPix } from '../banking/annapay.service'
 
 // Types defined locally until `npx prisma generate` is run with the new schema
 type ComandaMode = 'PREPAID' | 'POSTPAID'
@@ -423,6 +423,94 @@ export async function checkComandaItemPixStatus(itemId: string) {
   }
 
   return { itemId, status: 'PENDING' as const, alreadyPaid: false }
+}
+
+/**
+ * Envia um PIX real (via Annapay) ao jogador usando a chave PIX cadastrada dele,
+ * e registra a transferência como item TRANSFER_OUT na comanda.
+ * Usado quando o jogador tem saldo credor e o host quer pagar o valor em PIX.
+ */
+export async function sendComandaPixOut({
+  comandaId,
+  amount,
+  createdByUserId,
+}: {
+  comandaId: string
+  amount: number
+  createdByUserId: string
+}) {
+  if (amount <= 0) throw new Error('Valor deve ser maior que zero')
+
+  const comanda = await db.comanda.findUniqueOrThrow({
+    where: { id: comandaId },
+    include: {
+      player: { select: { id: true, name: true, cpf: true, pixKey: true, pixType: true } },
+    },
+  })
+  if (comanda.status === 'CLOSED') throw new Error('Comanda já está fechada')
+
+  const currentBalance = Number(comanda.balance)
+  if (currentBalance < amount) {
+    throw new Error(`Saldo credor insuficiente (atual: R$ ${currentBalance.toFixed(2)})`)
+  }
+
+  const pixKey = (comanda.player.pixKey ?? '').trim()
+  const cpf = (comanda.player.cpf ?? '').replace(/\D/g, '')
+  if (!pixKey) {
+    throw new Error('Jogador não tem chave PIX cadastrada')
+  }
+  if (!cpf) {
+    throw new Error('Jogador não tem CPF cadastrado')
+  }
+
+  // Faz o PIX real via Annapay
+  let payoutOrder: unknown
+  try {
+    payoutOrder = await createPix({
+      valor: amount,
+      descricao: `PIX para ${comanda.player.name}`,
+      destinatario: {
+        tipo: 'CHAVE',
+        chave: pixKey,
+        cpfCnpjRecebedor: cpf,
+      },
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Falha ao enviar PIX via Annapay'
+    throw new Error(`Falha no envio do PIX: ${msg}`)
+  }
+
+  // Extrai o ID da ordem PIX (se vier)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const orderId = (payoutOrder as any)?.id
+    ?? (payoutOrder as any)?.data?.id
+    ?? (payoutOrder as any)?.pixId
+    ?? null
+
+  // Registra o item TRANSFER_OUT na comanda — agora que o PIX foi aceito pelo Annapay.
+  const item = await prisma.$transaction(async (tx: any) => {
+    const created = await tx.comandaItem.create({
+      data: {
+        comandaId,
+        type: 'TRANSFER_OUT',
+        amount,
+        description: `PIX enviado ao jogador (${pixKey})`,
+        paymentReference: typeof orderId === 'string' ? orderId : null,
+        createdByUserId,
+      },
+    })
+    await tx.comanda.update({
+      where: { id: comandaId },
+      data: { balance: { decrement: amount } },
+    })
+    return created
+  })
+
+  return {
+    item,
+    payoutOrderId: orderId,
+    payoutOrder,
+  }
 }
 
 // ─── Close ────────────────────────────────────────────────────────────────────
