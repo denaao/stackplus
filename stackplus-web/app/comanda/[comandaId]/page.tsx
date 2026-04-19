@@ -110,14 +110,49 @@ export default function ComandaDetailPage() {
     qrCodeBase64: string | null
     pixCopyPaste: string | null
     amount: number
+    itemId: string
   } | null>(null)
   const [pixCopied, setPixCopied] = useState(false)
+  const [pixPaidConfirmed, setPixPaidConfirmed] = useState(false)
 
   const load = () => {
     api.get(`/comanda/${comandaId}`).then(r => setComanda(r.data)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [comandaId])
+
+  // Polling do status do PIX enquanto o modal de cobrança estiver aberto.
+  // A cada 3s consulta o banco; se retornar PAID, marca como confirmado,
+  // recarrega a comanda (pra aparecer o crédito no extrato) e fecha o modal em 2s.
+  useEffect(() => {
+    if (!pixChargeResult || pixPaidConfirmed) return
+    const itemId = pixChargeResult.itemId
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const { data } = await api.get(`/comanda/items/${itemId}/pix-status`)
+        if (cancelled) return
+        if (data.status === 'PAID') {
+          setPixPaidConfirmed(true)
+          load()
+          setTimeout(() => {
+            setPixChargeResult(null)
+            setPixChargeKind(null)
+            setPixCopied(false)
+            setPixPaidConfirmed(false)
+          }, 2500)
+        }
+      } catch {
+        // silencioso — tenta de novo no próximo tick
+      }
+    }
+
+    const interval = setInterval(poll, 3000)
+    // checa imediatamente também
+    poll()
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [pixChargeResult, pixPaidConfirmed])
 
   const handleClose = async () => {
     if (!confirm('Fechar esta comanda?')) return
@@ -170,11 +205,13 @@ export default function ComandaDetailPage() {
         amount: debit,
         kind,
       })
+      setPixPaidConfirmed(false)
       setPixChargeResult({
         kind,
         qrCodeBase64: data.qrCodeBase64 ?? null,
         pixCopyPaste: data.pixCopyPaste ?? null,
         amount: debit,
+        itemId: data.item.id,
       })
       load()
     } catch (e: any) {
@@ -469,13 +506,26 @@ export default function ComandaDetailPage() {
               {pixChargeResult.kind === 'SPOT' && ' · válido por 5 minutos'}
             </p>
 
-            {pixChargeResult.qrCodeBase64 && (
+            {pixPaidConfirmed ? (
+              <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-6 text-center">
+                <div className="text-3xl mb-2">✅</div>
+                <div className="text-sm font-bold text-green-400">Pagamento confirmado!</div>
+                <div className="text-xs text-green-300/80 mt-1">Crédito lançado na comanda.</div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-sx-muted">
+                <div className="w-2 h-2 rounded-full bg-sx-cyan animate-pulse" />
+                Aguardando pagamento...
+              </div>
+            )}
+
+            {!pixPaidConfirmed && pixChargeResult.qrCodeBase64 && (
               <div className="rounded-lg bg-white p-3">
                 <img src={pixChargeResult.qrCodeBase64} alt="QR Code PIX" className="w-full h-auto" />
               </div>
             )}
 
-            {pixChargeResult.pixCopyPaste && (
+            {!pixPaidConfirmed && pixChargeResult.pixCopyPaste && (
               <div className="space-y-2">
                 <p className="text-xs text-white/40 uppercase tracking-wide">PIX Copia e Cola</p>
                 <textarea

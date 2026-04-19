@@ -88,6 +88,13 @@ router.patch('/items/:itemId/settle', async (req: AuthRequest, res: Response) =>
   res.json(item)
 })
 
+// GET /comanda/items/:itemId/pix-status
+// Consulta o banco pra ver se a cobrança PIX foi paga, e liquida automaticamente se sim.
+router.get('/items/:itemId/pix-status', async (req: AuthRequest, res: Response) => {
+  const result = await ComandaService.checkComandaItemPixStatus(req.params.itemId)
+  res.json(result)
+})
+
 // POST /comanda/:comandaId/pix-charge
 // Gera cobrança PIX (QR ou 24h) via Annapay e registra item PENDING na comanda.
 router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) => {

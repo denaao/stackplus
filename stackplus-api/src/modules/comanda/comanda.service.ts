@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma'
-import { createNormalizedCob } from '../banking/annapay.service'
+import { createNormalizedCob, checkPixChargeIsPaid } from '../banking/annapay.service'
 
 // Types defined locally until `npx prisma generate` is run with the new schema
 type ComandaMode = 'PREPAID' | 'POSTPAID'
@@ -386,6 +386,42 @@ export async function generateComandaPixCharge({
     chargeId: cob.id ?? null,
     expiresIn: expiracao,
   }
+}
+
+/**
+ * Consulta o status do PIX via Annapay usando o paymentReference (chargeId) do item.
+ * Se estiver pago, liquida o item (status PAID) automaticamente.
+ * Retorna o status atual do item.
+ */
+export async function checkComandaItemPixStatus(itemId: string) {
+  const item = await db.comandaItem.findUniqueOrThrow({
+    where: { id: itemId },
+  })
+
+  // Se já está liquidado ou cancelado, não consulta de novo.
+  if (item.paymentStatus === 'PAID') {
+    return { itemId, status: 'PAID' as const, alreadyPaid: true }
+  }
+  if (item.paymentStatus === 'EXPIRED' || item.paymentStatus === 'CANCELED') {
+    return { itemId, status: item.paymentStatus as 'EXPIRED' | 'CANCELED', alreadyPaid: false }
+  }
+
+  if (!item.paymentReference) {
+    return { itemId, status: 'PENDING' as const, alreadyPaid: false }
+  }
+
+  const { paid } = await checkPixChargeIsPaid(item.paymentReference, item.paymentVirtualAccount ?? undefined)
+
+  if (paid) {
+    // Liquida via settleComandaPaymentItem — ele ajusta o balance se necessário.
+    await settleComandaPaymentItem({
+      itemId: item.id,
+      paymentStatus: 'PAID',
+    })
+    return { itemId, status: 'PAID' as const, alreadyPaid: false }
+  }
+
+  return { itemId, status: 'PENDING' as const, alreadyPaid: false }
 }
 
 // ─── Close ────────────────────────────────────────────────────────────────────
