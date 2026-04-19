@@ -323,17 +323,9 @@ export default function ComandaDetailPage() {
               </span>
             </div>
           </div>
+          {/* Fechar comanda fica no header (ação destrutiva/final) */}
           {comanda.status === 'OPEN' && (
             <div className="flex gap-2 flex-wrap justify-end">
-              <button
-                onClick={() => {
-                if (balance < 0) setPaymentAmount(Math.abs(balance).toFixed(2))
-                setShowAddPayment(true)
-              }}
-                className="px-3 py-1.5 bg-sx-cyan-dim hover:bg-sx-cyan rounded-lg text-xs font-medium"
-              >
-                + Pagamento
-              </button>
               <button
                 onClick={handleClose}
                 disabled={closing}
@@ -366,8 +358,8 @@ export default function ComandaDetailPage() {
             </div>
           </div>
 
-          {/* Botões de cobrança PIX — só quando comanda aberta e saldo devedor */}
-          {comanda.status === 'OPEN' && balance < 0 && (
+          {/* Botões de cobrança PIX — quando há saldo devedor (aberta ou fechada) */}
+          {balance < 0 && (
             <div className="mt-4 pt-4 border-t border-sx-border grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
@@ -388,8 +380,8 @@ export default function ComandaDetailPage() {
             </div>
           )}
 
-          {/* Botão Enviar PIX — só quando comanda aberta e jogador tem saldo credor */}
-          {comanda.status === 'OPEN' && balance > 0 && (
+          {/* Botão Enviar PIX — quando jogador tem saldo credor (aberta ou fechada) */}
+          {balance > 0 && (
             <div className="mt-4 pt-4 border-t border-sx-border">
               <button
                 type="button"
@@ -397,6 +389,23 @@ export default function ComandaDetailPage() {
                 className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 hover:bg-sx-cyan/20 px-3 py-2.5 text-sm font-bold text-sx-cyan"
               >
                 ↗ Enviar PIX ao jogador
+              </button>
+            </div>
+          )}
+
+          {/* Pagamento manual (dinheiro/cartão): permitido com comanda aberta ou
+              com comanda fechada enquanto houver saldo devedor. */}
+          {(comanda.status === 'OPEN' || balance < 0) && (
+            <div className="mt-4 pt-4 border-t border-sx-border">
+              <button
+                type="button"
+                onClick={() => {
+                  if (balance < 0) setPaymentAmount(Math.abs(balance).toFixed(2))
+                  setShowAddPayment(true)
+                }}
+                className="w-full rounded-lg border border-sx-border2 bg-sx-input hover:bg-sx-card2 px-3 py-2.5 text-sm font-bold text-zinc-200"
+              >
+                + Registrar pagamento manual
               </button>
             </div>
           )}

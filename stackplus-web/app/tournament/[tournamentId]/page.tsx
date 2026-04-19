@@ -185,10 +185,19 @@ export default function TournamentPage() {
     try {
       const res = await api.get(`/tournaments/${tournamentId}`)
       setTournament(res.data)
-      // Carrega membros do home game na primeira carga
+      // Carrega membros do home game na primeira carga.
+      // Inclui o HOST como opção também — o dono pode jogar o próprio torneio.
       if (res.data.homeGameId && homeGameMembers.length === 0) {
         api.get(`/home-games/${res.data.homeGameId}`)
-          .then((r) => setHomeGameMembers(r.data.members ?? []))
+          .then((r) => {
+            const members = Array.isArray(r.data.members) ? r.data.members : []
+            const hostUser = r.data.host
+            // Se o host não aparece em members (que é o caso padrão), injeta ele no topo.
+            const hostAsMember = hostUser && !members.some((m: any) => m?.user?.id === hostUser.id)
+              ? [{ id: `host-${hostUser.id}`, userId: hostUser.id, user: hostUser, paymentMode: null, role: 'HOST' }]
+              : []
+            setHomeGameMembers([...hostAsMember, ...members])
+          })
           .catch(() => {})
       }
     } catch {

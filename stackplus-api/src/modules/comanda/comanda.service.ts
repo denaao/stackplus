@@ -256,7 +256,11 @@ export async function addComandaItemWithTx(tx: any, params: AddComandaItemParams
   const { comandaId, type, amount, description, sessionId, tournamentId, tournamentPlayerId, transactionId, createdByUserId } = params
 
   const comanda = await tx.comanda.findUniqueOrThrow({ where: { id: comandaId } })
-  if (comanda.status === 'CLOSED') throw new Error('Comanda já está fechada')
+  // Em comanda fechada, só aceitamos pagamentos (pra quitar saldo devedor/credor).
+  // Débitos (BUYIN/REBUY/etc) continuam bloqueados — comanda fechada não deve receber novos consumos.
+  if (comanda.status === 'CLOSED' && !isPaymentType(type) && type !== 'TRANSFER_IN' && type !== 'TRANSFER_OUT') {
+    throw new Error('Comanda já está fechada')
+  }
 
   // CARRY_IN/CARRY_OUT só são criados na abertura da comanda, via create direto.
   // Se chegou aqui é bug: estaria aplicando delta em cima de um balance já transportado.
@@ -407,7 +411,9 @@ export async function generateComandaPixCharge({
       player: { select: { id: true, name: true, cpf: true } },
     },
   })
-  if (comanda.status === 'CLOSED') throw new Error('Comanda já está fechada')
+  // Permite gerar cobrança mesmo com comanda fechada — muitas vezes o host precisa
+  // cobrar saldo devedor depois de ter fechado. O item entra como pagamento normal
+  // e reequilibra o balance.
 
   const expiracao = kind === 'TERM' ? 86400 : 300
   const solicitacao = kind === 'TERM'
@@ -704,7 +710,8 @@ export async function sendComandaPixOut({
       player: { select: { id: true, name: true, cpf: true, pixKey: true, pixType: true } },
     },
   })
-  if (comanda.status === 'CLOSED') throw new Error('Comanda já está fechada')
+  // Permite enviar PIX mesmo com comanda fechada — host pode querer quitar saldo
+  // credor após o fechamento.
 
   const currentBalance = Number(comanda.balance)
   if (currentBalance < amount) {
