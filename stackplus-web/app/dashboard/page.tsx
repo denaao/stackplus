@@ -32,17 +32,6 @@ export default function DashboardPage() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [connectingGameId, setConnectingGameId] = useState<string | null>(null)
-  const [qrModalOpen, setQrModalOpen] = useState(false)
-  const [qrImage, setQrImage] = useState<string | null>(null)
-  const [qrError, setQrError] = useState<string | null>(null)
-  const [qrForGameName, setQrForGameName] = useState<string>('')
-  const [qrRefreshing, setQrRefreshing] = useState(false)
-  const [qrStatusMessage, setQrStatusMessage] = useState<string>('Aguardando leitura do QR code...')
-  const [qrConnected, setQrConnected] = useState(false)
-  // Todo usuário pode gerenciar WhatsApp dos home games em que é dono.
-  // O botão só aparece nos cards de OWNER, então o permission check é contextual.
-  const canManageWhatsApp = true
 
   useEffect(() => {
     // Roda uma vez no mount. Usar user nas deps causava loop (setAuth → re-render → re-fetch).
@@ -57,35 +46,6 @@ export default function DashboardPage() {
     }).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  function mapQrErrorMessage(error: unknown): string {
-    const message = typeof error === 'string' ? error : ''
-    const normalized = message.toLowerCase()
-    if (normalized.includes('fetch failed') || normalized.includes('network error'))
-      return 'Nao foi possivel conectar na Evolution API. Verifique EVOLUTION_API_URL e se o servico esta online.'
-    if (normalized.includes('acesso negado') || normalized === 'forbidden')
-      return 'Seu usuario nao tem permissao para conectar WhatsApp. Entre com perfil HOST ou ADMIN.'
-    if (normalized.includes('token')) return 'Sua sessao expirou. Faca login novamente.'
-    return message || 'Falha ao conectar WhatsApp'
-  }
-
-  function isMissingInstanceError(error: unknown): boolean {
-    // Axios error pode vir como objeto ou string. Extrai mensagem de todas as formas possíveis.
-    const e = error as any
-    const candidates = [
-      typeof error === 'string' ? error : '',
-      e?.message,
-      e?.response?.data?.error,
-      e?.response?.data?.message,
-      // Annapay/Evolution às vezes retorna stringified JSON
-      typeof e?.response?.data === 'string' ? e.response.data : '',
-    ]
-    const message = candidates.filter(Boolean).join(' ').toLowerCase()
-    return message.includes('does not exist')
-      || message.includes('nao existe')
-      || message.includes('não existe')
-      || message.includes('not found')
-  }
 
   function handleLogout() { logout(); router.push('/') }
 
@@ -150,76 +110,6 @@ export default function DashboardPage() {
       await api.delete(`/home-games/${game.id}`)
       setAsOwner((prev) => prev.filter((g) => g.id !== game.id))
     } catch { alert('Nao foi possivel excluir o Home Game') } finally { setDeletingId(null) }
-  }
-
-  function extractQrCodeBase64(payload: any): string | null {
-    const value = payload?.response?.qrCodeBase64 || payload?.qrcode?.base64 || payload?.base64 || payload?.response?.qrcode?.base64 || null
-    if (!value || typeof value !== 'string') return null
-    if (value.startsWith('data:image')) return value
-    return `data:image/png;base64,${value}`
-  }
-
-  function extractConnectionState(payload: any): string {
-    return String(payload?.remote?.instance?.state || payload?.remote?.instance?.status || payload?.remote?.state || payload?.remote?.status || payload?.local?.status || '').toLowerCase()
-  }
-
-  function normalizeStateLabel(state: string): string {
-    if (state === 'open' || state === 'connected') return 'conectado'
-    if (state === 'connecting') return 'conectando'
-    if (state === 'close' || state === 'closed' || state === 'disconnect' || state === 'disconnected') return 'desconectado'
-    if (!state) return 'desconhecido'
-    return state
-  }
-
-  async function checkConnectionStatus(showError = false) {
-    try {
-      const { data } = await api.get('/whatsapp/evolution/status')
-      const state = extractConnectionState(data)
-      if (state === 'open' || state === 'connected') {
-        setQrConnected(true); setQrStatusMessage('WhatsApp conectado com sucesso. Voce ja pode fechar este modal.'); setQrError(null); return
-      }
-      setQrConnected(false)
-      setQrStatusMessage(`Status atual: ${normalizeStateLabel(state)}. Se o QR expirou, clique em Atualizar QR code.`)
-    } catch (error) { if (showError) setQrError(mapQrErrorMessage(error)) }
-  }
-
-  useEffect(() => {
-    if (!qrModalOpen || !canManageWhatsApp || qrError || qrConnected) return
-    const timer = setInterval(() => checkConnectionStatus(false), 5000)
-    return () => clearInterval(timer)
-  }, [qrModalOpen, canManageWhatsApp, qrError, qrConnected])
-
-  async function handleConnectWhatsApp(game: HomeGame) {
-    if (!canManageWhatsApp) {
-      setQrError('Seu usuario nao tem permissao para conectar WhatsApp. Entre com perfil HOST ou ADMIN.')
-      setQrForGameName(game.name); setQrModalOpen(true); return
-    }
-    setConnectingGameId(game.id); setQrError(null); setQrImage(null); setQrConnected(false)
-    setQrStatusMessage('Gerando QR code...'); setQrForGameName(game.name); setQrModalOpen(true)
-    try {
-      let data: any
-      try { const r = await api.get('/whatsapp/evolution/connect'); data = r.data }
-      catch (error) { if (!isMissingInstanceError(error)) throw error; await api.post('/whatsapp/evolution/setup', {}); const r = await api.get('/whatsapp/evolution/connect'); data = r.data }
-      const qr = extractQrCodeBase64(data)
-      if (!qr) { setQrError('Nao foi possivel gerar o QR code agora. Tente novamente em alguns segundos.'); return }
-      setQrImage(qr); setQrStatusMessage('QR code gerado. Escaneie com o WhatsApp do celular.')
-      await checkConnectionStatus(false)
-    } catch (error) { setQrError(mapQrErrorMessage(error)) } finally { setConnectingGameId(null) }
-  }
-
-  async function handleRefreshQr() {
-    if (!canManageWhatsApp) { setQrError('Sem permissao para atualizar QR code.'); return }
-    setQrRefreshing(true); setQrError(null); setQrConnected(false)
-    try {
-      const { data } = await api.get('/whatsapp/evolution/connect')
-      const qr = extractQrCodeBase64(data)
-      if (!qr) { setQrError('Nao foi possivel atualizar o QR code agora. Tente novamente.'); return }
-      setQrImage(qr); setQrStatusMessage('QR code atualizado. Escaneie novamente no WhatsApp.')
-      await checkConnectionStatus(false)
-    } catch (error) {
-      const message = mapQrErrorMessage(error)
-      setQrError(message === 'Falha ao conectar WhatsApp' ? 'Falha ao atualizar QR code' : message)
-    } finally { setQrRefreshing(false) }
   }
 
   const gameTypeLabel: Record<'CASH_GAME' | 'TOURNAMENT', string> = { CASH_GAME: 'Cash Game', TOURNAMENT: 'Torneio' }
@@ -362,17 +252,6 @@ export default function DashboardPage() {
                               <span>🎮 {game._count.sessions} sessões</span>
                               <span>{gameType === 'CASH_GAME' ? `💵 R$ ${game.chipValue}/ficha` : '🏆 Estrutura de torneio'}</span>
                             </div>
-
-                            {isOwner && (
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleConnectWhatsApp(game) }}
-                                disabled={connectingGameId === game.id || !canManageWhatsApp}
-                                className="mt-4 w-full rounded-lg border border-sx-cyan-dim bg-sx-cyan-deep/30 px-3 py-2 text-sm font-semibold text-sx-cyan hover:bg-sx-cyan-deep/50 disabled:opacity-50 transition-colors"
-                              >
-                                {connectingGameId === game.id ? 'Gerando QR...' : '📱 Conectar WhatsApp do Home Game'}
-                              </button>
-                            )}
                           </div>
                         </div>
                       )
@@ -427,67 +306,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* WhatsApp QR Modal */}
-      {qrModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setQrModalOpen(false)}>
-          <div className="w-full max-w-md rounded-xl border border-sx-border bg-sx-card p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-white">Conectar WhatsApp</h3>
-                <p className="text-xs text-sx-muted">Home Game: {qrForGameName}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setQrModalOpen(false)}
-                className="rounded-md border border-sx-border px-2 py-1 text-xs text-sx-muted hover:text-white hover:bg-sx-input"
-              >
-                Fechar
-              </button>
-            </div>
-            {qrError ? (
-              <div className="rounded-md border border-red-900/50 bg-red-950/40 p-3 text-sm text-red-300">{qrError}</div>
-            ) : qrImage ? (
-              <div className="space-y-3">
-                <div className={`rounded-md border p-3 text-sm ${qrConnected ? 'border-sx-cyan-deep/50 bg-sx-cyan-deep/40 text-sx-cyan' : 'border-sx-border bg-sx-input text-white/70'}`}>
-                  {qrStatusMessage}
-                </div>
-                <div className="rounded-lg bg-white p-3">
-                  <img src={qrImage} alt="QR Code WhatsApp" className="h-auto w-full" />
-                </div>
-                <button type="button" onClick={() => checkConnectionStatus(true)} className="w-full rounded-md border border-sx-border bg-sx-input px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-sx-card2">
-                  Verificar status da conexao
-                </button>
-                <button type="button" onClick={handleRefreshQr} disabled={qrRefreshing} className="w-full rounded-md border border-sx-border bg-sx-input px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-sx-card2 disabled:opacity-60">
-                  {qrRefreshing ? 'Atualizando QR...' : 'Atualizar QR code'}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setQrError(null); setQrImage(null); setQrConnected(false)
-                    setQrStatusMessage('Resetando instância e gerando novo QR...')
-                    try {
-                      await api.post('/whatsapp/evolution/reset')
-                      const r = await api.get('/whatsapp/evolution/connect')
-                      const qr = extractQrCodeBase64(r.data)
-                      if (qr) { setQrImage(qr); setQrStatusMessage('QR code gerado após reset. Escaneie no celular.') }
-                      else setQrError('Não foi possível gerar QR após reset.')
-                    } catch (err) {
-                      setQrError(mapQrErrorMessage(err))
-                    }
-                  }}
-                  className="w-full rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300/80 hover:text-red-200 hover:bg-red-950/50"
-                  title="Deleta a instância na Evolution API e cria uma nova — use se o scan não completar a conexão"
-                >
-                  🔄 Resetar instância (se o scan não conectar)
-                </button>
-                <p className="text-xs text-sx-muted">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.</p>
-              </div>
-            ) : (
-              <div className="rounded-md border border-sx-border bg-sx-input p-3 text-sm text-sx-muted">Gerando QR code...</div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

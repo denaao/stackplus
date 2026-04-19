@@ -1,5 +1,4 @@
 import { prisma } from '../../lib/prisma'
-import { notifySessionFinishedIfEnabled } from '../whatsapp/evolution.service'
 import { generateSessionFinancialReport } from '../banking/annapay.service'
 import { FinancialModule } from '@prisma/client'
 import { isHomeGameHost } from '../../lib/homegame-auth'
@@ -496,10 +495,6 @@ export async function finishSession(
       },
       include: sessionInclude,
     })
-  })
-
-  void notifySessionFinishedIfEnabled(updatedSession.id).catch((error) => {
-    console.error('[WHATSAPP] Falha ao notificar encerramento da sessão:', error)
   })
 
   const payload = withCaixinhaDistribution(updatedSession)
