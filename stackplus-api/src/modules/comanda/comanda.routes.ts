@@ -6,6 +6,8 @@ import * as ComandaService from './comanda.service'
 const router = Router()
 router.use(authenticate)
 
+// ─── ROTAS ESTÁTICAS (precisam vir ANTES de /:comandaId pra Express não capturar 'bank'/'cashbox'/etc) ───
+
 // POST /comanda/open
 router.post('/open', async (req: AuthRequest, res: Response) => {
   const data = z.object({
@@ -23,10 +25,16 @@ router.post('/open', async (req: AuthRequest, res: Response) => {
   res.status(201).json(comanda)
 })
 
-// GET /comanda/:comandaId
-router.get('/:comandaId', async (req: AuthRequest, res: Response) => {
-  const comanda = await ComandaService.getComanda(req.params.comandaId, req.user!.userId)
-  res.json(comanda)
+// GET /comanda?homeGameId=...&status=OPEN|CLOSED
+router.get('/', async (req: AuthRequest, res: Response) => {
+  const homeGameId = z.string().uuid().parse(req.query.homeGameId)
+  const status = z.enum(['OPEN', 'CLOSED']).optional().parse(req.query.status)
+  const comandas = await ComandaService.listComandas({
+    homeGameId,
+    status,
+    viewerUserId: req.user!.userId,
+  })
+  res.json(comandas)
 })
 
 // GET /comanda/player/:playerId?homeGameId=...
@@ -40,16 +48,65 @@ router.get('/player/:playerId', async (req: AuthRequest, res: Response) => {
   res.json(comanda)
 })
 
-// GET /comanda?homeGameId=...&status=OPEN|CLOSED
-router.get('/', async (req: AuthRequest, res: Response) => {
+// GET /comanda/bank?homeGameId=...
+router.get('/bank', async (req: AuthRequest, res: Response) => {
   const homeGameId = z.string().uuid().parse(req.query.homeGameId)
-  const status = z.enum(['OPEN', 'CLOSED']).optional().parse(req.query.status)
-  const comandas = await ComandaService.listComandas({
-    homeGameId,
-    status,
+  const result = await ComandaService.getHomeGameBank(homeGameId, req.user!.userId)
+  res.json(result)
+})
+
+// POST /comanda/bank/reconcile
+router.post('/bank/reconcile', async (req: AuthRequest, res: Response) => {
+  const { homeGameId } = z.object({ homeGameId: z.string().uuid() }).parse(req.body)
+  const result = await ComandaService.reconcileHomeGameBank(homeGameId, req.user!.userId)
+  res.json(result)
+})
+
+// POST /comanda/cashbox/close
+router.post('/cashbox/close', async (req: AuthRequest, res: Response) => {
+  const data = z.object({
+    homeGameId: z.string().uuid(),
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  }).parse(req.body)
+
+  const result = await ComandaService.closeCashbox({
+    homeGameId: data.homeGameId,
+    viewerUserId: req.user!.userId,
+    from: data.from ? new Date(data.from) : undefined,
+    to: data.to ? new Date(data.to) : undefined,
+  })
+  res.json(result)
+})
+
+// PATCH /comanda/items/:itemId/settle
+router.patch('/items/:itemId/settle', async (req: AuthRequest, res: Response) => {
+  const data = z.object({
+    paymentReference: z.string().optional(),
+    paymentVirtualAccount: z.string().optional(),
+    paymentStatus: z.enum(['PENDING', 'PAID', 'EXPIRED', 'CANCELED']),
+  }).parse(req.body)
+
+  const item = await ComandaService.settleComandaPaymentItem({
+    itemId: req.params.itemId,
+    ...data,
     viewerUserId: req.user!.userId,
   })
-  res.json(comandas)
+  res.json(item)
+})
+
+// GET /comanda/items/:itemId/pix-status
+router.get('/items/:itemId/pix-status', async (req: AuthRequest, res: Response) => {
+  const result = await ComandaService.checkComandaItemPixStatus(req.params.itemId, req.user!.userId)
+  res.json(result)
+})
+
+// ─── ROTAS DINÂMICAS POR COMANDA (só depois das estáticas) ───
+
+// GET /comanda/:comandaId
+router.get('/:comandaId', async (req: AuthRequest, res: Response) => {
+  const comanda = await ComandaService.getComanda(req.params.comandaId, req.user!.userId)
+  res.json(comanda)
 })
 
 // POST /comanda/:comandaId/items
@@ -78,31 +135,7 @@ router.post('/:comandaId/items', async (req: AuthRequest, res: Response) => {
   res.status(201).json(item)
 })
 
-// PATCH /comanda/items/:itemId/settle
-router.patch('/items/:itemId/settle', async (req: AuthRequest, res: Response) => {
-  const data = z.object({
-    paymentReference: z.string().optional(),
-    paymentVirtualAccount: z.string().optional(),
-    paymentStatus: z.enum(['PENDING', 'PAID', 'EXPIRED', 'CANCELED']),
-  }).parse(req.body)
-
-  const item = await ComandaService.settleComandaPaymentItem({
-    itemId: req.params.itemId,
-    ...data,
-    viewerUserId: req.user!.userId,
-  })
-  res.json(item)
-})
-
-// GET /comanda/items/:itemId/pix-status
-// Consulta o banco pra ver se a cobrança PIX foi paga, e liquida automaticamente se sim.
-router.get('/items/:itemId/pix-status', async (req: AuthRequest, res: Response) => {
-  const result = await ComandaService.checkComandaItemPixStatus(req.params.itemId, req.user!.userId)
-  res.json(result)
-})
-
 // POST /comanda/:comandaId/pix-out
-// Envia PIX real via Annapay ao jogador usando a chave PIX dele, e registra TRANSFER_OUT.
 router.post('/:comandaId/pix-out', async (req: AuthRequest, res: Response) => {
   const data = z.object({
     amount: z.number().positive(),
@@ -117,7 +150,6 @@ router.post('/:comandaId/pix-out', async (req: AuthRequest, res: Response) => {
 })
 
 // POST /comanda/:comandaId/pix-charge
-// Gera cobrança PIX (QR ou 24h) via Annapay e registra item PENDING na comanda.
 router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) => {
   const data = z.object({
     amount: z.number().positive(),
@@ -131,40 +163,6 @@ router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) =>
     createdByUserId: req.user!.userId,
   })
   res.status(201).json(result)
-})
-
-// GET /comanda/bank?homeGameId=...
-// Saldo bancário e últimas movimentações do home game.
-router.get('/bank', async (req: AuthRequest, res: Response) => {
-  const homeGameId = z.string().uuid().parse(req.query.homeGameId)
-  const result = await ComandaService.getHomeGameBank(homeGameId, req.user!.userId)
-  res.json(result)
-})
-
-// POST /comanda/bank/reconcile
-// Varre items PAID sem bank tx correspondente e cria lançamentos retroativos.
-router.post('/bank/reconcile', async (req: AuthRequest, res: Response) => {
-  const { homeGameId } = z.object({ homeGameId: z.string().uuid() }).parse(req.body)
-  const result = await ComandaService.reconcileHomeGameBank(homeGameId, req.user!.userId)
-  res.json(result)
-})
-
-// POST /comanda/cashbox/close?homeGameId=...
-// Gera relatório agregado de caixa do home game.
-router.post('/cashbox/close', async (req: AuthRequest, res: Response) => {
-  const data = z.object({
-    homeGameId: z.string().uuid(),
-    from: z.string().datetime().optional(),
-    to: z.string().datetime().optional(),
-  }).parse(req.body)
-
-  const result = await ComandaService.closeCashbox({
-    homeGameId: data.homeGameId,
-    viewerUserId: req.user!.userId,
-    from: data.from ? new Date(data.from) : undefined,
-    to: data.to ? new Date(data.to) : undefined,
-  })
-  res.json(result)
 })
 
 // POST /comanda/:comandaId/close
