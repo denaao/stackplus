@@ -25,7 +25,7 @@ router.post('/open', async (req: AuthRequest, res: Response) => {
 
 // GET /comanda/:comandaId
 router.get('/:comandaId', async (req: AuthRequest, res: Response) => {
-  const comanda = await ComandaService.getComanda(req.params.comandaId)
+  const comanda = await ComandaService.getComanda(req.params.comandaId, req.user!.userId)
   res.json(comanda)
 })
 
@@ -35,6 +35,7 @@ router.get('/player/:playerId', async (req: AuthRequest, res: Response) => {
   const comanda = await ComandaService.getComandaByPlayer({
     playerId: req.params.playerId,
     homeGameId,
+    viewerUserId: req.user!.userId,
   })
   res.json(comanda)
 })
@@ -43,7 +44,11 @@ router.get('/player/:playerId', async (req: AuthRequest, res: Response) => {
 router.get('/', async (req: AuthRequest, res: Response) => {
   const homeGameId = z.string().uuid().parse(req.query.homeGameId)
   const status = z.enum(['OPEN', 'CLOSED']).optional().parse(req.query.status)
-  const comandas = await ComandaService.listComandas({ homeGameId, status })
+  const comandas = await ComandaService.listComandas({
+    homeGameId,
+    status,
+    viewerUserId: req.user!.userId,
+  })
   res.json(comandas)
 })
 
@@ -84,6 +89,7 @@ router.patch('/items/:itemId/settle', async (req: AuthRequest, res: Response) =>
   const item = await ComandaService.settleComandaPaymentItem({
     itemId: req.params.itemId,
     ...data,
+    viewerUserId: req.user!.userId,
   })
   res.json(item)
 })
@@ -91,7 +97,7 @@ router.patch('/items/:itemId/settle', async (req: AuthRequest, res: Response) =>
 // GET /comanda/items/:itemId/pix-status
 // Consulta o banco pra ver se a cobrança PIX foi paga, e liquida automaticamente se sim.
 router.get('/items/:itemId/pix-status', async (req: AuthRequest, res: Response) => {
-  const result = await ComandaService.checkComandaItemPixStatus(req.params.itemId)
+  const result = await ComandaService.checkComandaItemPixStatus(req.params.itemId, req.user!.userId)
   res.json(result)
 })
 

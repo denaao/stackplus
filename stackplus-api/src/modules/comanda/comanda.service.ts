@@ -1,5 +1,48 @@
 import { prisma } from '../../lib/prisma'
 import { createNormalizedCob, checkPixChargeIsPaid, createPix } from '../banking/annapay.service'
+import { isHomeGameHost } from '../../lib/homegame-auth'
+
+/**
+ * Autorização de acesso a uma comanda:
+ * - O próprio jogador (playerId) pode ver/interagir com a SUA comanda.
+ * - Host/co-host/admin do home game pode ver/interagir com qualquer comanda do HG.
+ *
+ * `managerOnly=true` exige host/co-host (usado em ações gerenciais: abrir, fechar,
+ * registrar item, gerar PIX, enviar PIX, liquidar). O jogador não pode executar.
+ */
+async function assertComandaAccess(
+  viewerUserId: string,
+  comandaIdOrPlayerAndHomeGame:
+    | { comandaId: string }
+    | { playerId: string; homeGameId: string },
+  options: { managerOnly?: boolean } = {},
+) {
+  let homeGameId: string
+  let playerId: string
+
+  if ('comandaId' in comandaIdOrPlayerAndHomeGame) {
+    const comanda = await db.comanda.findUniqueOrThrow({
+      where: { id: comandaIdOrPlayerAndHomeGame.comandaId },
+      select: { homeGameId: true, playerId: true },
+    })
+    homeGameId = comanda.homeGameId
+    playerId = comanda.playerId
+  } else {
+    homeGameId = comandaIdOrPlayerAndHomeGame.homeGameId
+    playerId = comandaIdOrPlayerAndHomeGame.playerId
+  }
+
+  const isManager = await isHomeGameHost(viewerUserId, homeGameId)
+  if (isManager) return { isManager: true, isOwnComanda: viewerUserId === playerId }
+
+  if (options.managerOnly) {
+    throw new Error('Acesso negado — apenas host/co-host pode executar esta ação')
+  }
+
+  if (viewerUserId === playerId) return { isManager: false, isOwnComanda: true }
+
+  throw new Error('Acesso negado')
+}
 
 // Types defined locally until `npx prisma generate` is run with the new schema
 type ComandaMode = 'PREPAID' | 'POSTPAID'
@@ -58,6 +101,9 @@ export async function openComanda({
   note?: string
   openedByUserId: string
 }) {
+  // Somente host/co-host pode abrir comanda pra outro jogador.
+  await assertComandaAccess(openedByUserId, { playerId, homeGameId }, { managerOnly: true })
+
   // Garante que não existe comanda OPEN para o mesmo jogador/home game
   const existing = await db.comanda.findFirst({
     where: { playerId, homeGameId, status: 'OPEN' },
@@ -118,7 +164,8 @@ export async function openComanda({
 
 // ─── Get ─────────────────────────────────────────────────────────────────────
 
-export async function getComanda(comandaId: string) {
+export async function getComanda(comandaId: string, viewerUserId: string) {
+  await assertComandaAccess(viewerUserId, { comandaId })
   return db.comanda.findUniqueOrThrow({
     where: { id: comandaId },
     include: {
@@ -144,10 +191,13 @@ export async function getComanda(comandaId: string) {
 export async function getComandaByPlayer({
   playerId,
   homeGameId,
+  viewerUserId,
 }: {
   playerId: string
   homeGameId: string
+  viewerUserId: string
 }) {
+  await assertComandaAccess(viewerUserId, { playerId, homeGameId })
   return db.comanda.findFirst({
     where: { playerId, homeGameId, status: 'OPEN' },
     include: {
@@ -165,10 +215,15 @@ export async function getComandaByPlayer({
 export async function listComandas({
   homeGameId,
   status,
+  viewerUserId,
 }: {
   homeGameId: string
   status?: 'OPEN' | 'CLOSED'
+  viewerUserId: string
 }) {
+  // Listagem completa é só pra host/co-host. Jogador comum usa getComandaByPlayer.
+  const isManager = await isHomeGameHost(viewerUserId, homeGameId)
+  if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode listar comandas')
   return db.comanda.findMany({
     where: {
       homeGameId,
@@ -249,8 +304,9 @@ export async function addComandaItemWithTx(tx: any, params: AddComandaItemParams
   return created
 }
 
-// Versão pública: envelopa em transaction própria.
+// Versão pública: envelopa em transaction própria + exige host/co-host.
 export async function addComandaItem(params: AddComandaItemParams) {
+  await assertComandaAccess(params.createdByUserId, { comandaId: params.comandaId }, { managerOnly: true })
   return prisma.$transaction((tx: any) => addComandaItemWithTx(tx, params))
 }
 
@@ -261,12 +317,22 @@ export async function settleComandaPaymentItem({
   paymentReference,
   paymentVirtualAccount,
   paymentStatus,
+  viewerUserId,
 }: {
   itemId: string
   paymentReference?: string
   paymentVirtualAccount?: string
   paymentStatus: ComandaItemPaymentStatus
+  viewerUserId?: string  // opcional: uso interno (check pix status) passa sem, rota passa com
 }) {
+  // Se veio de rota HTTP, valida permissão.
+  if (viewerUserId) {
+    const item = await db.comandaItem.findUniqueOrThrow({
+      where: { id: itemId },
+      select: { comandaId: true },
+    })
+    await assertComandaAccess(viewerUserId, { comandaId: item.comandaId }, { managerOnly: true })
+  }
   // Ajusta balance conforme a transição de paymentStatus.
   // Regra: enquanto o item foi criado via addComandaItem, o balance já foi
   // incrementado no momento da criação (independente do status ser PENDING ou PAID).
@@ -333,6 +399,7 @@ export async function generateComandaPixCharge({
   createdByUserId: string
 }) {
   if (amount <= 0) throw new Error('Valor deve ser maior que zero')
+  await assertComandaAccess(createdByUserId, { comandaId }, { managerOnly: true })
 
   const comanda = await db.comanda.findUniqueOrThrow({
     where: { id: comandaId },
@@ -394,10 +461,12 @@ export async function generateComandaPixCharge({
  * Se estiver pago, liquida o item (status PAID) automaticamente.
  * Retorna o status atual do item.
  */
-export async function checkComandaItemPixStatus(itemId: string) {
+export async function checkComandaItemPixStatus(itemId: string, viewerUserId: string) {
   const item = await db.comandaItem.findUniqueOrThrow({
     where: { id: itemId },
   })
+  // Tanto o jogador dono da comanda quanto host/co-host podem consultar.
+  await assertComandaAccess(viewerUserId, { comandaId: item.comandaId })
 
   // Se já está liquidado ou cancelado, não consulta de novo.
   if (item.paymentStatus === 'PAID') {
@@ -448,6 +517,7 @@ export async function sendComandaPixOut({
   createdByUserId: string
 }) {
   if (amount <= 0) throw new Error('Valor deve ser maior que zero')
+  await assertComandaAccess(createdByUserId, { comandaId }, { managerOnly: true })
 
   const comanda = await db.comanda.findUniqueOrThrow({
     where: { id: comandaId },
@@ -548,6 +618,7 @@ export async function closeComanda({
   comandaId: string
   closedByUserId: string
 }) {
+  await assertComandaAccess(closedByUserId, { comandaId }, { managerOnly: true })
   const comanda = await db.comanda.findUniqueOrThrow({
     where: { id: comandaId },
     include: { items: true },
