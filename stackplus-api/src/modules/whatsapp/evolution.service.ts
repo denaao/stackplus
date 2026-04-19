@@ -452,6 +452,10 @@ export async function handleEvolutionWebhook(payload: any, secretHeader?: string
   const event = String(payload?.event || payload?.type || '').toLowerCase()
   const externalMessageId = extractMessageExternalId(payload)
 
+  // Log detalhado dos eventos do webhook pra diagnosticar estados "connecting" travados.
+  const stateFromPayload = extractConnectionState(payload)
+  console.log(`[evolution webhook] event="${event}" instance="${instanceName}" state="${stateFromPayload}"`)
+
   if (event.includes('qrcode')) {
     await upsertLocalInstance(instanceName, {
       status: 'CONNECTING',
@@ -461,11 +465,24 @@ export async function handleEvolutionWebhook(payload: any, secretHeader?: string
   }
 
   if (event.includes('connection')) {
-    const nextStatus = mapStatus(extractConnectionState(payload))
+    const nextStatus = mapStatus(stateFromPayload)
+    console.log(`[evolution webhook] connection event — state=${stateFromPayload} → status=${nextStatus}`)
     await upsertLocalInstance(instanceName, {
       status: nextStatus,
       qrCodeBase64: nextStatus === 'CONNECTED' ? null : extractQrCodeBase64(payload),
       lastConnectionAt: nextStatus === 'CONNECTED' ? new Date() : undefined,
+      lastError: null,
+    })
+  }
+
+  // Alguns setups da Evolution emitem eventos sem "connection" no nome mas com state no payload.
+  // Se chegou state=open e ainda não marcamos como CONNECTED, atualiza agora.
+  if (stateFromPayload && String(stateFromPayload).toLowerCase() === 'open' && !event.includes('connection')) {
+    console.log(`[evolution webhook] fallback: state=open detectado fora de connection event → marcando CONNECTED`)
+    await upsertLocalInstance(instanceName, {
+      status: 'CONNECTED',
+      qrCodeBase64: null,
+      lastConnectionAt: new Date(),
       lastError: null,
     })
   }
