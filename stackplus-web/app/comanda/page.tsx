@@ -419,7 +419,12 @@ function ComandasContent() {
                       const r = await api.get(`/comanda/bank?homeGameId=${homeGameId}`)
                       setBankBalance(Number(r.data?.balance ?? 0))
                     } catch (err: any) {
-                      alert(err?.response?.data?.error ?? err?.message ?? 'Falha ao reconciliar')
+                      const status = err?.response?.status
+                      const body = err?.response?.data
+                      const msg = typeof err === 'string' ? err
+                        : body?.error ?? body?.message ?? err?.message ?? JSON.stringify(body ?? {})
+                      alert(`Falha ao reconciliar\nStatus: ${status ?? '?'}\nMensagem: ${msg}`)
+                      console.error('[reconcile]', err)
                     }
                   }}
                   className="w-full rounded-lg border border-sx-border2 bg-sx-input hover:bg-sx-card2 text-sx-muted hover:text-white text-sm py-2"
