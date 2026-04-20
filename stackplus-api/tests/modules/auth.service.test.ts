@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const prismaMock = {
   user: {
     findUnique: vi.fn(),
-    findFirst: vi.fn(),
     create: vi.fn(),
   },
 }
@@ -28,12 +27,11 @@ describe('auth.service register', () => {
 
   it('forces new public users to PLAYER role', async () => {
     prismaMock.user.findUnique.mockResolvedValue(null)
-    prismaMock.user.findFirst.mockResolvedValue(null)
     prismaMock.user.create.mockResolvedValue({
       id: 'user-1',
       name: 'User',
       email: 'user@test.com',
-      cpf: null,
+      cpf: '12345678901',
       phone: null,
       pixType: 'EMAIL',
       pixKey: 'user@test.com',
@@ -45,14 +43,17 @@ describe('auth.service register', () => {
 
     const result = await authService.register({
       name: 'User',
+      cpf: '123.456.789-01',
       email: 'user@test.com',
       password: '123456',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       pixType: 'EMAIL' as any,
       pixKey: 'user@test.com',
     })
 
     expect(prismaMock.user.create).toHaveBeenCalledTimes(1)
     expect(prismaMock.user.create.mock.calls[0][0].data.role).toBe('PLAYER')
+    expect(prismaMock.user.create.mock.calls[0][0].data.cpf).toBe('12345678901')
     expect(result.user.role).toBe('PLAYER')
     expect(result.token).toBe('fake-token')
   })

@@ -4,6 +4,9 @@ const txMock = {
   prepaidChargePending: { deleteMany: vi.fn() },
   sessionFinancialChargePending: { deleteMany: vi.fn() },
   sessionFinancialPayoutPending: { deleteMany: vi.fn() },
+  sangeurSale: { deleteMany: vi.fn() },
+  sangeurShiftMovement: { deleteMany: vi.fn() },
+  sangeurShift: { deleteMany: vi.fn() },
   transaction: { deleteMany: vi.fn() },
   playerSessionState: { deleteMany: vi.fn() },
   sessionStaff: { deleteMany: vi.fn() },
@@ -21,6 +24,15 @@ const prismaMock = {
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: prismaMock,
+}))
+
+// Stub do authz: retorna sempre true. Testes específicos de authz existem
+// no escopo de homegame-auth (fora daqui).
+vi.mock('../../src/lib/homegame-auth', () => ({
+  isHomeGameHost: vi.fn(async () => true),
+  isHomeGameOwner: vi.fn(async () => true),
+  assertHomeGameHost: vi.fn(async () => {}),
+  assertHomeGameOwner: vi.fn(async () => {}),
 }))
 
 vi.mock('../../src/modules/whatsapp/evolution.service', () => ({
@@ -52,7 +64,8 @@ describe('session.service critical rules', () => {
   it('cleans financial dependencies when deleting a session', async () => {
     prismaMock.session.findUniqueOrThrow.mockResolvedValueOnce({
       id: 'session-1',
-      homeGame: { hostId: 'host-1' },
+      homeGameId: 'home-1',
+      homeGame: { id: 'home-1', hostId: 'host-1' },
     })
 
     const sessionService = await import('../../src/modules/session/session.service')

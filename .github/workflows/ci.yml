@@ -68,7 +68,5 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
-      # Unit tests disabled — existing tests (auth/homegame/session) have outdated
-      # mocks and never passed. Re-enable in QUAL-001 after writing real coverage.
-      # - name: Unit tests
-      #   run: npm run test
+      - name: Unit tests
+        run: npm run test

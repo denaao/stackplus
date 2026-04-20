@@ -4,6 +4,10 @@ const txMock = {
   prepaidChargePending: { deleteMany: vi.fn() },
   sessionFinancialChargePending: { deleteMany: vi.fn() },
   sessionFinancialPayoutPending: { deleteMany: vi.fn() },
+  sangeurSale: { deleteMany: vi.fn() },
+  sangeurShiftMovement: { deleteMany: vi.fn() },
+  sangeurShift: { deleteMany: vi.fn() },
+  homeGameSangeurAccess: { deleteMany: vi.fn() },
   transaction: { deleteMany: vi.fn() },
   playerSessionState: { deleteMany: vi.fn() },
   sessionStaff: { deleteMany: vi.fn() },
@@ -23,6 +27,14 @@ const prismaMock = {
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: prismaMock,
+}))
+
+// Stub do authz: assertHomeGameOwner passa sem consultar o banco.
+vi.mock('../../src/lib/homegame-auth', () => ({
+  isHomeGameHost: vi.fn(async () => true),
+  isHomeGameOwner: vi.fn(async () => true),
+  assertHomeGameHost: vi.fn(async () => {}),
+  assertHomeGameOwner: vi.fn(async () => {}),
 }))
 
 describe('homegame.service deleteHomeGame', () => {
