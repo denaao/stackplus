@@ -83,21 +83,21 @@ export function Hero() {
             </ul>
           </div>
 
-          {/* Print real do sistema em uso */}
-          <div className="relative">
-            <div className="relative overflow-hidden rounded-2xl border border-sx-border2 bg-sx-card shadow-sx-glow-lg">
+          {/* Snapshot mobile — tela de comandas */}
+          <div className="relative mx-auto w-full max-w-xs sm:max-w-sm">
+            <div className="relative overflow-hidden rounded-[2rem] border-[8px] border-zinc-900 bg-sx-card shadow-sx-glow-lg">
               <Image
-                src="/screen-cash.png"
-                alt="StackPlus em uso — controle de caixa e jogadores"
-                width={700}
-                height={570}
+                src="/comandas.jpg"
+                alt="StackPlus no celular — controle de comandas"
+                width={900}
+                height={1800}
                 className="h-auto w-full"
                 priority
               />
             </div>
             <div
               aria-hidden
-              className="pointer-events-none absolute -inset-8 -z-10 rounded-3xl bg-sx-cyan/10 blur-3xl"
+              className="pointer-events-none absolute -inset-8 -z-10 rounded-3xl bg-sx-cyan/15 blur-3xl"
             />
           </div>
         </div>
