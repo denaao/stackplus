@@ -536,6 +536,9 @@ model Transaction {
   chips        Decimal         @db.Decimal(10, 2)
   note         String?
   registeredBy String
+  // 'C' (cashier) | 'S' (sangeur). Nullable durante DATA-001 Deploy A;
+  // vira NOT NULL no Deploy B, após cleanup dos prefixos legacy.
+  origin       String?
   createdAt    DateTime        @default(now())
 
   session Session @relation(fields: [sessionId], references: [id])

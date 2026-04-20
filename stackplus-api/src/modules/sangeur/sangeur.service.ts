@@ -527,7 +527,10 @@ export async function registerSale(input: {
         amount,
         chips,
         note: input.note?.trim() || `Venda SANGEUR [shift:${shift.id}]`,
-        registeredBy: `sangeur:${input.userId}`,
+        // DATA-001: grava userId puro + marca origin='S'. Legacy rows
+        // com prefixo "sangeur:" em registeredBy são resolvidos por backfill.
+        registeredBy: input.userId,
+        origin: 'S',
       },
     })
 
@@ -742,6 +745,7 @@ export async function getVoucherReceiptData(input: {
           chips: true,
           createdAt: true,
           registeredBy: true,
+          origin: true,
           sangeurSale: { select: { paymentStatus: true } },
         },
       })
@@ -756,14 +760,24 @@ export async function getVoucherReceiptData(input: {
       // Transações direto do caixa: consideradas em aberto (crédito ao jogador em pós-pago).
       return true
     })
-    .map((tx) => ({
-      id: tx.id,
-      origin: typeof tx.registeredBy === 'string' && tx.registeredBy.startsWith('sangeur:') ? 'S' as const : 'C' as const,
-      type: tx.type,
-      chips: toNumber(tx.chips),
-      amount: toNumber(tx.amount),
-      createdAt: tx.createdAt,
-    }))
+    .map((tx) => {
+      // DATA-001: fonte preferida é a coluna origin. Fallback pro prefixo
+      // legacy cobre rows cujo backfill não rodou (rollback parcial).
+      const origin: 'C' | 'S' =
+        tx.origin === 'C' || tx.origin === 'S'
+          ? tx.origin
+          : typeof tx.registeredBy === 'string' && tx.registeredBy.startsWith('sangeur:')
+            ? 'S'
+            : 'C'
+      return {
+        id: tx.id,
+        origin,
+        type: tx.type,
+        chips: toNumber(tx.chips),
+        amount: toNumber(tx.amount),
+        createdAt: tx.createdAt,
+      }
+    })
 
   return {
     saleId: sale.id,

@@ -133,6 +133,7 @@ export async function registerTransaction(input: TransactionInput) {
         chips: isJackpot ? 0 : chips,
         note: input.note,
         registeredBy: input.registeredBy,
+        origin: 'C',
       },
     })
 
