@@ -2,6 +2,9 @@
   "name": "stackplus-web",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "node scripts/dev-stable.js",
     "dev:raw": "next dev",

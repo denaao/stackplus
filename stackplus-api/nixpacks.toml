@@ -1,0 +1,8 @@
+# Railway Nixpacks config.
+# Força Node 20 (default do Nixpacks ainda é 18).
+# Várias devDeps (vitest, vite, rolldown) exigem Node 20+ — sem isso,
+# warnings EBADENGINE em todo build e risco de quebra quando essas libs
+# removerem o fallback pra Node 18.
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm-10_x"]
