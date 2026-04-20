@@ -500,27 +500,27 @@ export async function testLogin() {
   }
 }
 
-function normalizeFinancialModule(value: string | null | undefined): FinancialModuleValue {
+export function normalizeFinancialModule(value: string | null | undefined): FinancialModuleValue {
   const normalized = String(value || '').toUpperCase()
   if (normalized === 'PREPAID') return 'PREPAID'
   if (normalized === 'HYBRID') return 'HYBRID'
   return 'POSTPAID'
 }
 
-function normalizeMemberPaymentMode(value: string | null | undefined): MemberPaymentModeValue {
+export function normalizeMemberPaymentMode(value: string | null | undefined): MemberPaymentModeValue {
   const normalized = String(value || '').toUpperCase()
   if (normalized === 'PREPAID') return 'PREPAID'
   if (normalized === 'POSTPAID') return 'POSTPAID'
   return null
 }
 
-function resolvePlayerMode(financialModule: FinancialModuleValue, memberMode: MemberPaymentModeValue): ResolvedPlayerMode {
+export function resolvePlayerMode(financialModule: FinancialModuleValue, memberMode: MemberPaymentModeValue): ResolvedPlayerMode {
   if (financialModule === 'POSTPAID') return 'POSTPAID'
   if (financialModule === 'PREPAID') return 'PREPAID'
   return memberMode === 'PREPAID' ? 'PREPAID' : 'POSTPAID'
 }
 
-function resolveCpfCnpjFromPix(input: { pixType: string | null; pixKey: string | null; cpf?: string | null }) {
+export function resolveCpfCnpjFromPix(input: { pixType: string | null; pixKey: string | null; cpf?: string | null }) {
   const digits = (input.pixKey || '').replace(/\D/g, '')
   const pixType = String(input.pixType || '').toUpperCase()
   const cpfDigits = (input.cpf || '').replace(/\D/g, '')
@@ -548,7 +548,7 @@ function amountToFixed(value: number) {
   return Number(value.toFixed(2))
 }
 
-function buildRakebackByUserId(params: {
+export function buildRakebackByUserId(params: {
   totalRake: number
   rakebackAssignments: Array<{ userId: string; percent?: unknown }>
 }) {
