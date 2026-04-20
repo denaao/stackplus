@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Image from 'next/image'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
@@ -127,9 +128,9 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-sx-muted pt-1">
             Não tem conta?{' '}
-            <a href="/register" className="text-sx-cyan hover:underline font-semibold">
+            <Link href="/register" className="text-sx-cyan hover:underline font-semibold">
               Cadastrar
-            </a>
+            </Link>
           </p>
         </div>
 

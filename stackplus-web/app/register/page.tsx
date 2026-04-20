@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
+import Link from 'next/link'
 
 type PixType = 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM'
 
@@ -310,7 +311,7 @@ export default function RegisterPage() {
           </button>
           <p className="text-center text-sm text-sx-muted">
             Já tem conta?{' '}
-            <a href="/" className="text-sx-cyan hover:underline">Entrar</a>
+            <Link href="/" className="text-sx-cyan hover:underline">Entrar</Link>
           </p>
         </form>
       </div>
