@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+.vercel
+build
+coverage
+*.lock
+*.log
+.env*
+stackplus-api/prisma/migrations
+stackplus-web/public
+stackplus-web/.next

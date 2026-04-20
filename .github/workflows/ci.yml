@@ -65,6 +65,11 @@ jobs:
       - name: Prisma generate
         run: npm run db:generate
 
+      - name: Lint
+        # Não bloqueia merge enquanto o backlog de warnings está sendo resolvido (QUAL-004).
+        continue-on-error: true
+        run: npm run lint
+
       - name: Typecheck
         run: npx tsc --noEmit
 
