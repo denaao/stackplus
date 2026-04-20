@@ -1152,6 +1152,82 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
     return { processed: false, reason: 'missing-charge-id' as const }
   }
 
+  // Curto-circuito: se já está SETTLED, retorna idempotente sem concorrência.
+  const preCheckRows = await prisma.$queryRaw<Array<{ status: string; sessionId: string }>>`
+    SELECT "status", "sessionId"
+    FROM "PrepaidChargePending"
+    WHERE "chargeId" = ${chargeId}
+    LIMIT 1
+  `
+  const preCheck = preCheckRows[0]
+  if (!preCheck) {
+    return { processed: false, reason: 'pending-not-found' as const, chargeId }
+  }
+  if (preCheck.status === 'SETTLED') {
+    return {
+      processed: true,
+      reason: 'already-settled' as const,
+      chargeId,
+      sessionId: preCheck.sessionId,
+    }
+  }
+
+  const status = extractStatusDeep(payload)
+  const isPaid = isPaidStatus(status) || payloadHasPixConfirmation(payload)
+  if (!isPaid) {
+    return { processed: false, reason: 'not-paid' as const, chargeId, status }
+  }
+
+  // Lock atômico: reivindica a charge via UPDATE condicional (SEC-006).
+  // Apenas UM processo conseguirá transicionar PENDING → PROCESSING.
+  // Webhooks concorrentes pegam 'being-processed' e retornam sem duplicar.
+  // Nota: se o processo crashar entre o claim e o settle, a charge fica em
+  // PROCESSING até intervenção manual. Mitigação futura: cron que limpa
+  // PROCESSING com updatedAt antigo (> N minutos) — fora do escopo atual.
+  const claimRowCount = await prisma.$executeRaw`
+    UPDATE "PrepaidChargePending"
+    SET "status" = 'PROCESSING', "updatedAt" = NOW()
+    WHERE "chargeId" = ${chargeId}
+      AND "status" = 'PENDING'
+  `
+
+  if (claimRowCount === 0) {
+    // Não conseguimos o claim — outro webhook pegou, ou status mudou entre checks.
+    const currentRows = await prisma.$queryRaw<Array<{ status: string; sessionId: string }>>`
+      SELECT "status", "sessionId"
+      FROM "PrepaidChargePending"
+      WHERE "chargeId" = ${chargeId}
+      LIMIT 1
+    `
+    const current = currentRows[0]
+    if (!current) {
+      return { processed: false, reason: 'pending-not-found' as const, chargeId }
+    }
+    if (current.status === 'SETTLED') {
+      return {
+        processed: true,
+        reason: 'already-settled' as const,
+        chargeId,
+        sessionId: current.sessionId,
+      }
+    }
+    if (current.status === 'PROCESSING') {
+      return {
+        processed: false,
+        reason: 'being-processed' as const,
+        chargeId,
+        sessionId: current.sessionId,
+      }
+    }
+    return {
+      processed: false,
+      reason: 'unexpected-status' as const,
+      chargeId,
+      status: current.status,
+    }
+  }
+
+  // Temos o claim. Buscar dados completos pra processar.
   const pendingRows = await prisma.$queryRaw<Array<PendingChargeRow>>`
     SELECT
       "chargeId",
@@ -1169,17 +1245,8 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
   `
   const pending = pendingRows[0]
   if (!pending) {
+    // Cenário raríssimo: pending foi deletado entre claim e read. Reverte não é possível.
     return { processed: false, reason: 'pending-not-found' as const, chargeId }
-  }
-
-  if (pending.status === 'SETTLED') {
-    return { processed: true, reason: 'already-settled' as const, chargeId, sessionId: pending.sessionId }
-  }
-
-  const status = extractStatusDeep(payload)
-  const isPaid = isPaidStatus(status) || payloadHasPixConfirmation(payload)
-  if (!isPaid) {
-    return { processed: false, reason: 'not-paid' as const, chargeId, status }
   }
 
   try {
@@ -1227,6 +1294,14 @@ export async function settlePrepaidChargeFromWebhook(payload: unknown) {
         sessionId: pending.sessionId,
       }
     }
+
+    // Erro não-legítimo: reverte claim pra PENDING pra permitir retry futuro.
+    await prisma.$executeRaw`
+      UPDATE "PrepaidChargePending"
+      SET "status" = 'PENDING', "updatedAt" = NOW()
+      WHERE "chargeId" = ${chargeId}
+        AND "status" = 'PROCESSING'
+    `
 
     throw error
   }

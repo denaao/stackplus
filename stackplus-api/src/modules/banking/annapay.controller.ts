@@ -1,7 +1,24 @@
 import { Request, Response } from 'express'
+import crypto from 'crypto'
 import { AuthRequest } from '../../middlewares/auth.middleware'
 import * as AnnapayService from './annapay.service'
 import { emitSessionRankingUpdated, getIO, getPrivateSessionRoom } from '../../socket/socket'
+
+/**
+ * Compara dois secrets em tempo constante para mitigar timing attacks.
+ * Retorna false se qualquer um estiver vazio ou com tamanhos diferentes.
+ */
+function safeCompareSecrets(provided: string, configured: string): boolean {
+  if (!provided || !configured) return false
+  const providedBuf = Buffer.from(provided, 'utf8')
+  const configuredBuf = Buffer.from(configured, 'utf8')
+  if (providedBuf.length !== configuredBuf.length) return false
+  try {
+    return crypto.timingSafeEqual(providedBuf, configuredBuf)
+  } catch {
+    return false
+  }
+}
 
 export async function login(_req: AuthRequest, res: Response) {
   const data = await AnnapayService.testLogin()
@@ -122,12 +139,31 @@ export async function settlePrepaidChargeByBody(req: AuthRequest, res: Response)
 
 export async function handleCobWebhook(req: Request, res: Response) {
   const configuredSecret = process.env.ANNAPAY_WEBHOOK_SECRET?.trim()
+
   if (configuredSecret) {
-    const providedSecret = String(req.headers['x-annapay-webhook-secret'] || req.headers['x-webhook-secret'] || '').trim()
-    if (!providedSecret || providedSecret !== configuredSecret) {
-      // Some provider URL validations do not include custom headers.
-      // Return 200 to keep webhook registration flow working, but ignore processing.
-      return res.status(200).json({ received: true, ignored: 'missing-or-invalid-webhook-secret' })
+    const providedSecret = String(
+      req.headers['x-annapay-webhook-secret'] || req.headers['x-webhook-secret'] || '',
+    ).trim()
+
+    // Header ausente: provavelmente healthcheck de registro do webhook.
+    // Mantém 200 pra não quebrar o handshake do provider.
+    if (!providedSecret) {
+      return res
+        .status(200)
+        .json({ received: true, ignored: 'missing-webhook-secret' })
+    }
+
+    // Header presente mas inválido: bloqueia e registra tentativa.
+    // Timing-safe compare evita vazar o secret via side-channel.
+    if (!safeCompareSecrets(providedSecret, configuredSecret)) {
+      console.warn('[annapay webhook] invalid secret attempt', {
+        ip: req.ip,
+        userAgent: String(req.headers['user-agent'] || ''),
+        path: req.path,
+      })
+      return res
+        .status(401)
+        .json({ received: false, ignored: 'invalid-webhook-secret' })
     }
   }
 
