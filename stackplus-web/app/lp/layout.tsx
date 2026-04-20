@@ -11,13 +11,11 @@ export const metadata: Metadata = {
       'Crie sua mesa, convide sua galera e jogue com tudo no controle. TV ao vivo, caixa automatizada e torneio estruturado.',
     type: 'website',
     locale: 'pt_BR',
-    images: ['/stackplus-icon-blue.svg'],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'StackPlus — Home game de poker',
     description: 'Crie sua mesa, convide sua galera e jogue com tudo no controle.',
-    images: ['/stackplus-icon-blue.svg'],
   },
 }
 
