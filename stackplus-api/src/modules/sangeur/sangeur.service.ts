@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma'
-import { SangeurMovementType, SangeurPaymentMethod, SangeurPaymentStatus, SangeurShiftStatus, SessionStatus, TransactionType } from '@prisma/client'
+import { ComandaItemType, SangeurMovementType, SangeurPaymentMethod, SangeurPaymentStatus, SangeurShiftStatus, SessionStatus, TransactionType } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import * as AnnapayService from '../banking/annapay.service'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
@@ -461,8 +461,8 @@ export async function registerSale(input: {
   if (input.paymentMethod === SangeurPaymentMethod.PIX_QR) {
     try {
       paymentStatus = SangeurPaymentStatus.PENDING
-      const playerCpf = (playerLookup.user as any)?.cpf
-        ? String((playerLookup.user as any).cpf).replace(/\D/g, '')
+      const playerCpf = playerLookup.user?.cpf
+        ? String(playerLookup.user.cpf).replace(/\D/g, '')
         : null
       const playerDisplayName = resolvedPlayerName || playerLookup.user?.name || 'Jogador'
       const cobResult = await AnnapayService.createNormalizedCob({
@@ -489,10 +489,10 @@ export async function registerSale(input: {
 
   // Prepara metadados da integração com comanda (aplicada dentro da mesma transaction abaixo)
   const comandaGameLabel = shift.session.homeGame?.name ?? shift.homeGameId
-  const paymentTypeMap: Partial<Record<SangeurPaymentMethod, string>> = {
-    [SangeurPaymentMethod.CASH]:    'PAYMENT_CASH',
-    [SangeurPaymentMethod.CARD]:    'PAYMENT_CARD',
-    [SangeurPaymentMethod.PIX_QR]:  'PAYMENT_PIX_SPOT',
+  const paymentTypeMap: Partial<Record<SangeurPaymentMethod, ComandaItemType>> = {
+    [SangeurPaymentMethod.CASH]:    ComandaItemType.PAYMENT_CASH,
+    [SangeurPaymentMethod.CARD]:    ComandaItemType.PAYMENT_CARD,
+    [SangeurPaymentMethod.PIX_QR]:  ComandaItemType.PAYMENT_PIX_SPOT,
     // VOUCHER: sem item de pagamento imediato (fica pendente)
   }
   const comandaPaymentType = paymentTypeMap[input.paymentMethod] ?? null
@@ -590,7 +590,7 @@ export async function registerSale(input: {
 
     // Comanda integration — BLOCKING: roda dentro da mesma tx.
     // Se falhar (ex.: limite de crédito insuficiente), a venda inteira é revertida.
-    const cashType = newTx.type === TransactionType.BUYIN ? 'CASH_BUYIN' : 'CASH_REBUY'
+    const cashType = newTx.type === TransactionType.BUYIN ? ComandaItemType.CASH_BUYIN : ComandaItemType.CASH_REBUY
     const typeLabel = newTx.type === TransactionType.BUYIN ? 'Buy-in' : 'Rebuy'
     const txDescription = `${typeLabel} (Sangeur) — ${comandaGameLabel}`
 
@@ -602,7 +602,7 @@ export async function registerSale(input: {
 
     await addComandaItemWithTx(tx, {
       comandaId: comanda.id,
-      type: cashType as any,
+      type: cashType,
       amount,
       description: txDescription,
       sessionId: shift.sessionId,
@@ -614,7 +614,7 @@ export async function registerSale(input: {
       const isPix = input.paymentMethod === SangeurPaymentMethod.PIX_QR
       await addComandaItemWithTx(tx, {
         comandaId: comanda.id,
-        type: comandaPaymentType as any,
+        type: comandaPaymentType,
         amount,
         description: `Pagamento ${isPix ? 'PIX' : input.paymentMethod} — ${txDescription}`,
         sessionId: shift.sessionId,

@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma'
+import { ComandaItemPaymentStatus, ComandaItemType, ComandaMode, Prisma } from '@prisma/client'
 import { createNormalizedCob, checkPixChargeIsPaid, createPix } from '../banking/annapay.service'
 import { isHomeGameHost } from '../../lib/homegame-auth'
 import { logger } from '../../lib/logger'
@@ -45,20 +46,9 @@ async function assertComandaAccess(
   throw new Error('Acesso negado')
 }
 
-// Types defined locally until `npx prisma generate` is run with the new schema
-type ComandaMode = 'PREPAID' | 'POSTPAID'
-type ComandaItemType =
-  | 'CASH_BUYIN' | 'CASH_REBUY' | 'CASH_ADDON' | 'CASH_CASHOUT'
-  | 'TOURNAMENT_BUYIN' | 'TOURNAMENT_REBUY' | 'TOURNAMENT_ADDON'
-  | 'TOURNAMENT_BOUNTY_RECEIVED' | 'TOURNAMENT_PRIZE'
-  | 'PAYMENT_PIX_SPOT' | 'PAYMENT_PIX_TERM' | 'PAYMENT_CASH' | 'PAYMENT_CARD'
-  | 'TRANSFER_IN' | 'TRANSFER_OUT'
-  | 'CARRY_IN' | 'CARRY_OUT'
-  | 'STAFF_CAIXINHA' | 'STAFF_RAKEBACK'
-type ComandaItemPaymentStatus = 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELED'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = prisma as any
+// Enums agora vêm de @prisma/client (acima). Mantido alias `db` para reduzir
+// churn do diff — pode ser removido gradualmente em troca de `prisma` direto.
+const db = prisma
 
 // ─── Mode resolution ─────────────────────────────────────────────────────────
 // Resolve o modo default da comanda pra um (player, homeGame), levando em conta:
@@ -82,7 +72,11 @@ async function resolveDefaultComandaMode(
     where: { homeGameId_userId: { homeGameId, userId: playerId } },
     select: { paymentMode: true },
   })
-  return (member?.paymentMode as ComandaMode | null) ?? 'POSTPAID'
+  // MemberPaymentMode e ComandaMode têm os mesmos valores ('PREPAID'|'POSTPAID'),
+  // mas TypeScript trata como enums distintos — mapeamos explicitamente.
+  if (member?.paymentMode === 'PREPAID') return ComandaMode.PREPAID
+  if (member?.paymentMode === 'POSTPAID') return ComandaMode.POSTPAID
+  return ComandaMode.POSTPAID
 }
 
 // ─── Open ────────────────────────────────────────────────────────────────────
@@ -123,7 +117,7 @@ export async function openComanda({
   // Se mode não foi passado explicitamente, herda do home game (+ preferência do jogador em HYBRID)
   const resolvedMode = mode ?? (await resolveDefaultComandaMode(playerId, homeGameId))
 
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Cria a nova comanda
     const newComanda = await tx.comanda.create({
       data: {
@@ -253,7 +247,7 @@ type AddComandaItemParams = {
 
 // Versão "inner" que opera em uma tx já aberta. Use quando quiser atomizar
 // a criação do item da comanda junto com outra operação (ex.: caixa/sangeur).
-export async function addComandaItemWithTx(tx: any, params: AddComandaItemParams) {
+export async function addComandaItemWithTx(tx: Prisma.TransactionClient, params: AddComandaItemParams) {
   const { comandaId, type, amount, description, sessionId, tournamentId, tournamentPlayerId, transactionId, createdByUserId } = params
 
   const comanda = await tx.comanda.findUniqueOrThrow({ where: { id: comandaId } })
@@ -312,7 +306,7 @@ export async function addComandaItemWithTx(tx: any, params: AddComandaItemParams
 // Versão pública: envelopa em transaction própria + exige host/co-host.
 export async function addComandaItem(params: AddComandaItemParams) {
   await assertComandaAccess(params.createdByUserId, { comandaId: params.comandaId }, { managerOnly: true })
-  return prisma.$transaction((tx: any) => addComandaItemWithTx(tx, params))
+  return prisma.$transaction((tx: Prisma.TransactionClient) => addComandaItemWithTx(tx, params))
 }
 
 // ─── Settle payment item ──────────────────────────────────────────────────────
@@ -344,7 +338,7 @@ export async function settleComandaPaymentItem({
   // Se o pagamento "sair" do crédito (EXPIRED/CANCELED), precisamos reverter.
   // Se um pagamento CANCELED/EXPIRED voltar a PAID (ex.: reativação manual),
   // precisamos re-creditar.
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const item = await tx.comandaItem.findUniqueOrThrow({ where: { id: itemId } })
     if (!isPaymentType(item.type as ComandaItemType)) {
       throw new Error('Item não é de pagamento')
@@ -434,7 +428,7 @@ export async function generateComandaPixCharge({
   const type: ComandaItemType = kind === 'SPOT' ? 'PAYMENT_PIX_SPOT' : 'PAYMENT_PIX_TERM'
 
   // Cria o item via addComandaItem (que ja atualiza balance como PENDING).
-  const created = await prisma.$transaction(async (tx: any) => {
+  const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const item = await tx.comandaItem.create({
       data: {
         comandaId,
@@ -658,7 +652,7 @@ async function recordBankTransaction(params: {
   comandaItemId?: string | null
   annapayRef?: string | null
 }) {
-  await prisma.$transaction(async (tx: any) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.homeGameBankTransaction.create({
       data: {
         homeGameId: params.homeGameId,
@@ -735,7 +729,7 @@ export async function sendComandaPixOut({
   }
 
   // 1) Cria item PENDING + decrementa balance IMEDIATAMENTE
-  const item = await prisma.$transaction(async (tx: any) => {
+  const item = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const created = await tx.comandaItem.create({
       data: {
         comandaId,
@@ -767,17 +761,17 @@ export async function sendComandaPixOut({
         },
       })
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const orderId = (payoutOrder as any)?.id
-        ?? (payoutOrder as any)?.data?.id
-        ?? (payoutOrder as any)?.pixId
-        ?? null
+      // Resposta do Annapay varia conforme o endpoint (pix spot vs término).
+      // Narrowing manual pra evitar `any` explícito.
+      const payout = payoutOrder as { id?: unknown; data?: { id?: unknown }; pixId?: unknown } | null | undefined
+      const rawId = payout?.id ?? payout?.data?.id ?? payout?.pixId ?? null
+      const orderId = typeof rawId === 'string' ? rawId : null
 
       await db.comandaItem.update({
         where: { id: item.id },
         data: {
           paymentStatus: 'PAID',
-          paymentReference: typeof orderId === 'string' ? orderId : null,
+          paymentReference: orderId,
         },
       })
       // Debita a conta bancária do home game — PIX confirmado pelo Annapay.
@@ -787,13 +781,13 @@ export async function sendComandaPixOut({
         amount,
         description: `PIX enviado para ${playerName}`,
         comandaItemId: item.id,
-        annapayRef: typeof orderId === 'string' ? orderId : null,
+        annapayRef: orderId,
       })
     } catch (err) {
       // PIX falhou — reverte o balance e marca item como CANCELED
       logger.error({ err, itemId: item.id }, '[comanda pix-out] falha no envio do PIX')
       try {
-        await prisma.$transaction(async (tx: any) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
           await tx.comandaItem.update({
             where: { id: item.id },
             data: {
@@ -1107,7 +1101,7 @@ type FindOrOpenParams = {
 }
 
 // Versão "inner" que opera em uma tx já aberta.
-export async function findOrOpenComandaWithTx(tx: any, params: FindOrOpenParams) {
+export async function findOrOpenComandaWithTx(tx: Prisma.TransactionClient, params: FindOrOpenParams) {
   const { playerId, homeGameId, openedByUserId } = params
 
   const existing = await tx.comanda.findFirst({
@@ -1154,7 +1148,7 @@ export async function findOrOpenComandaWithTx(tx: any, params: FindOrOpenParams)
 
 // Versão pública: envelopa em transaction própria.
 export async function findOrOpenComanda(params: FindOrOpenParams) {
-  return prisma.$transaction((tx: any) => findOrOpenComandaWithTx(tx, params))
+  return prisma.$transaction((tx: Prisma.TransactionClient) => findOrOpenComandaWithTx(tx, params))
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

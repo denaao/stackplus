@@ -1,11 +1,9 @@
 import { prisma } from '../../lib/prisma'
+import { TournamentStatus } from '@prisma/client'
 import * as ComandaService from '../comanda/comanda.service'
 
-// Types defined locally until `npx prisma generate` is run with the new schema
-type TournamentStatus = 'REGISTRATION' | 'RUNNING' | 'ON_BREAK' | 'FINISHED' | 'CANCELED'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = prisma as any
+// Alias mantido pra reduzir churn do diff. Pode ser removido gradualmente.
+const db = prisma
 
 // ─── Blind templates ──────────────────────────────────────────────────────────
 
@@ -341,9 +339,9 @@ export async function registerPlayer({
   }
 
   const base = Number(tournament.buyInAmount)
-  const taxAmount = Number((tournament as any).buyInTaxAmount ?? 0)
-  const taxChips = Number((tournament as any).buyInTaxChips ?? 0)
-  const bonusChips = Number((tournament as any).doubleBuyInBonusChips ?? 0)
+  const taxAmount = Number(tournament.buyInTaxAmount ?? 0)
+  const taxChips = Number(tournament.buyInTaxChips ?? 0)
+  const bonusChips = Number(tournament.doubleBuyInBonusChips ?? 0)
   const rakeRate = Number(tournament.rake) / 100
 
   // Calcula valor base (sobre o qual incide o rake), taxa da casa e fichas
@@ -443,13 +441,13 @@ export async function cancelRegistration({
   // Determina quanto era base e quanto era taxa para reverter corretamente
   const totalCharged = Number(buyInItem?.amount ?? 0)
   const rakeRate = Number(tp.tournament.rake) / 100
-  const description = (buyInItem as any)?.description ?? ''
+  const description = buyInItem?.description ?? ''
   // Inferir taxa a partir da descrição
   const wasWithTax = description.includes('Opcional') || description.includes('Duplo')
   const taxAmount = wasWithTax
     ? description.includes('Duplo')
-      ? Number((tp.tournament as any).buyInTaxAmount ?? 0)
-      : Number((tp.tournament as any).buyInTaxAmount ?? 0)
+      ? Number(tp.tournament.buyInTaxAmount ?? 0)
+      : Number(tp.tournament.buyInTaxAmount ?? 0)
     : 0
   const baseCharged = totalCharged - taxAmount
   const prizeToRevert = baseCharged * (1 - rakeRate)
@@ -507,8 +505,8 @@ export async function registerRebuy({
   }
 
   const base = Number(tp.tournament.rebuyAmount)
-  const taxUnit = Number((tp.tournament as any).rebuyTaxAmount ?? 0)
-  const taxChipsUnit = Number((tp.tournament as any).rebuyTaxChips ?? 0)
+  const taxUnit = Number(tp.tournament.rebuyTaxAmount ?? 0)
+  const taxChipsUnit = Number(tp.tournament.rebuyTaxChips ?? 0)
   const baseChips = tp.tournament.rebuyChips ?? tp.tournament.startingChips
   const rakeRate = Number(tp.tournament.rake) / 100
 
@@ -602,7 +600,7 @@ export async function reEntryPlayer({
   }
 
   const rebuyBase = Number(tp.tournament.rebuyAmount)
-  const rebuyTaxUnit = Number((tp.tournament as any).rebuyTaxAmount ?? 0)
+  const rebuyTaxUnit = Number(tp.tournament.rebuyTaxAmount ?? 0)
   const rebuyBaseChips = tp.tournament.rebuyChips ?? tp.tournament.startingChips
   const rakeRate = Number(tp.tournament.rake) / 100
 
@@ -752,8 +750,8 @@ export async function registerAddon({
   }
 
   const base = Number(tp.tournament.addonAmount)
-  const taxAmount = withTax ? Number((tp.tournament as any).addonTaxAmount ?? 0) : 0
-  const taxChips = withTax ? Number((tp.tournament as any).addonTaxChips ?? 0) : 0
+  const taxAmount = withTax ? Number(tp.tournament.addonTaxAmount ?? 0) : 0
+  const taxChips = withTax ? Number(tp.tournament.addonTaxChips ?? 0) : 0
   const rakeRate = Number(tp.tournament.rake) / 100
   const totalCharge = base + taxAmount
   const totalChips = (tp.tournament.addonChips ?? tp.tournament.startingChips) + taxChips
@@ -839,9 +837,9 @@ export async function eliminatePlayer({
     } catch {
       effectivePayouts = calcPayoutSuggestion(prizePool, totalPlayers)
     }
-  } else if ((tp.tournament as any).payoutStructure) {
+  } else if (tp.tournament.payoutStructure) {
     try {
-      const structure: { position: number; percent: number }[] = JSON.parse((tp.tournament as any).payoutStructure)
+      const structure: { position: number; percent: number }[] = JSON.parse(tp.tournament.payoutStructure)
       effectivePayouts = structure.map((s) => ({
         position: s.position,
         amount: Math.round(prizePool * s.percent / 100 * 100) / 100,
@@ -945,7 +943,7 @@ export async function eliminatePlayer({
         if (winnerPrize && winnerPrize.amount > 0) {
           await tx.comandaItem.create({
             data: {
-              comandaId: (winner as any).comanda.id,
+              comandaId: winner.comanda.id,
               type: 'TOURNAMENT_PRIZE',
               amount: winnerPrize.amount,
               description: `Prêmio 1º lugar: ${tp.tournament.name}`,
@@ -955,7 +953,7 @@ export async function eliminatePlayer({
             },
           })
           await tx.comanda.update({
-            where: { id: (winner as any).comanda.id },
+            where: { id: winner.comanda.id },
             data: { balance: { increment: winnerPrize.amount } },
           })
         }
@@ -1160,7 +1158,7 @@ export async function updateBlindLevels(
     data: levels.map((l) => ({ tournamentId, level: l.level, smallBlind: l.smallBlind, bigBlind: l.bigBlind, ante: l.ante ?? 0 })),
   })
   if (breaks !== undefined) {
-    await (db as any).tournament.update({
+    await db.tournament.update({
       where: { id: tournamentId },
       data: { breaks: JSON.stringify(breaks) },
     })

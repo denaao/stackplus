@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma'
-import { TransactionType } from '@prisma/client'
+import { TransactionType, ComandaItemType, Prisma } from '@prisma/client'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
 
 type CashierTransactionType = TransactionType | 'JACKPOT'
@@ -16,11 +16,11 @@ interface TransactionInput {
 
 // ─── Comanda helpers ──────────────────────────────────────────────────────────
 
-const CASH_COMANDA_TYPE_MAP: Partial<Record<CashierTransactionType, string>> = {
-  BUYIN:   'CASH_BUYIN',
-  REBUY:   'CASH_REBUY',
-  ADDON:   'CASH_ADDON',
-  CASHOUT: 'CASH_CASHOUT',
+const CASH_COMANDA_TYPE_MAP: Partial<Record<CashierTransactionType, ComandaItemType>> = {
+  BUYIN:   ComandaItemType.CASH_BUYIN,
+  REBUY:   ComandaItemType.CASH_REBUY,
+  ADDON:   ComandaItemType.CASH_ADDON,
+  CASHOUT: ComandaItemType.CASH_CASHOUT,
   // JACKPOT: sem tipo na comanda
 }
 
@@ -30,7 +30,7 @@ function extractChargeId(note: string | undefined | null): string | null {
   return m ? m[1] : null
 }
 
-async function applyTransactionToComandaTx(tx: any, {
+async function applyTransactionToComandaTx(tx: Prisma.TransactionClient, {
   homeGameId,
   playerId,
   operatorUserId,
@@ -46,7 +46,7 @@ async function applyTransactionToComandaTx(tx: any, {
   operatorUserId: string
   sessionId: string
   transactionId: string
-  cashType: string
+  cashType: ComandaItemType
   amount: number
   description: string
   chargeId: string | null
@@ -55,7 +55,7 @@ async function applyTransactionToComandaTx(tx: any, {
 
   await addComandaItemWithTx(tx, {
     comandaId: comanda.id,
-    type: cashType as any,
+    type: cashType,
     amount,
     description,
     sessionId,
@@ -67,7 +67,7 @@ async function applyTransactionToComandaTx(tx: any, {
   if (chargeId) {
     await addComandaItemWithTx(tx, {
       comandaId: comanda.id,
-      type: 'PAYMENT_PIX_SPOT' as any,
+      type: ComandaItemType.PAYMENT_PIX_SPOT,
       amount,
       description: `Pagamento PIX — ${description}`,
       sessionId,

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
 import { logger } from './logger'
 
@@ -27,20 +28,18 @@ export async function logAudit(params: {
   action: string
   resource: string
   resourceId?: string | null
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  metadata?: Record<string, any> | null
+  metadata?: Record<string, unknown> | null
   ip?: string | null
   userAgent?: string | null
 }): Promise<void> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (prisma as any).auditLog.create({
+    await prisma.auditLog.create({
       data: {
         userId: params.userId ?? null,
         action: params.action,
         resource: params.resource,
         resourceId: params.resourceId ?? null,
-        metadata: params.metadata ?? null,
+        metadata: (params.metadata ?? Prisma.JsonNull) as Prisma.InputJsonValue | typeof Prisma.JsonNull,
         ip: params.ip ?? null,
         userAgent: params.userAgent ?? null,
       },

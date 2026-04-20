@@ -10,24 +10,21 @@ import { prisma } from './prisma'
  * Use essa funcao em endpoints que antes faziam `homeGame.hostId === userId`.
  */
 export async function isHomeGameHost(userId: string, homeGameId: string): Promise<boolean> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = prisma as any
-
-  const user = await db.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { role: true },
   })
   if (!user) return false
   if (user.role === 'ADMIN') return true
 
-  const homeGame = await db.homeGame.findUnique({
+  const homeGame = await prisma.homeGame.findUnique({
     where: { id: homeGameId },
     select: { hostId: true },
   })
   if (!homeGame) return false
   if (homeGame.hostId === userId) return true
 
-  const member = await db.homeGameMember.findUnique({
+  const member = await prisma.homeGameMember.findUnique({
     where: { homeGameId_userId: { homeGameId, userId } },
     select: { role: true },
   })
@@ -40,9 +37,7 @@ export async function isHomeGameHost(userId: string, homeGameId: string): Promis
  * Use em acoes restritas: promover/rebaixar outros hosts, transferir ownership, deletar home game.
  */
 export async function isHomeGameOwner(userId: string, homeGameId: string): Promise<boolean> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = prisma as any
-  const homeGame = await db.homeGame.findUnique({
+  const homeGame = await prisma.homeGame.findUnique({
     where: { id: homeGameId },
     select: { hostId: true },
   })

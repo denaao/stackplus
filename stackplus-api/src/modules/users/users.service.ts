@@ -1,3 +1,4 @@
+import { Role } from '@prisma/client'
 import { prisma } from '../../lib/prisma'
 
 export async function getAllUsers() {
@@ -8,9 +9,12 @@ export async function getAllUsers() {
 }
 
 export async function updateUserRole(userId: string, role: string) {
+  if (!(role in Role)) {
+    throw new Error(`Invalid role: ${role}`)
+  }
   return prisma.user.update({
     where: { id: userId },
-    data: { role: role as any },
+    data: { role: role as Role },
     select: { id: true, name: true, email: true, role: true },
   })
 }

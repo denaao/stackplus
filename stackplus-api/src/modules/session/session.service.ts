@@ -1,6 +1,6 @@
 import { prisma } from '../../lib/prisma'
 import { generateSessionFinancialReport } from '../banking/annapay.service'
-import { FinancialModule } from '@prisma/client'
+import { FinancialModule, ComandaItemType } from '@prisma/client'
 import { isHomeGameHost } from '../../lib/homegame-auth'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
 import { logger } from '../../lib/logger'
@@ -460,7 +460,7 @@ export async function finishSession(
       })
       await addComandaItemWithTx(tx, {
         comandaId: comanda.id,
-        type: 'STAFF_CAIXINHA' as any,
+        type: ComandaItemType.STAFF_CAIXINHA,
         amount,
         description: `Caixinha — ${session.homeGame.name}`,
         sessionId,
@@ -478,7 +478,7 @@ export async function finishSession(
       })
       await addComandaItemWithTx(tx, {
         comandaId: comanda.id,
-        type: 'STAFF_RAKEBACK' as any,
+        type: ComandaItemType.STAFF_RAKEBACK,
         amount: amountToFixed(value),
         description: `Rakeback — ${session.homeGame.name}`,
         sessionId,

@@ -174,8 +174,7 @@ export async function getMyHomeGamesWithRoles(userId: string) {
       include: { _count: { select: { members: true, sessions: true } } },
       orderBy: { createdAt: 'desc' },
     }),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (prisma as any).homeGameMember.findMany({
+    prisma.homeGameMember.findMany({
       where: { userId },
       include: {
         homeGame: {
@@ -188,7 +187,7 @@ export async function getMyHomeGamesWithRoles(userId: string) {
 
   const coHostGames: typeof ownerGames = []
   const playerGames: typeof ownerGames = []
-  for (const entry of memberEntries as Array<{ role: 'HOST' | 'PLAYER'; homeGame: typeof ownerGames[number] }>) {
+  for (const entry of memberEntries) {
     // Se o usuario tambem eh dono desse home game, ja esta em asOwner — nao duplica.
     if (entry.homeGame.hostId === userId) continue
     if (entry.role === 'HOST') coHostGames.push(entry.homeGame)
@@ -252,9 +251,7 @@ export async function setMemberRole(input: {
     throw new Error('O dono original nao pode ter o papel alterado')
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = prisma as any
-  const member = await db.homeGameMember.findUnique({
+  const member = await prisma.homeGameMember.findUnique({
     where: { homeGameId_userId: { homeGameId: input.homeGameId, userId: input.memberUserId } },
     select: { id: true },
   })
@@ -262,7 +259,7 @@ export async function setMemberRole(input: {
     throw new Error('Usuario nao e membro deste home game')
   }
 
-  return db.homeGameMember.update({
+  return prisma.homeGameMember.update({
     where: { homeGameId_userId: { homeGameId: input.homeGameId, userId: input.memberUserId } },
     data: { role: input.role },
     include: {
