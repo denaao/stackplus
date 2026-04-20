@@ -180,4 +180,11 @@ router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) =>
 
 // POST /comanda/:comandaId/close
 router.post('/:comandaId/close', async (req: AuthRequest, res: Response) => {
-  const com
+  const comanda = await ComandaService.closeComanda({
+    comandaId: req.params.comandaId,
+    closedByUserId: req.user!.userId,
+  })
+  res.json(comanda)
+})
+
+export default router
