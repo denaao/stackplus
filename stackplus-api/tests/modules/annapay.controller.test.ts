@@ -35,6 +35,8 @@ function mockReq(opts: { headers?: Record<string, string>; body?: any; ip?: stri
     path: opts.path ?? '/webhook/cob',
     method: 'POST',
     originalUrl: opts.path ?? '/webhook/cob',
+    // pino-http injeta req.log em runtime; mockamos aqui
+    log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
   }
 }
 
@@ -91,7 +93,6 @@ describe('annapay.controller handleCobWebhook', () => {
 
   it('retorna 401 invalid-webhook-secret quando header está presente mas errado', async () => {
     process.env.ANNAPAY_WEBHOOK_SECRET = 'super-secret-123'
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const { handleCobWebhook } = await import('../../src/modules/banking/annapay.controller')
     const req = mockReq({ headers: { 'x-annapay-webhook-secret': 'wrong-secret-xyz' } })
@@ -104,17 +105,14 @@ describe('annapay.controller handleCobWebhook', () => {
       expect.objectContaining({ ignored: 'invalid-webhook-secret' }),
     )
     expect(settleFromWebhookMock).not.toHaveBeenCalled()
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('invalid secret attempt'),
+    expect(req.log.warn).toHaveBeenCalledWith(
       expect.any(Object),
+      expect.stringContaining('invalid secret attempt'),
     )
-
-    consoleSpy.mockRestore()
   })
 
   it('retorna 401 quando secrets têm tamanhos diferentes (timing-safe compare rejeita)', async () => {
     process.env.ANNAPAY_WEBHOOK_SECRET = 'short'
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const { handleCobWebhook } = await import('../../src/modules/banking/annapay.controller')
     const req = mockReq({ headers: { 'x-annapay-webhook-secret': 'muuuuuuuito-longo-e-errado' } })
@@ -124,8 +122,6 @@ describe('annapay.controller handleCobWebhook', () => {
 
     expect(res.status).toHaveBeenCalledWith(401)
     expect(settleFromWebhookMock).not.toHaveBeenCalled()
-
-    consoleSpy.mockRestore()
   })
 
   it('processa normalmente quando header X-Annapay-Webhook-Secret bate com env', async () => {

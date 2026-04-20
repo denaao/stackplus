@@ -3,6 +3,7 @@ import { generateSessionFinancialReport } from '../banking/annapay.service'
 import { FinancialModule } from '@prisma/client'
 import { isHomeGameHost } from '../../lib/homegame-auth'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
+import { logger } from '../../lib/logger'
 
 function amountToFixed(value: number) {
   return Number(value.toFixed(2))
@@ -509,7 +510,7 @@ export async function finishSession(
       financialReport,
     }
   } catch (error) {
-    console.error('[ANNAPAY] Falha ao gerar relatório financeiro automático:', error)
+    logger.error({ err: error }, '[ANNAPAY] falha ao gerar relatório financeiro automático')
     return {
       ...payload,
       financialReportError: 'Falha ao gerar relatório financeiro automático',

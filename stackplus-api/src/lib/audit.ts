@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { logger } from './logger'
 
 /**
  * Helper para registrar evento de auditoria (SEC-008).
@@ -45,10 +46,13 @@ export async function logAudit(params: {
       },
     })
   } catch (error) {
-    console.error('[audit] falha ao gravar registro de auditoria:', {
-      action: params.action,
-      resource: params.resource,
-      error: error instanceof Error ? error.message : String(error),
-    })
+    logger.error(
+      {
+        action: params.action,
+        resource: params.resource,
+        err: error instanceof Error ? error.message : String(error),
+      },
+      '[audit] falha ao gravar registro de auditoria',
+    )
   }
 }

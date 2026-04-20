@@ -109,7 +109,7 @@ export async function settlePrepaidCharge(req: AuthRequest, res: Response) {
       const ranking = await getRanking(data.sessionId)
       emitSessionRankingUpdated(data.sessionId, ranking)
     } catch (error) {
-      console.warn('[annapay settle] realtime broadcast failed:', error)
+      req.log?.warn({ err: error }, '[annapay settle] realtime broadcast failed')
     }
   }
 
@@ -130,7 +130,7 @@ export async function settlePrepaidChargeByBody(req: AuthRequest, res: Response)
       const ranking = await getRanking(data.sessionId)
       emitSessionRankingUpdated(data.sessionId, ranking)
     } catch (error) {
-      console.warn('[annapay settle body] realtime broadcast failed:', error)
+      req.log?.warn({ err: error }, '[annapay settle body] realtime broadcast failed')
     }
   }
 
@@ -156,11 +156,7 @@ export async function handleCobWebhook(req: Request, res: Response) {
     // Header presente mas inválido: bloqueia e registra tentativa.
     // Timing-safe compare evita vazar o secret via side-channel.
     if (!safeCompareSecrets(providedSecret, configuredSecret)) {
-      console.warn('[annapay webhook] invalid secret attempt', {
-        ip: req.ip,
-        userAgent: String(req.headers['user-agent'] || ''),
-        path: req.path,
-      })
+      req.log?.warn({ ip: req.ip, userAgent: String(req.headers['user-agent'] || ''), path: req.path }, '[annapay webhook] invalid secret attempt')
       return res
         .status(401)
         .json({ received: false, ignored: 'invalid-webhook-secret' })
@@ -178,7 +174,7 @@ export async function handleCobWebhook(req: Request, res: Response) {
       const ranking = await getRanking(result.sessionId)
       emitSessionRankingUpdated(result.sessionId, ranking)
     } catch (error) {
-      console.warn('[annapay webhook] realtime broadcast failed:', error)
+      req.log?.warn({ err: error }, '[annapay webhook] realtime broadcast failed')
     }
   }
 

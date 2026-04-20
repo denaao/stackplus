@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma'
 import { createNormalizedCob, checkPixChargeIsPaid, createPix } from '../banking/annapay.service'
 import { isHomeGameHost } from '../../lib/homegame-auth'
+import { logger } from '../../lib/logger'
 
 /**
  * Autorização de acesso a uma comanda:
@@ -546,10 +547,10 @@ export async function checkComandaItemPixStatus(itemId: string, viewerUserId: st
  * Também reconcilia TRANSFER_OUT confirmados (PAID) sem bank tx.
  */
 export async function reconcileHomeGameBank(homeGameId: string, viewerUserId: string) {
-  console.log('[reconcile] start', { homeGameId, viewerUserId })
+  logger.info({ homeGameId, viewerUserId }, '[reconcile] start')
   try {
     const isManager = await isHomeGameHost(viewerUserId, homeGameId)
-    console.log('[reconcile] isManager?', isManager)
+    logger.debug({ isManager }, '[reconcile] isManager?')
     if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode reconciliar')
 
     const items = await db.comandaItem.findMany({
@@ -560,7 +561,7 @@ export async function reconcileHomeGameBank(homeGameId: string, viewerUserId: st
       },
       select: { id: true, type: true, amount: true, paymentReference: true },
     })
-    console.log('[reconcile] items to check:', items.length)
+    logger.debug({ count: items.length }, '[reconcile] items to check')
 
     const existingTxs = items.length > 0
       ? await db.homeGameBankTransaction.findMany({
@@ -569,13 +570,13 @@ export async function reconcileHomeGameBank(homeGameId: string, viewerUserId: st
         })
       : []
     const existingSet = new Set(existingTxs.map((t: any) => t.comandaItemId))
-    console.log('[reconcile] existing bank txs:', existingTxs.length)
+    logger.debug({ count: existingTxs.length }, '[reconcile] existing bank txs')
 
     let created = 0
     for (const it of items) {
       if (existingSet.has(it.id)) continue
       const direction = it.type === 'TRANSFER_OUT' ? 'OUT' : 'IN'
-      console.log('[reconcile] creating bank tx', { itemId: it.id, direction, amount: Number(it.amount) })
+      logger.info({ itemId: it.id, direction, amount: Number(it.amount) }, '[reconcile] creating bank tx')
       await recordBankTransaction({
         homeGameId,
         direction,
@@ -592,13 +593,13 @@ export async function reconcileHomeGameBank(homeGameId: string, viewerUserId: st
       select: { bankBalance: true },
     })
 
-    console.log('[reconcile] done', { created, newBalance: Number(home.bankBalance) })
+    logger.info({ created, newBalance: Number(home.bankBalance) }, '[reconcile] done')
     return {
       reconciledCount: created,
       newBalance: Number(home.bankBalance),
     }
   } catch (err) {
-    console.error('[reconcile] ERROR:', err instanceof Error ? err.stack : err)
+    logger.error({ err }, '[reconcile] error')
     throw err
   }
 }
@@ -790,7 +791,7 @@ export async function sendComandaPixOut({
       })
     } catch (err) {
       // PIX falhou — reverte o balance e marca item como CANCELED
-      console.error(`[comanda pix-out] Falha no envio do PIX (item ${item.id}):`, err)
+      logger.error({ err, itemId: item.id }, '[comanda pix-out] falha no envio do PIX')
       try {
         await prisma.$transaction(async (tx: any) => {
           await tx.comandaItem.update({
@@ -806,7 +807,7 @@ export async function sendComandaPixOut({
           })
         })
       } catch (rollbackErr) {
-        console.error(`[comanda pix-out] Falha ao reverter item ${item.id}:`, rollbackErr)
+        logger.error({ err: rollbackErr, itemId: item.id }, '[comanda pix-out] falha ao reverter item')
       }
     }
   })

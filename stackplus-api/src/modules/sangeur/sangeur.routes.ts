@@ -22,7 +22,7 @@ router.post('/webhooks/pix', async (req, res: Response) => {
     const result = await SangeurService.settleSangeurPixSaleFromWebhook(req.body)
     return res.status(200).json(result)
   } catch (error) {
-    console.error('[sangeur webhook] Error processing PIX payment:', error)
+    req.log?.error({ err: error }, '[sangeur webhook] error processing PIX payment')
     return res.status(200).json({ received: true, error: 'Processing failed' })
   }
 })
@@ -120,7 +120,7 @@ router.post('/shifts/:shiftId/sales', async (req: AuthRequest, res: Response) =>
     const sessionId = result.shift.session.id
     const room = getPrivateSessionRoom(sessionId)
     const socketsInRoom = await io.in(room).fetchSockets()
-    console.log(`[sangeur] emitting transaction:new to room=${room} | clients=${socketsInRoom.length}`)
+    req.log?.debug({ room, clients: socketsInRoom.length }, '[sangeur] emitting transaction:new')
     io.to(room).emit('transaction:new', {
       transaction: result.transaction,
       playerState: result.playerState,
@@ -130,7 +130,7 @@ router.post('/shifts/:shiftId/sales', async (req: AuthRequest, res: Response) =>
     const ranking = await getRanking(sessionId)
     emitSessionRankingUpdated(sessionId, ranking)
   } catch (error) {
-    console.warn('[sangeur] realtime broadcast failed:', error)
+    req.log?.warn({ err: error }, '[sangeur] realtime broadcast failed')
   }
 
   res.status(201).json(result)

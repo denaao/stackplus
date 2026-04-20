@@ -3,6 +3,7 @@ import { SangeurMovementType, SangeurPaymentMethod, SangeurPaymentStatus, Sangeu
 import { randomBytes } from 'crypto'
 import * as AnnapayService from '../banking/annapay.service'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
+import { logger } from '../../lib/logger'
 
 function toNumber(value: string | number | null | undefined | any) {
   return Number(value || 0)
@@ -481,7 +482,7 @@ export async function registerSale(input: {
         if (chargeId) paymentReference = chargeId
       }
     } catch (error) {
-      console.warn('[sangeur.registerSale] Failed to create PIX charge:', error)
+      logger.warn({ err: error }, '[sangeur.registerSale] failed to create PIX charge')
       throw new Error('Falha ao criar cobrança PIX. Tente novamente.')
     }
   }
@@ -1021,7 +1022,7 @@ export async function getSangeurPixChargeDetails(chargeId: string) {
   try {
     return await AnnapayService.getCobById(chargeId)
   } catch (error) {
-    console.error('[sangeur] Failed to fetch charge details:', error)
+    logger.error({ err: error }, '[sangeur] failed to fetch charge details')
     throw new Error('Falha ao buscar detalhes da cobrança PIX')
   }
 }

@@ -32,7 +32,7 @@ router.post('/transaction', authenticate, async (req: AuthRequest, res: Response
     const ranking = await getRanking(data.sessionId)
     emitSessionRankingUpdated(data.sessionId, ranking)
   } catch (error) {
-    console.warn('[cashier] realtime broadcast failed:', error)
+    req.log?.warn({ err: error }, '[cashier] realtime broadcast failed')
   }
 
   res.status(201).json(result)
@@ -72,7 +72,7 @@ router.delete('/transaction/:transactionId', authenticate, async (req: AuthReque
     const ranking = await getRanking(result.sessionId)
     emitSessionRankingUpdated(result.sessionId, ranking)
   } catch (error) {
-    console.warn('[cashier] realtime broadcast failed after delete:', error)
+    req.log?.warn({ err: error }, '[cashier] realtime broadcast failed after delete')
   }
 
   res.json(result)
