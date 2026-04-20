@@ -6,11 +6,6 @@ import { passwordSchema } from '../../utils/password'
 
 const pixTypeEnum = z.enum(['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'RANDOM'])
 
-/**
- * Rejeita os 9 primeiros dígitos quando formam sequência óbvia (asc/desc),
- * p.ex. 123456789 → CPF fake 12345678909 que passa no DV. Chance de usuário
- * real ter essa sequência é essencialmente zero (SEC-009).
- */
 function isSequentialFirst9(digits: string): boolean {
   const first9 = digits.slice(0, 9)
   let asc = true
@@ -226,4 +221,11 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
 
 export async function changeSangeurPassword(req: AuthRequest, res: Response): Promise<void> {
   const data = sangeurChangePasswordSchema.parse(req.body)
-  const result = a
+  const result = await AuthService.changeSangeurPassword({
+    userId: req.user!.userId,
+    homeGameId: data.homeGameId,
+    currentPassword: data.currentPassword,
+    newPassword: data.newPassword,
+  })
+  res.json(result)
+}
