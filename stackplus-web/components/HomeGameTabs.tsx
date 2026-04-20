@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useHomeGameRole } from '@/hooks/useHomeGameRole'
 
 type TabKey = 'TOURNAMENTS' | 'CASH' | 'COMANDAS'
 
@@ -15,6 +16,7 @@ interface HomeGameTabsProps {
  */
 export default function HomeGameTabs({ homeGameId, active }: HomeGameTabsProps) {
   const router = useRouter()
+  const { canManage } = useHomeGameRole(homeGameId)
 
   const tabs: Array<{ key: TabKey; label: string; icon: string; onClick: () => void }> = [
     {
@@ -29,12 +31,16 @@ export default function HomeGameTabs({ homeGameId, active }: HomeGameTabsProps) 
       icon: '💵',
       onClick: () => router.push(`/homegame/${homeGameId}`),
     },
-    {
-      key: 'COMANDAS',
-      label: 'Comandas',
-      icon: '💲',
-      onClick: () => router.push(`/comanda?homeGameId=${homeGameId}`),
-    },
+    ...(canManage
+      ? [
+          {
+            key: 'COMANDAS' as TabKey,
+            label: 'Comandas',
+            icon: '💲',
+            onClick: () => router.push(`/comanda?homeGameId=${homeGameId}`),
+          },
+        ]
+      : []),
   ]
 
   return (

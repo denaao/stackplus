@@ -6,6 +6,7 @@ import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
+import { useHomeGameRole } from '@/hooks/useHomeGameRole'
 
 interface Comanda {
   id: string
@@ -94,11 +95,21 @@ function ComandasContent() {
   const [closingCashbox, setClosingCashbox] = useState(false)
   const [cashboxReport, setCashboxReport] = useState<CashboxReport | null>(null)
   const [cashboxError, setCashboxError] = useState<string | null>(null)
-  const [myRoleInHG, setMyRoleInHG] = useState<'OWNER' | 'COHOST' | 'PLAYER' | null>(null)
   const [bankBalance, setBankBalance] = useState<number | null>(null)
+
+  // Papel do usuário no home game — define se tem permissão pra listar/gerenciar.
+  const { canManage, loading: roleLoading } = useHomeGameRole(homeGameId)
 
   useEffect(() => {
     if (!homeGameId) return
+    if (roleLoading) return
+    // Não-manager (PLAYER ou fora do HG) não pode listar comandas. Bloqueia
+    // a chamada aqui pra evitar 403 no backend e ruído no log (QUAL-005).
+    if (!canManage) {
+      setLoading(false)
+      setComandas([])
+      return
+    }
     setLoading(true)
     const params = new URLSearchParams({ homeGameId })
     // No modo histórico filtra por status no backend; no normal busca tudo e filtra no frontend
@@ -123,21 +134,7 @@ function ComandasContent() {
         setComandas(data)
       })
       .finally(() => setLoading(false))
-  }, [homeGameId, playerIdParam, isHistoryMode])
-
-  // Descobre o papel do usuário logado neste home game (pra mostrar/esconder "Fechar caixa").
-  useEffect(() => {
-    if (!homeGameId) { setMyRoleInHG(null); return }
-    api.get('/home-games/mine/with-roles')
-      .then(r => {
-        const d = r.data
-        if ((d.asOwner ?? []).some((g: any) => g.id === homeGameId)) setMyRoleInHG('OWNER')
-        else if ((d.asCoHost ?? []).some((g: any) => g.id === homeGameId)) setMyRoleInHG('COHOST')
-        else if ((d.asPlayer ?? []).some((g: any) => g.id === homeGameId)) setMyRoleInHG('PLAYER')
-        else setMyRoleInHG(null)
-      })
-      .catch(() => setMyRoleInHG(null))
-  }, [homeGameId])
+  }, [homeGameId, playerIdParam, isHistoryMode, canManage, roleLoading])
 
   // Saldo bancário do home game.
   useEffect(() => {
@@ -181,6 +178,35 @@ function ComandasContent() {
     } finally {
       setClosingCashbox(false)
     }
+  }
+
+  // Player comum (ou user fora do HG) não pode abrir a listagem de comandas.
+  // Mostra tela de acesso restrito em vez de renderizar UI com lista vazia + 403 silencioso.
+  if (homeGameId && !roleLoading && !canManage) {
+    return (
+      <div className="min-h-screen bg-sx-bg text-white">
+        <AppHeader
+          title="Comandas"
+          onBack={() => router.back()}
+          userName={user?.name}
+          onLogout={() => { logout(); router.push('/') }}
+        />
+        <main className="max-w-md mx-auto px-4 py-16 text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h2 className="text-xl font-bold text-white mb-2">Área restrita</h2>
+          <p className="text-sx-muted mb-8">
+            A lista de comandas é visível apenas para o host ou co-host do home game.
+            Você está aqui como jogador.
+          </p>
+          <button
+            onClick={() => router.push(`/homegame/${homeGameId}`)}
+            className="rounded-lg bg-sx-cyan px-5 py-2.5 text-sm font-semibold text-sx-bg"
+          >
+            Voltar pro home game
+          </button>
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -287,7 +313,7 @@ function ComandasContent() {
             Fechadas
           </button>
 
-          {homeGameId && !isHistoryMode && (user?.role === 'ADMIN' || myRoleInHG === 'OWNER' || myRoleInHG === 'COHOST') && (
+          {homeGameId && !isHistoryMode && canManage && (
             <button
               onClick={() => setShowCloseCashboxModal(true)}
               className="ml-auto px-4 py-1.5 rounded-lg text-xs font-bold transition-all"

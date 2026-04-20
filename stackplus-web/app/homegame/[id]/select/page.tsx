@@ -6,6 +6,7 @@ import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
 import { useAuthStore } from '@/store/useStore'
+import { useHomeGameRole } from '@/hooks/useHomeGameRole'
 
 interface HomeGame {
   id: string
@@ -25,6 +26,7 @@ export default function HomeGameSelectPage() {
   const id = params.id as string
   const [game, setGame] = useState<HomeGame | null>(null)
   const [loading, setLoading] = useState(true)
+  const { canManage } = useHomeGameRole(id)
 
   useEffect(() => {
     api.get(`/home-games/${id}`)
@@ -39,10 +41,13 @@ export default function HomeGameSelectPage() {
 
   if (!game) return null
 
+  // "Comandas" só aparece para host/co-host/admin — jogador comum não lista comandas do HG.
   const actions = [
     { key: 'cash',       label: 'Cash Game', icon: '💵', onClick: () => router.push(`/homegame/${id}`) },
     { key: 'tournament', label: 'Torneio',   icon: '🏆', onClick: () => router.push(`/homegame/${id}/tournaments`) },
-    { key: 'comanda',    label: 'Comandas',  icon: '💲', onClick: () => router.push(`/comanda?homeGameId=${id}`) },
+    ...(canManage
+      ? [{ key: 'comanda', label: 'Comandas', icon: '💲', onClick: () => router.push(`/comanda?homeGameId=${id}`) }]
+      : []),
     { key: 'members',    label: 'Membros',   icon: '👥', onClick: () => router.push(`/homegame/${id}/members`) },
   ]
 
