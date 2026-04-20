@@ -4,6 +4,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import routes from './routes'
 import { errorMiddleware } from './middlewares/error.middleware'
+import { requestLogger } from './middlewares/request-logger.middleware'
 
 const app = express()
 
@@ -39,6 +40,10 @@ app.use(cors({
   credentials: true,
 }))
 app.use(express.json())
+
+// Request logging (QUAL-005): pino-http injeta req.log com correlation id
+// e loga entrada/saída de cada request automaticamente.
+app.use(requestLogger)
 
 app.use('/api', routes)
 

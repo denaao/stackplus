@@ -77,18 +77,27 @@ export function errorMiddleware(
   const message = extractMessage(err) || 'Erro interno do servidor'
 
   // Contexto do request — userId/role se autenticado, IP pra rastrear anônimos.
-  // Melhora drástica na capacidade de rastrear 401/403/500 em produção.
   const authUser = (req as Request & { user?: { userId?: string; role?: string } }).user
   const userId = authUser?.userId ?? 'anonymous'
   const userRole = authUser?.role ?? '-'
-  const ip = req.ip || req.socket?.remoteAddress || '-'
 
-  console.error(
-    `[ERROR] ${req.method} ${req.originalUrl} -> ${status} | user=${userId} role=${userRole} ip=${ip} | ${message}`,
+  // req.log vem do pino-http (middleware requestLogger) com requestId injetado.
+  // Fallback pra console se por algum motivo não existir.
+  const log =
+    (req as Request & { log?: { error: (obj: object, msg: string) => void } }).log ?? {
+      error: (obj: object, msg: string) => console.error(msg, obj),
+    }
+
+  log.error(
+    {
+      status,
+      userId,
+      role: userRole,
+      errorName: err instanceof Error ? err.name : undefined,
+      stack: err instanceof Error ? err.stack : undefined,
+    },
+    message,
   )
-  if (err instanceof Error && err.stack) {
-    console.error(err.stack)
-  }
 
   if (err instanceof ZodError) {
     res.status(status).json({
