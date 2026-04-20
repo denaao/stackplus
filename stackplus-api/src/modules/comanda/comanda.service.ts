@@ -559,11 +559,11 @@ export async function reconcileHomeGameBank(homeGameId: string, viewerUserId: st
 
     const existingTxs = items.length > 0
       ? await db.homeGameBankTransaction.findMany({
-          where: { homeGameId, comandaItemId: { in: items.map((i: any) => i.id) } },
+          where: { homeGameId, comandaItemId: { in: items.map((i) => i.id) } },
           select: { comandaItemId: true },
         })
       : []
-    const existingSet = new Set(existingTxs.map((t: any) => t.comandaItemId))
+    const existingSet = new Set(existingTxs.map((t) => t.comandaItemId))
     logger.debug({ count: existingTxs.length }, '[reconcile] existing bank txs')
 
     let created = 0
@@ -632,7 +632,7 @@ export async function getHomeGameBank(homeGameId: string, viewerUserId: string, 
     homeGameId: home.id,
     homeGameName: home.name,
     balance: Number(home.bankBalance),
-    transactions: transactions.map((t: any) => ({
+    transactions: transactions.map((t) => ({
       id: t.id,
       direction: t.direction,
       amount: Number(t.amount),
@@ -832,11 +832,12 @@ export async function closeCashbox({
   const isManager = await isHomeGameHost(viewerUserId, homeGameId)
   if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode fechar o caixa')
 
-  const itemWhere: any = { comanda: { homeGameId } }
+  const itemWhere: Prisma.ComandaItemWhereInput = { comanda: { homeGameId } }
   if (from || to) {
-    itemWhere.createdAt = {}
-    if (from) itemWhere.createdAt.gte = from
-    if (to) itemWhere.createdAt.lte = to
+    const createdAt: Prisma.DateTimeFilter = {}
+    if (from) createdAt.gte = from
+    if (to) createdAt.lte = to
+    itemWhere.createdAt = createdAt
   }
 
   const items = await db.comandaItem.findMany({
@@ -867,8 +868,7 @@ export async function closeCashbox({
   const sessions = await db.session.count({ where: { homeGameId } })
   const tournaments = await db.tournament.count({ where: { homeGameId } })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totals: any = {
+  const totals = {
     totalDebits: 0,
     totalCredits: 0,
     totalCash: 0,
@@ -966,18 +966,18 @@ export async function closeCashbox({
     where: { homeGameId, status: 'FINISHED' },
     select: { rake: true },
   })
-  totals.totalRake = finishedSessions.reduce((sum: number, s: any) => sum + Number(s.rake || 0), 0)
+  totals.totalRake = finishedSessions.reduce((sum, s) => sum + Number(s.rake || 0), 0)
 
   // Round money
-  for (const k of Object.keys(totals)) {
+  for (const k of Object.keys(totals) as Array<keyof typeof totals>) {
     totals[k] = Number(totals[k].toFixed(2))
   }
 
-  const open = comandas.filter((c: any) => c.status === 'OPEN')
-  const closed = comandas.filter((c: any) => c.status === 'CLOSED')
-  const openBalancesTotal = open.reduce((s: number, c: any) => s + Number(c.balance), 0)
-  const playersWithDebt = open.filter((c: any) => Number(c.balance) < 0).length
-  const playersWithCredit = open.filter((c: any) => Number(c.balance) > 0).length
+  const open = comandas.filter((c) => c.status === 'OPEN')
+  const closed = comandas.filter((c) => c.status === 'CLOSED')
+  const openBalancesTotal = open.reduce((s, c) => s + Number(c.balance), 0)
+  const playersWithDebt = open.filter((c) => Number(c.balance) < 0).length
+  const playersWithCredit = open.filter((c) => Number(c.balance) > 0).length
 
   const round = (n: number) => Number(n.toFixed(2))
 
@@ -1014,14 +1014,14 @@ export async function closeCashbox({
     debitsByPlayer: Array.from(debitsByPlayer.values())
       .map((e) => ({ ...e, amount: round(e.amount) }))
       .sort((a, b) => b.amount - a.amount),
-    openComandas: open.map((c: any) => ({
+    openComandas: open.map((c) => ({
       id: c.id,
       playerId: c.player.id,
       playerName: c.player.name,
       balance: Number(c.balance),
       openedAt: c.openedAt,
-    })).sort((a: any, b: any) => a.balance - b.balance), // devedores primeiro
-    closedComandasDetail: closed.slice(0, 50).map((c: any) => ({
+    })).sort((a, b) => a.balance - b.balance), // devedores primeiro
+    closedComandasDetail: closed.slice(0, 50).map((c) => ({
       id: c.id,
       playerName: c.player.name,
       balance: Number(c.balance),
@@ -1047,7 +1047,7 @@ export async function closeComanda({
   if (comanda.status === 'CLOSED') throw new Error('Comanda já está fechada')
 
   const hasPendingPayments = comanda.items.some(
-    (i: any) => isPaymentType(i.type) && i.paymentStatus === 'PENDING',
+    (i) => isPaymentType(i.type) && i.paymentStatus === 'PENDING',
   )
   if (hasPendingPayments) {
     throw new Error('Existem pagamentos pendentes na comanda')

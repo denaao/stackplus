@@ -255,7 +255,9 @@ async function login(forceRefresh = false): Promise<string> {
     throw new Error(message)
   }
 
-  const token = (payload as any)?.token || (payload as any)?.accessToken || (payload as any)?.jwt
+  // Resposta do login varia (token/accessToken/jwt) — narrow com unknown.
+  const payloadObj = (payload && typeof payload === 'object') ? (payload as Record<string, unknown>) : {}
+  const token = payloadObj.token || payloadObj.accessToken || payloadObj.jwt
   if (!token || typeof token !== 'string') {
     throw new Error('Resposta de login da Annapay sem token JWT')
   }
@@ -709,7 +711,7 @@ function extractPaidAtDeep(payload: unknown): string | null {
 }
 
 function extractStatusDeep(payload: unknown): string | null {
-  const stack: any[] = [payload]
+  const stack: unknown[] = [payload]
 
   while (stack.length > 0) {
     const current = stack.pop()
@@ -720,13 +722,14 @@ function extractStatusDeep(payload: unknown): string | null {
       continue
     }
 
-    const status = typeof current.status === 'string' ? current.status.trim() : ''
+    const obj = current as Record<string, unknown>
+    const status = typeof obj.status === 'string' ? obj.status.trim() : ''
     if (status) return status
 
-    const situacao = typeof current.situacao === 'string' ? current.situacao.trim() : ''
+    const situacao = typeof obj.situacao === 'string' ? obj.situacao.trim() : ''
     if (situacao) return situacao
 
-    Object.values(current as Record<string, unknown>).forEach((value) => {
+    Object.values(obj).forEach((value) => {
       if (value && typeof value === 'object') stack.push(value)
     })
   }
@@ -735,7 +738,7 @@ function extractStatusDeep(payload: unknown): string | null {
 }
 
 function payloadHasPixConfirmation(payload: unknown): boolean {
-  const stack: any[] = [payload]
+  const stack: unknown[] = [payload]
 
   while (stack.length > 0) {
     const current = stack.pop()
@@ -799,15 +802,15 @@ export async function checkPixChargeIsPaid(chargeId: string, virtualAccount?: st
   }
 }
 
-function getStringByPaths(payload: any, paths: string[][]): string | null {
+function getStringByPaths(payload: unknown, paths: string[][]): string | null {
   for (const path of paths) {
-    let current: any = payload
+    let current: unknown = payload
     for (const key of path) {
-      if (current == null) {
+      if (current == null || typeof current !== 'object') {
         current = undefined
         break
       }
-      current = current[key]
+      current = (current as Record<string, unknown>)[key]
     }
 
     if (typeof current === 'string' && current.trim()) {
@@ -819,7 +822,7 @@ function getStringByPaths(payload: any, paths: string[][]): string | null {
 }
 
 function extractPixOrderId(payload: unknown): string | null {
-  return getStringByPaths(payload as any, [
+  return getStringByPaths(payload, [
     ['id'],
     ['pixId'],
     ['orderId'],
@@ -845,7 +848,7 @@ function toDataImage(value: string | null): string | null {
 }
 
 function normalizeCobPayload(payload: unknown): NormalizedCobResult {
-  const source = payload as any
+  const source = payload
   // IMPORTANTE: Priorizar o ID próprio da Annapay ANTES de txid (que é um identificador PIX diferente)
   const id = getStringByPaths(source, [
     ['id'],

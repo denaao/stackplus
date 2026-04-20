@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma'
-import { ComandaItemType, SangeurMovementType, SangeurPaymentMethod, SangeurPaymentStatus, SangeurShiftStatus, SessionStatus, TransactionType } from '@prisma/client'
+import { ComandaItemType, Prisma, SangeurMovementType, SangeurPaymentMethod, SangeurPaymentStatus, SangeurShiftStatus, SessionStatus, TransactionType } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import * as AnnapayService from '../banking/annapay.service'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
@@ -40,29 +40,35 @@ async function ensureSangeurAccess(homeGameId: string, userId: string) {
   return access
 }
 
-function buildShiftSummary(shift: any) {
+// Shift com movements e sales inclusos — o include real é mais profundo (session,
+// sangeurAccess, etc.), mas essas são as únicas relações usadas aqui.
+type ShiftWithMovementsAndSales = Prisma.SangeurShiftGetPayload<{
+  include: { movements: true; sales: true }
+}>
+
+function buildShiftSummary(shift: ShiftWithMovementsAndSales) {
   const initialChips = toNumber(shift.initialChips)
   const reloadedChips = shift.movements
-    .filter((movement: any) => movement.type === 'RELOAD')
-    .reduce((sum: number, movement: any) => sum + toNumber(movement.chips), 0)
+    .filter((movement) => movement.type === 'RELOAD')
+    .reduce((sum, movement) => sum + toNumber(movement.chips), 0)
   const returnedChips = shift.movements
-    .filter((movement: any) => movement.type === 'RETURN')
-    .reduce((sum: number, movement: any) => sum + toNumber(movement.chips), 0)
+    .filter((movement) => movement.type === 'RETURN')
+    .reduce((sum, movement) => sum + toNumber(movement.chips), 0)
 
-  const validSales = shift.sales.filter((sale: any) => sale.paymentStatus !== 'CANCELED')
-  const soldChips = validSales.reduce((sum: number, sale: any) => sum + toNumber(sale.chips), 0)
+  const validSales = shift.sales.filter((sale) => sale.paymentStatus !== 'CANCELED')
+  const soldChips = validSales.reduce((sum, sale) => sum + toNumber(sale.chips), 0)
 
-  const totalSalesAmount = validSales.reduce((sum: number, sale: any) => sum + toNumber(sale.amount), 0)
+  const totalSalesAmount = validSales.reduce((sum, sale) => sum + toNumber(sale.amount), 0)
   const paidAmount = validSales
-    .filter((sale: any) => sale.paymentStatus === 'PAID')
-    .reduce((sum: number, sale: any) => sum + toNumber(sale.amount), 0)
+    .filter((sale) => sale.paymentStatus === 'PAID')
+    .reduce((sum, sale) => sum + toNumber(sale.amount), 0)
   const pendingAmount = validSales
-    .filter((sale: any) => sale.paymentStatus === 'PENDING')
-    .reduce((sum: number, sale: any) => sum + toNumber(sale.amount), 0)
+    .filter((sale) => sale.paymentStatus === 'PENDING')
+    .reduce((sum, sale) => sum + toNumber(sale.amount), 0)
 
   const pendingVoucherAmount = validSales
-    .filter((sale: any) => sale.paymentStatus === 'PENDING' && sale.paymentMethod === 'VOUCHER')
-    .reduce((sum: number, sale: any) => sum + toNumber(sale.amount), 0)
+    .filter((sale) => sale.paymentStatus === 'PENDING' && sale.paymentMethod === 'VOUCHER')
+    .reduce((sum, sale) => sum + toNumber(sale.amount), 0)
 
   const availableChips = round2(initialChips + reloadedChips - soldChips - returnedChips)
 
@@ -455,7 +461,7 @@ export async function registerSale(input: {
     : SangeurPaymentStatus.PAID
 
   let paymentReference = input.paymentReference?.trim() || null
-  let pixQrData: any = null
+  let pixQrData: Awaited<ReturnType<typeof AnnapayService.createNormalizedCob>> | null = null
 
   // PIX_QR: criar cobrança Annapay antes de persistir qualquer coisa
   if (input.paymentMethod === SangeurPaymentMethod.PIX_QR) {
@@ -477,8 +483,10 @@ export async function registerSale(input: {
 
       pixQrData = cobResult
       if (typeof cobResult === 'object' && cobResult !== null) {
-        const normalized = cobResult as Record<string, any>
-        const chargeId = normalized.id || normalized.identificador
+        const normalized = cobResult as Record<string, unknown>
+        const chargeId = typeof normalized.id === 'string' ? normalized.id
+          : typeof normalized.identificador === 'string' ? normalized.identificador
+          : null
         if (chargeId) paymentReference = chargeId
       }
     } catch (error) {
@@ -828,25 +836,25 @@ export async function getShiftClosingReport(input: {
   ] as const
 
   const paymentBreakdown = methods.map((method) => {
-    const methodSales = shift.sales.filter((sale: any) => sale.paymentMethod === method)
-    const paidSales = methodSales.filter((sale: any) => sale.paymentStatus === SangeurPaymentStatus.PAID)
-    const pendingSales = methodSales.filter((sale: any) => sale.paymentStatus === SangeurPaymentStatus.PENDING)
-    const canceledSales = methodSales.filter((sale: any) => sale.paymentStatus === SangeurPaymentStatus.CANCELED)
+    const methodSales = shift.sales.filter((sale) => sale.paymentMethod === method)
+    const paidSales = methodSales.filter((sale) => sale.paymentStatus === SangeurPaymentStatus.PAID)
+    const pendingSales = methodSales.filter((sale) => sale.paymentStatus === SangeurPaymentStatus.PENDING)
+    const canceledSales = methodSales.filter((sale) => sale.paymentStatus === SangeurPaymentStatus.CANCELED)
 
     return {
       paymentMethod: method,
       salesCount: methodSales.length,
-      chipsTotal: round2(methodSales.reduce((sum: number, sale: any) => sum + toNumber(sale.chips), 0)),
-      amountTotal: round2(methodSales.reduce((sum: number, sale: any) => sum + toNumber(sale.amount), 0)),
-      amountPaid: round2(paidSales.reduce((sum: number, sale: any) => sum + toNumber(sale.amount), 0)),
-      amountPending: round2(pendingSales.reduce((sum: number, sale: any) => sum + toNumber(sale.amount), 0)),
-      amountCanceled: round2(canceledSales.reduce((sum: number, sale: any) => sum + toNumber(sale.amount), 0)),
+      chipsTotal: round2(methodSales.reduce((sum, sale) => sum + toNumber(sale.chips), 0)),
+      amountTotal: round2(methodSales.reduce((sum, sale) => sum + toNumber(sale.amount), 0)),
+      amountPaid: round2(paidSales.reduce((sum, sale) => sum + toNumber(sale.amount), 0)),
+      amountPending: round2(pendingSales.reduce((sum, sale) => sum + toNumber(sale.amount), 0)),
+      amountCanceled: round2(canceledSales.reduce((sum, sale) => sum + toNumber(sale.amount), 0)),
     }
   })
 
   const pendingSales = shift.sales
-    .filter((sale: any) => sale.paymentStatus === SangeurPaymentStatus.PENDING)
-    .map((sale: any) => ({
+    .filter((sale) => sale.paymentStatus === SangeurPaymentStatus.PENDING)
+    .map((sale) => ({
       saleId: sale.id,
       paymentMethod: sale.paymentMethod,
       voucherCode: sale.voucherCode,
@@ -893,9 +901,9 @@ export async function getShiftClosingReport(input: {
       pendingAmount: shift.summary.pendingAmount,
       pendingVoucherAmount: shift.summary.pendingVoucherAmount,
       salesCount: shift.sales.length,
-      salesPaidCount: shift.sales.filter((sale: any) => sale.paymentStatus === SangeurPaymentStatus.PAID).length,
-      salesPendingCount: shift.sales.filter((sale: any) => sale.paymentStatus === SangeurPaymentStatus.PENDING).length,
-      salesCanceledCount: shift.sales.filter((sale: any) => sale.paymentStatus === SangeurPaymentStatus.CANCELED).length,
+      salesPaidCount: shift.sales.filter((sale) => sale.paymentStatus === SangeurPaymentStatus.PAID).length,
+      salesPendingCount: shift.sales.filter((sale) => sale.paymentStatus === SangeurPaymentStatus.PENDING).length,
+      salesCanceledCount: shift.sales.filter((sale) => sale.paymentStatus === SangeurPaymentStatus.CANCELED).length,
     },
     paymentBreakdown,
     pendingSales,

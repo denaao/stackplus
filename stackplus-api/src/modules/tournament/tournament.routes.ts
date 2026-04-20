@@ -209,7 +209,7 @@ router.post('/:tournamentId/cancel', async (req: AuthRequest, res: Response) => 
 router.get('/:tournamentId/payout-suggestion', async (req: AuthRequest, res: Response) => {
   const tournament = await TournamentService.getTournament(req.params.tournamentId)
   const playerCount = tournament.players.filter(
-    (p: any) => !['ELIMINATED'].includes(p.status) || true // conta todos os inscritos
+    (p) => !['ELIMINATED'].includes(p.status) || true // conta todos os inscritos
   ).length
   const suggestion = TournamentService.calcPayoutSuggestion(
     Number(tournament.prizePool),

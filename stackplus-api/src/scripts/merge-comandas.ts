@@ -14,7 +14,7 @@
  *   npx ts-node src/scripts/merge-comandas.ts                (executa)
  */
 
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 
 const db = new PrismaClient()
 const DRY_RUN = process.env.DRY_RUN === 'true'
@@ -97,7 +97,7 @@ async function main() {
       )
 
       if (!DRY_RUN) {
-        await db.$transaction(async (tx: any) => {
+        await db.$transaction(async (tx: Prisma.TransactionClient) => {
           // Cria o item de carry-over
           await tx.comandaItem.create({
             data: {

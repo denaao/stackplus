@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma'
-import { TournamentStatus } from '@prisma/client'
+import { Prisma, TournamentStatus } from '@prisma/client'
 import * as ComandaService from '../comanda/comanda.service'
 
 // Alias mantido pra reduzir churn do diff. Pode ser removido gradualmente.
@@ -372,7 +372,7 @@ export async function registerPlayer({
   const prizeIncrement = baseForRake * (1 - rakeRate)
   const rakeIncrement = baseForRake * rakeRate
 
-  const tournamentPlayer = await prisma.$transaction(async (tx: any) => {
+  const tournamentPlayer = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const tp = await tx.tournamentPlayer.create({
       data: {
         tournamentId,
@@ -453,7 +453,7 @@ export async function cancelRegistration({
   const prizeToRevert = baseCharged * (1 - rakeRate)
   const rakeToRevert = baseCharged * rakeRate
 
-  await prisma.$transaction(async (tx: any) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Estorna o buy-in na comanda
     if (buyInItem) {
       await tx.comanda.update({
@@ -536,7 +536,7 @@ export async function registerRebuy({
   const prizeIncrement = baseForRake * (1 - rakeRate)
   const rakeIncrement = baseForRake * rakeRate
 
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const updated = await tx.tournamentPlayer.update({
       where: { id: tournamentPlayerId },
       data: { rebuysCount: { increment: rebuyType === 'DOUBLE' ? 2 : 1 } },
@@ -636,7 +636,7 @@ export async function reEntryPlayer({
     addonRakeIncrement = addonCharge * rakeRate
   }
 
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Reverte prêmio automático que possa ter sido creditado ao ser eliminado
     const prizeItem = await tx.comandaItem.findFirst({
       where: { tournamentPlayerId, type: 'TOURNAMENT_PRIZE' },
@@ -759,7 +759,7 @@ export async function registerAddon({
   const prizeIncrement = base * (1 - rakeRate)
   const rakeIncrement = base * rakeRate
 
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const updated = await tx.tournamentPlayer.update({
       where: { id: tournamentPlayerId },
       data: { hasAddon: true },
@@ -852,7 +852,7 @@ export async function eliminatePlayer({
   }
   const prizeEntry = effectivePayouts.find((p) => p.position === position)
 
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Marca eliminado com posição calculada
     const eliminated = await tx.tournamentPlayer.update({
       where: { id: tournamentPlayerId },
@@ -984,7 +984,7 @@ export async function awardPrize({
     include: { tournament: true, comanda: true },
   })
 
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.tournamentPlayer.update({
       where: { id: tournamentPlayerId },
       data: { prizeAmount },
@@ -1207,7 +1207,7 @@ export async function finishByDeal(tournamentId: string) {
     (a, b) => Number(b.prizeAmount ?? 0) - Number(a.prizeAmount ?? 0)
   )
 
-  return prisma.$transaction(async (tx: any) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     for (let i = 0; i < sorted.length; i++) {
       const p = sorted[i]
       const isWinner = i === 0
