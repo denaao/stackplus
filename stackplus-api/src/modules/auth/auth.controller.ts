@@ -2,13 +2,33 @@ import { Request, Response } from 'express'
 import * as AuthService from './auth.service'
 import { AuthRequest } from '../../middlewares/auth.middleware'
 import { z } from 'zod'
+import { passwordSchema } from '../../utils/password'
 
 const pixTypeEnum = z.enum(['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'RANDOM'])
+
+/**
+ * Rejeita os 9 primeiros dígitos quando formam sequência óbvia (asc/desc),
+ * p.ex. 123456789 → CPF fake 12345678909 que passa no DV. Chance de usuário
+ * real ter essa sequência é essencialmente zero (SEC-009).
+ */
+function isSequentialFirst9(digits: string): boolean {
+  const first9 = digits.slice(0, 9)
+  let asc = true
+  let desc = true
+  for (let i = 1; i < first9.length; i += 1) {
+    const prev = Number(first9[i - 1])
+    const curr = Number(first9[i])
+    if (curr !== (prev + 1) % 10) asc = false
+    if (curr !== (prev - 1 + 10) % 10) desc = false
+  }
+  return asc || desc
+}
 
 function isValidCpf(value: string) {
   const digits = value.replace(/\D/g, '')
   if (digits.length !== 11) return false
   if (/^(\d)\1{10}$/.test(digits)) return false
+  if (isSequentialFirst9(digits)) return false
 
   let sum = 0
   for (let i = 0; i < 9; i += 1) sum += Number(digits[i]) * (10 - i)
@@ -47,7 +67,7 @@ const registerSchema = z.object({
   cpf: z.string().trim().min(11),
   email: z.string().email().optional().or(z.literal('')),
   phone: z.string().trim().optional(),
-  password: z.string().min(6),
+  password: passwordSchema,
   pixType: pixTypeEnum,
   pixKey: z.string().trim().min(3).max(120),
 }).superRefine((data, ctx) => {
@@ -106,7 +126,7 @@ const sangeurLoginSchema = z.object({
 const sangeurChangePasswordSchema = z.object({
   homeGameId: z.string().uuid(),
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(6).max(120),
+  newPassword: passwordSchema,
 })
 
 export async function register(req: Request, res: Response): Promise<void> {
@@ -191,7 +211,7 @@ export async function updateMe(req: AuthRequest, res: Response): Promise<void> {
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(6).max(120),
+  newPassword: passwordSchema,
 })
 
 export async function changePassword(req: AuthRequest, res: Response): Promise<void> {
@@ -206,11 +226,4 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
 
 export async function changeSangeurPassword(req: AuthRequest, res: Response): Promise<void> {
   const data = sangeurChangePasswordSchema.parse(req.body)
-  const result = await AuthService.changeSangeurPassword({
-    userId: req.user!.userId,
-    homeGameId: data.homeGameId,
-    currentPassword: data.currentPassword,
-    newPassword: data.newPassword,
-  })
-  res.json(result)
-}
+  const result = a

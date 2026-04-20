@@ -116,31 +116,6 @@ enum PixKeyType {
   RANDOM
 }
 
-enum WhatsAppProvider {
-  EVOLUTION
-}
-
-enum WhatsAppInstanceStatus {
-  DISCONNECTED
-  CONNECTING
-  CONNECTED
-  ERROR
-}
-
-enum WhatsAppMessageDirection {
-  INBOUND
-  OUTBOUND
-}
-
-enum WhatsAppMessageStatus {
-  PENDING
-  SENT
-  DELIVERED
-  READ
-  RECEIVED
-  FAILED
-}
-
 enum SangeurShiftStatus {
   OPEN
   CLOSED
@@ -228,46 +203,6 @@ model AuditLog {
   @@index([action])
   @@index([resource, resourceId])
   @@index([createdAt])
-}
-
-model WhatsAppInstanceConfig {
-  id               String                 @id @default(uuid())
-  provider         WhatsAppProvider       @default(EVOLUTION)
-  instanceName     String                 @unique
-  apiBaseUrl       String
-  enabled          Boolean                @default(true)
-  status           WhatsAppInstanceStatus @default(DISCONNECTED)
-  phoneNumber      String?
-  qrCodeBase64     String?
-  webhookSecret    String?
-  lastConnectionAt DateTime?
-  lastError        String?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-
-  messageLogs WhatsAppMessageLog[]
-}
-
-model WhatsAppMessageLog {
-  id                String                   @id @default(uuid())
-  instanceConfigId  String
-  externalMessageId String?
-  event             String?
-  direction         WhatsAppMessageDirection @default(OUTBOUND)
-  status            WhatsAppMessageStatus    @default(PENDING)
-  recipientPhone    String?
-  senderPhone       String?
-  messageText       String?
-  payload           Json?
-  errorMessage      String?
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
-
-  instanceConfig WhatsAppInstanceConfig @relation(fields: [instanceConfigId], references: [id])
-
-  @@index([instanceConfigId, createdAt])
-  @@index([externalMessageId])
-  @@index([status])
 }
 
 model HomeGame {
