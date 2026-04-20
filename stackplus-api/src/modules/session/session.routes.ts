@@ -147,6 +147,18 @@ router.put('/:id/participants', authenticate, async (req: AuthRequest, res: Resp
 router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     await SessionService.deleteSession(req.params.id, req.user!.userId)
+
+    // SEC-008: audit trail pra delete de sessão (destrutivo, cascade em financeiros).
+    const { logAudit } = await import('../../lib/audit')
+    await logAudit({
+      userId: req.user?.userId,
+      action: 'SESSION_DELETE',
+      resource: 'Session',
+      resourceId: req.params.id,
+      ip: req.ip,
+      userAgent: String(req.headers['user-agent'] || ''),
+    })
+
     res.status(204).send()
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro interno do servidor'

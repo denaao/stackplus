@@ -52,6 +52,18 @@ router.get('/sessions/:sessionId/sangeur-sales', authenticate, async (req: AuthR
 router.delete('/transaction/:transactionId', authenticate, async (req: AuthRequest, res: Response) => {
   const result = await CashierService.deleteTransaction(req.params.transactionId)
 
+  // SEC-008: audit trail pra delete de transação (operação financeira reversa).
+  const { logAudit } = await import('../../lib/audit')
+  await logAudit({
+    userId: req.user?.userId,
+    action: 'TRANSACTION_DELETE',
+    resource: 'Transaction',
+    resourceId: req.params.transactionId,
+    metadata: { sessionId: result.sessionId },
+    ip: req.ip,
+    userAgent: String(req.headers['user-agent'] || ''),
+  })
+
   try {
     const io = getIO()
     io.to(getPrivateSessionRoom(result.sessionId)).emit('transaction:deleted', { transactionId: req.params.transactionId })

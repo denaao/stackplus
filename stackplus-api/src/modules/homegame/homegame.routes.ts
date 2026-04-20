@@ -105,6 +105,18 @@ router.patch('/:id/sangeurs/:userId/reset-password', authenticate, async (req: A
 
 router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   await HomeGameService.deleteHomeGame(req.params.id, req.user!.userId)
+
+  // SEC-008: audit trail pra delete de home game (destrutivo e em cascata).
+  const { logAudit } = await import('../../lib/audit')
+  await logAudit({
+    userId: req.user?.userId,
+    action: 'HOMEGAME_DELETE',
+    resource: 'HomeGame',
+    resourceId: req.params.id,
+    ip: req.ip,
+    userAgent: String(req.headers['user-agent'] || ''),
+  })
+
   res.status(204).send()
 })
 

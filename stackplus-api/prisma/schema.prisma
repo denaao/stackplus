@@ -201,6 +201,37 @@ model User {
   comandaItemsCreated    ComandaItem[]      @relation("ComandaItemCreator")
   comandaTransfersCreated ComandaTransfer[] @relation("ComandaTransferCreator")
   tournamentPlayers      TournamentPlayer[]
+  auditLogs              AuditLog[]
+}
+
+/**
+ * Trilha de auditoria para operações financeiras e administrativas (SEC-008).
+ * Registros imutáveis — nunca deletar nem update.
+ *
+ * action: código curto da operação (ex: 'TRANSACTION_DELETE', 'COMANDA_PIX_OUT',
+ * 'HOMEGAME_DELETE', 'SESSION_FINISH').
+ * resource: nome do modelo afetado ('Transaction', 'HomeGame', etc).
+ * resourceId: id do recurso (nullable pra operações sem alvo único).
+ * metadata: dados adicionais em jsonb (amount, chargeId, razão, etc).
+ * userId: nullable pra eventos de sistema/webhook.
+ */
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource, resourceId])
+  @@index([createdAt])
 }
 
 model WhatsAppInstanceConfig {
