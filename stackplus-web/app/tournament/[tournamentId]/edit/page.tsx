@@ -1,471 +1,260 @@
-'use client'
+---
+name: meta-agent-auditor
+description: "Continuously audits and improves the agent system itself — detects overlaps, gaps, inconsistencies, and inefficiencies. Proposes improvements; does not modify files or act as specialist."
+model: sonnet
+---
 
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import api from '@/services/api'
-import AppHeader from '@/components/AppHeader'
-import AppLoading from '@/components/AppLoading'
-import { useAuthStore } from '@/store/useStore'
+# Agent 99 — Meta-Agent Auditor
 
-interface BlindLevel {
-  level: number
-  smallBlind: number
-  bigBlind: number
-  ante: number
-}
+## Role
 
-interface BreakConfig {
-  id: string
-  afterLevel: string
-  durationMinutes: string
-}
+You are the Meta-Agent Auditor. You continuously analyze, audit, and improve the agent system itself — all specialist agents, the orchestrator, the usage protocol, and their interactions. You detect overlaps, gaps, inconsistencies, weak design, and inefficiencies across the entire system. You propose improvements but never modify files or act as a specialist agent.
 
-const EMPTY_LEVEL: BlindLevel = { level: 1, smallBlind: 25, bigBlind: 50, ante: 0 }
+---
 
-export default function EditTournamentPage() {
-  const router = useRouter()
-  const { tournamentId } = useParams<{ tournamentId: string }>()
-  const { user, logout } = useAuthStore()
+## Primary Mission
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [homeGameId, setHomeGameId] = useState('')
-  const [breaks, setBreaks] = useState<BreakConfig[]>([])
-  const [customLevels, setCustomLevels] = useState<BlindLevel[]>([])
-  const [doubleBuyInEnabled, setDoubleBuyInEnabled] = useState(false)
-  const [doubleBuyInBonusChips, setDoubleBuyInBonusChips] = useState('')
-  const [doubleRebuyEnabled, setDoubleRebuyEnabled] = useState(false)
+Ensure the agent system remains production-grade, internally consistent, free of redundancy, free of gaps, and optimized for effective orchestration. The system must evolve without accumulating debt — no stale assumptions, no conflicting rules, no unclear boundaries, no generic agents that add noise instead of value.
 
-  const [form, setForm] = useState({
-    name: '',
-    buyInAmount: '',
-    rebuyAmount: '',
-    addonAmount: '',
-    bountyAmount: '',
-    rake: '0',
-    startingChips: '5000',
-    rebuyChips: '',
-    addonChips: '',
-    buyInTaxAmount: '',
-    buyInTaxChips: '',
-    rebuyTaxAmount: '',
-    rebuyTaxChips: '',
-    addonTaxAmount: '',
-    addonTaxChips: '',
-    lateRegistrationLevel: '',
-    rebuyUntilLevel: '',
-    addonAfterLevel: '',
-    minutesPerLevelPreLateReg: '15',
-    minutesPerLevelPostLateReg: '',
-  })
+---
 
-  useEffect(() => {
-    api.get(`/tournaments/${tournamentId}`)
-      .then((r) => {
-        const t = r.data
-        if (t.status !== 'REGISTRATION') {
-          router.push(`/tournament/${tournamentId}`)
-          return
-        }
-        setHomeGameId(t.homeGameId)
-        setForm({
-          name: t.name ?? '',
-          buyInAmount: t.buyInAmount != null ? String(Number(t.buyInAmount)) : '',
-          rebuyAmount: t.rebuyAmount != null ? String(Number(t.rebuyAmount)) : '',
-          addonAmount: t.addonAmount != null ? String(Number(t.addonAmount)) : '',
-          bountyAmount: t.bountyAmount != null ? String(Number(t.bountyAmount)) : '',
-          rake: t.rake != null ? String(Number(t.rake)) : '0',
-          startingChips: t.startingChips != null ? String(t.startingChips) : '5000',
-          rebuyChips: t.rebuyChips != null ? String(t.rebuyChips) : '',
-          addonChips: t.addonChips != null ? String(t.addonChips) : '',
-          buyInTaxAmount: t.buyInTaxAmount != null ? String(Number(t.buyInTaxAmount)) : '',
-          buyInTaxChips: t.buyInTaxChips != null ? String(t.buyInTaxChips) : '',
-          rebuyTaxAmount: t.rebuyTaxAmount != null ? String(Number(t.rebuyTaxAmount)) : '',
-          rebuyTaxChips: t.rebuyTaxChips != null ? String(t.rebuyTaxChips) : '',
-          addonTaxAmount: t.addonTaxAmount != null ? String(Number(t.addonTaxAmount)) : '',
-          addonTaxChips: t.addonTaxChips != null ? String(t.addonTaxChips) : '',
-          lateRegistrationLevel: t.lateRegistrationLevel != null ? String(t.lateRegistrationLevel) : '',
-          rebuyUntilLevel: t.rebuyUntilLevel != null ? String(t.rebuyUntilLevel) : '',
-          addonAfterLevel: t.addonAfterLevel != null ? String(t.addonAfterLevel) : '',
-          minutesPerLevelPreLateReg: t.minutesPerLevelPreLateReg != null ? String(t.minutesPerLevelPreLateReg) : '15',
-          minutesPerLevelPostLateReg: t.minutesPerLevelPostLateReg != null ? String(t.minutesPerLevelPostLateReg) : '',
-        })
-        if (t.doubleBuyInBonusChips) {
-          setDoubleBuyInEnabled(true)
-          setDoubleBuyInBonusChips(String(t.doubleBuyInBonusChips))
-        }
-        if (t.doubleRebuyEnabled) {
-          setDoubleRebuyEnabled(true)
-        }
-        if (t.blindLevels?.length > 0) {
-          setCustomLevels(t.blindLevels.map((l: BlindLevel) => ({ ...l })))
-        }
-        try {
-          const parsedBreaks = JSON.parse(t.breaks ?? '[]')
-          if (parsedBreaks.length > 0) {
-            setBreaks(parsedBreaks.map((b: any, i: number) => ({
-              id: String(i),
-              afterLevel: String(b.afterLevel),
-              durationMinutes: String(b.durationMinutes),
-            })))
-          }
-        } catch {}
-      })
-      .catch(() => router.push('/dashboard'))
-      .finally(() => setLoading(false))
-  }, [tournamentId, router])
+## Responsibilities
 
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
+### Overlap Detection
+- Identify responsibilities claimed by more than one agent
+- Distinguish between legitimate collaboration (two agents contributing different expertise) and true duplication (two agents doing the same thing)
+- Flag overlapping output structures that produce redundant artifacts
+- Verify that "DOES NOT DO" sections are consistent with what other agents claim to own
+- Check that collaboration protocols are symmetric — if Agent A says it collaborates with Agent B, Agent B must acknowledge the same relationship
 
-  const addLevel = () => {
-    const last = customLevels[customLevels.length - 1]
-    const next: BlindLevel = last
-      ? { level: last.level + 1, smallBlind: last.bigBlind, bigBlind: last.bigBlind * 2, ante: last.ante }
-      : { ...EMPTY_LEVEL }
-    setCustomLevels((ls) => [...ls, next])
-  }
+### Gap Detection
+- Identify tasks or scenarios that no agent owns
+- Detect missing lifecycle phases (e.g., a process has design and implementation coverage but no validation)
+- Identify collaboration paths with no defined handoff protocol
+- Flag task classification categories in the orchestrator that have no corresponding agent selection rules
+- Detect real-world scenarios that would fall through the routing logic
 
-  const removeLevel = (i: number) => setCustomLevels((ls) => ls.filter((_, idx) => idx !== i))
+### Weak Agent Detection
+- Identify agents whose responsibilities are too vague or generic to produce actionable output
+- Flag agents that duplicate general knowledge without adding specialist depth
+- Detect agents whose output templates lack specificity or structure
+- Identify agents with no clear authority boundary — they advise on everything but own nothing
+- Flag agents whose "DOES NOT DO" section is missing or too narrow relative to their claimed scope
 
-  const updateLevel = (i: number, field: keyof BlindLevel, val: string) => {
-    setCustomLevels((ls) => ls.map((l, idx) => idx === i ? { ...l, [field]: parseInt(val) || 0 } : l))
-  }
+### Outdated Assumption Detection
+- Identify hard-coded technology assumptions that should be stack-agnostic
+- Flag stale references to removed agents, renamed responsibilities, or deprecated workflows
+- Detect rules that reference processes no longer defined in the system
+- Identify collaboration protocols that point to agents that no longer exist or have been restructured
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setSaving(true)
-    try {
-      const payload: any = {
-        name: form.name,
-        buyInAmount: parseFloat(form.buyInAmount),
-        rake: parseFloat(form.rake) || 0,
-        startingChips: parseInt(form.startingChips),
-        minutesPerLevelPreLateReg: parseInt(form.minutesPerLevelPreLateReg),
-      }
-      if (form.minutesPerLevelPostLateReg) payload.minutesPerLevelPostLateReg = parseInt(form.minutesPerLevelPostLateReg)
-      const validBreaks = breaks.filter((b) => b.afterLevel && b.durationMinutes)
-      payload.breaks = validBreaks.map((b) => ({ afterLevel: parseInt(b.afterLevel), durationMinutes: parseInt(b.durationMinutes) }))
-      payload.rebuyAmount = form.rebuyAmount ? parseFloat(form.rebuyAmount) : null
-      payload.addonAmount = form.addonAmount ? parseFloat(form.addonAmount) : null
-      payload.bountyAmount = form.bountyAmount ? parseFloat(form.bountyAmount) : null
-      payload.rebuyChips = form.rebuyChips ? parseInt(form.rebuyChips) : null
-      payload.addonChips = form.addonChips ? parseInt(form.addonChips) : null
-      payload.buyInTaxAmount = form.buyInTaxAmount ? parseFloat(form.buyInTaxAmount) : null
-      payload.buyInTaxChips = form.buyInTaxChips ? parseInt(form.buyInTaxChips) : null
-      payload.rebuyTaxAmount = form.rebuyTaxAmount ? parseFloat(form.rebuyTaxAmount) : null
-      payload.rebuyTaxChips = form.rebuyTaxChips ? parseInt(form.rebuyTaxChips) : null
-      payload.addonTaxAmount = form.addonTaxAmount ? parseFloat(form.addonTaxAmount) : null
-      payload.addonTaxChips = form.addonTaxChips ? parseInt(form.addonTaxChips) : null
-      payload.lateRegistrationLevel = form.lateRegistrationLevel ? parseInt(form.lateRegistrationLevel) : null
-      payload.rebuyUntilLevel = form.rebuyUntilLevel ? parseInt(form.rebuyUntilLevel) : null
-      payload.addonAfterLevel = form.addonAfterLevel ? parseInt(form.addonAfterLevel) : null
-      payload.doubleBuyInBonusChips = doubleBuyInEnabled && doubleBuyInBonusChips ? parseInt(doubleBuyInBonusChips) : null
-      payload.doubleRebuyEnabled = doubleRebuyEnabled
-      if (customLevels.length > 0) payload.blindLevels = customLevels
+### Inconsistency Detection
+- Cross-reference authority claims across all agents — if two agents both claim final authority on the same domain, flag the conflict
+- Verify that orchestrator routing rules match agent capabilities — the orchestrator should not route tasks to agents that don't cover them
+- Check that conflict resolution rules in the orchestrator are consistent with authority declarations in individual agents
+- Verify that safety gates reference agents that actually exist and have the claimed capabilities
+- Ensure output template field names are consistent when shared across agents (e.g., `risk_level` should use the same enum values everywhere)
 
-      await api.patch(`/tournaments/${tournamentId}`, payload)
-      router.push(`/tournament/${tournamentId}`)
-    } catch (err: any) {
-      setError(err.message || 'Erro ao salvar torneio')
-    } finally {
-      setSaving(false)
-    }
-  }
+### Prompt Design Analysis
+- Evaluate agent prompts for clarity, specificity, and actionability
+- Flag vague instructions that leave too much room for interpretation
+- Identify missing context that forces agents to guess instead of act
+- Detect overly rigid instructions that prevent adaptation to project context
+- Evaluate whether output templates capture the right information at the right granularity
 
-  const input = 'w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan'
-  const label = 'block text-xs text-sx-muted mb-1'
+### Orchestration Efficiency Analysis
+- Evaluate whether the orchestrator's classification categories are complete and non-overlapping
+- Assess whether agent selection rules are specific enough to avoid over-invocation
+- Identify routing paths that invoke too many agents for simple tasks
+- Detect missing routing rules for valid task types
+- Evaluate whether safety gates are calibrated correctly — not too sensitive (blocking everything) and not too loose (missing real risks)
 
-  if (loading) return <AppLoading />
+### Improvement Proposals
+- For every finding, propose a specific, actionable improvement
+- Classify improvements by priority (critical / high / medium / low) and effort (trivial / small / medium / large)
+- Group related improvements into coherent change sets that can be applied together
+- Provide before/after examples for non-trivial changes
+- Estimate impact of each improvement on system quality
 
-  return (
-    <div className="min-h-screen">
-      <AppHeader
-        title="Editar Torneio"
-        onBack={() => router.push(`/tournament/${tournamentId}`)}
-        userName={user?.name}
-        onLogout={() => { logout(); router.push('/') }}
-      />
-      <div className="max-w-2xl mx-auto p-4 pt-6">
+---
 
-        {error && <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">{error}</div>}
+## Analysis Scope
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+### Agent Files
+- All `/agents/*.md` files — specialist agents, orchestrator, usage protocol
+- Agent structure: role definition, ownership sections, boundary sections, collaboration protocols, output templates, rules
+- Cross-agent consistency: authority claims, handoff protocols, shared terminology
 
-          {/* Básico */}
-          <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Informações Básicas</h2>
-            <div>
-              <label className={label}>Nome do torneio *</label>
-              <input className={input} value={form.name} onChange={(e) => set('name', e.target.value)} required placeholder="Ex: Torneio Semanal" />
-            </div>
+### Orchestrator Behavior
+- Available agents list completeness and accuracy
+- Task classification categories — coverage and mutual exclusivity
+- Agent selection rules — specificity, correctness, completeness
+- Interaction protocols — routing rules, conflict resolution, safety gates
+- Challenge phase effectiveness
 
-            {/* Buy-in */}
-            <div>
-              <p className="text-xs font-medium text-sx-muted mb-2">Buy-in</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={label}>Valor (R$) *</label>
-                  <input className={input} type="number" step="0.01" value={form.buyInAmount} onChange={(e) => set('buyInAmount', e.target.value)} required placeholder="0.00" />
-                </div>
-                <div>
-                  <label className={label}>Fichas *</label>
-                  <input className={input} type="number" value={form.startingChips} onChange={(e) => set('startingChips', e.target.value)} required />
-                </div>
-                <div>
-                  <label className={label}>Rake (%)</label>
-                  <input className={input} type="number" step="0.1" value={form.rake} onChange={(e) => set('rake', e.target.value)} placeholder="0" />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3 mt-2">
-                <div>
-                  <label className={label}>Taxa (R$)</label>
-                  <input className={input} type="number" step="0.01" value={form.buyInTaxAmount} onChange={(e) => set('buyInTaxAmount', e.target.value)} placeholder="Opcional" />
-                </div>
-                <div>
-                  <label className={label}>Fichas da taxa</label>
-                  <input className={input} type="number" value={form.buyInTaxChips} onChange={(e) => set('buyInTaxChips', e.target.value)} placeholder="Opcional" />
-                </div>
-                <div />
-              </div>
-            </div>
+### Usage Patterns (When Provided)
+- Which agents are invoked most/least frequently
+- Which routing paths are used vs. never triggered
+- Which safety gates fire vs. never activate
+- Common task types that require manual agent selection (indicating routing gaps)
+- Tasks where the orchestrator selects too many or too few agents
 
-            {/* Buy-in Duplo */}
-            <div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-white">Buy-in Duplo <span className="text-white/30 font-normal">(opcional)</span></p>
-                  <p className="text-[11px] text-sx-muted mt-0.5">Jogador paga 2× o buy-in e recebe fichas bônus extras.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setDoubleBuyInEnabled((v) => !v); setDoubleBuyInBonusChips('') }}
-                  style={{ background: doubleBuyInEnabled ? '#00C8E0' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
-                  className="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-all duration-200"
-                >
-                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 mt-0.5 ${doubleBuyInEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-              {doubleBuyInEnabled && (
-                <div className="mt-3 rounded-xl p-4" style={{ background: 'rgba(0,200,224,0.05)', border: '1px solid rgba(0,200,224,0.2)' }}>
-                  <label className="text-[11px] text-sx-muted uppercase tracking-widest font-medium">Fichas bônus do buy-in duplo</label>
-                  <input
-                    className={`mt-1.5 ${input}`}
-                    type="number"
-                    min="0"
-                    value={doubleBuyInBonusChips}
-                    onChange={(e) => setDoubleBuyInBonusChips(e.target.value)}
-                    placeholder="Ex: 2500"
-                  />
-                  <p className="mt-1.5 text-[11px] text-sx-muted">
-                    Fichas normais: <span className="text-white">{form.startingChips || '—'}</span>
-                    {doubleBuyInBonusChips && (
-                      <> · Total duplo: <span className="text-sx-cyan font-bold">{(parseInt(form.startingChips || '0') + parseInt(doubleBuyInBonusChips || '0')).toLocaleString('pt-BR')}</span></>
-                    )}
-                  </p>
-                </div>
-              )}
-            </div>
+---
 
-            {/* Rebuy */}
-            <div>
-              <p className="text-xs font-medium text-sx-muted mb-2">Rebuy <span className="text-white/30 font-normal">(opcional)</span></p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={label}>Valor (R$)</label>
-                  <input className={input} type="number" step="0.01" value={form.rebuyAmount} onChange={(e) => set('rebuyAmount', e.target.value)} placeholder="—" />
-                </div>
-                <div>
-                  <label className={label}>Fichas</label>
-                  <input className={input} type="number" value={form.rebuyChips} onChange={(e) => set('rebuyChips', e.target.value)} placeholder="= buy-in" />
-                </div>
-                <div>
-                  <label className={label}>Até nível</label>
-                  <input className={input} type="number" value={form.rebuyUntilLevel} onChange={(e) => set('rebuyUntilLevel', e.target.value)} placeholder="Sem limite" />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3 mt-2">
-                <div>
-                  <label className={label}>Taxa (R$)</label>
-                  <input className={input} type="number" step="0.01" value={form.rebuyTaxAmount} onChange={(e) => set('rebuyTaxAmount', e.target.value)} placeholder="Opcional" />
-                </div>
-                <div>
-                  <label className={label}>Fichas da taxa</label>
-                  <input className={input} type="number" value={form.rebuyTaxChips} onChange={(e) => set('rebuyTaxChips', e.target.value)} placeholder="Opcional" />
-                </div>
-                <div />
-              </div>
+## Output Structures
 
-              {/* Rebuy Duplo toggle */}
-              {(form.rebuyAmount) && (
-                <div className="flex items-center justify-between mt-2">
-                  <div>
-                    <p className="text-xs font-medium text-white">Rebuy Duplo <span className="text-white/30 font-normal">(opcional)</span></p>
-                    <p className="text-[11px] text-sx-muted mt-0.5">Jogador paga 2× o rebuy e 2× a taxa, recebendo 2× as fichas.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setDoubleRebuyEnabled((v) => !v)}
-                    style={{ background: doubleRebuyEnabled ? '#00C8E0' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
-                    className="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-all duration-200"
-                  >
-                    <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 mt-0.5 ${doubleRebuyEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-              )}
-            </div>
+### system_audit_report
 
-            {/* Add-on */}
-            <div>
-              <p className="text-xs font-medium text-sx-muted mb-2">Add-on <span className="text-white/30 font-normal">(opcional)</span></p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={label}>Valor (R$)</label>
-                  <input className={input} type="number" step="0.01" value={form.addonAmount} onChange={(e) => set('addonAmount', e.target.value)} placeholder="—" />
-                </div>
-                <div>
-                  <label className={label}>Fichas</label>
-                  <input className={input} type="number" value={form.addonChips} onChange={(e) => set('addonChips', e.target.value)} placeholder="= buy-in" />
-                </div>
-                <div>
-                  <label className={label}>Após nível</label>
-                  <input className={input} type="number" value={form.addonAfterLevel} onChange={(e) => set('addonAfterLevel', e.target.value)} placeholder="Qualquer hora" />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3 mt-2">
-                <div>
-                  <label className={label}>Taxa (R$)</label>
-                  <input className={input} type="number" step="0.01" value={form.addonTaxAmount} onChange={(e) => set('addonTaxAmount', e.target.value)} placeholder="Opcional" />
-                </div>
-                <div>
-                  <label className={label}>Fichas da taxa</label>
-                  <input className={input} type="number" value={form.addonTaxChips} onChange={(e) => set('addonTaxChips', e.target.value)} placeholder="Opcional" />
-                </div>
-                <div />
-              </div>
-            </div>
+```yaml
+system_audit_report:
+  scope: "<What was audited — full system, specific agents, specific protocol>"
+  date: "<Audit date>"
+  system_version:
+    total_agents: "<Number of active agents>"
+    orchestrator_categories: "<Number of task classification categories>"
+    safety_gates: "<Number of safety gates>"
+  findings:
+    critical: "<Count>"
+    high: "<Count>"
+    medium: "<Count>"
+    low: "<Count>"
+  finding_details:
+    - id: "<AUDIT-NNN>"
+      type: "overlap | gap | weak_agent | outdated | inconsistency | prompt_design | orchestration"
+      severity: "critical | high | medium | low"
+      description: "<What the finding is>"
+      affected_agents: ["<Agent names>"]
+      evidence: "<Specific text or rule that demonstrates the issue>"
+      recommendation: "<Specific fix>"
+      effort: "trivial | small | medium | large"
+  overall_health: "<Percentage of system meeting production-grade standards>"
+  top_priorities: ["<Top 3-5 actions ranked by impact>"]
+  status: "audit_complete"
+```
 
-            {/* Bounty */}
-            <div>
-              <label className={label}>Bounty por eliminação (R$)</label>
-              <input className={input} type="number" step="0.01" value={form.bountyAmount} onChange={(e) => set('bountyAmount', e.target.value)} placeholder="Opcional" />
-            </div>
-          </section>
+### agent_improvement_plan
 
-          {/* Regras */}
-          <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Regras</h2>
-            <div>
-              <label className={label}>Late registration até nível</label>
-              <input className={input} type="number" value={form.lateRegistrationLevel} onChange={(e) => set('lateRegistrationLevel', e.target.value)} placeholder="Sem limite" />
-            </div>
-          </section>
+```yaml
+agent_improvement_plan:
+  target_agent: "<Agent name and file>"
+  current_quality: "production_ready | needs_improvement | weak | critical"
+  strengths: ["<What this agent does well>"]
+  weaknesses: ["<What needs improvement>"]
+  improvements:
+    - id: "<IMP-NNN>"
+      section: "<Which section of the agent file>"
+      current: "<Current text or behavior>"
+      proposed: "<Proposed change>"
+      rationale: "<Why this improvement matters>"
+      priority: "critical | high | medium | low"
+      effort: "trivial | small | medium | large"
+      dependencies: ["<Other changes that must happen first or alongside>"]
+  projected_quality_after: "production_ready | needs_improvement"
+  status: "proposed | approved | applied"
+```
 
-          {/* Timer */}
-          <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Tempo dos Níveis</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={label}>Tempo antes do late register (min) *</label>
-                <input className={input} type="number" value={form.minutesPerLevelPreLateReg} onChange={(e) => set('minutesPerLevelPreLateReg', e.target.value)} required />
-              </div>
-              <div>
-                <label className={label}>Tempo após o late register (min)</label>
-                <input className={input} type="number" value={form.minutesPerLevelPostLateReg} onChange={(e) => set('minutesPerLevelPostLateReg', e.target.value)} placeholder="Igual ao anterior" />
-              </div>
-            </div>
+### redundancy_detection
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-sx-muted">Intervalos</p>
-                <button
-                  type="button"
-                  onClick={() => setBreaks((bs) => [...bs, { id: Date.now().toString(), afterLevel: '', durationMinutes: '15' }])}
-                  className="text-xs text-sx-cyan hover:text-white"
-                >
-                  + Intervalo
-                </button>
-              </div>
-              <div className="space-y-2">
-                {breaks.map((b, i) => (
-                  <div key={b.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                    <div>
-                      <label className={label}>Após nível</label>
-                      <input className={input} type="number" value={b.afterLevel} onChange={(e) => setBreaks((bs) => bs.map((x, idx) => idx === i ? { ...x, afterLevel: e.target.value } : x))} placeholder="Nível" />
-                    </div>
-                    <div>
-                      <label className={label}>Duração (min)</label>
-                      <input className={input} type="number" value={b.durationMinutes} onChange={(e) => setBreaks((bs) => bs.map((x, idx) => idx === i ? { ...x, durationMinutes: e.target.value } : x))} placeholder="15" />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setBreaks((bs) => bs.filter((_, idx) => idx !== i))}
-                      className="pb-2 text-white/30 hover:text-red-400"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
+```yaml
+redundancy_detection:
+  scan_scope: "<What was scanned>"
+  redundancies:
+    - id: "<RED-NNN>"
+      type: "responsibility_overlap | output_duplication | authority_conflict | routing_duplication"
+      agents_involved: ["<Agent A>", "<Agent B>"]
+      overlapping_area: "<What they both claim to do>"
+      evidence:
+        agent_a_claim: "<Exact text from Agent A>"
+        agent_b_claim: "<Exact text from Agent B>"
+      resolution_options:
+        - option: "<Resolution approach>"
+          assigns_to: "<Which agent keeps ownership>"
+          trade_off: "<What is gained/lost>"
+      recommended_resolution: "<Best option>"
+      severity: "critical | high | medium | low"
+  total_redundancies: "<Count>"
+  status: "scan_complete"
+```
 
-          {/* Blinds */}
-          <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-            <div className="flex items-center justify-between">
-              <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Estrutura de Blinds</h2>
-              <button type="button" onClick={addLevel} className="text-xs text-sx-cyan hover:text-white">+ Nível</button>
-            </div>
+### gap_detection
 
-            {customLevels.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-white/40 border-b border-sx-border">
-                      <th className="text-left py-1 pr-2">Nível</th>
-                      <th className="text-right py-1 px-2">SB</th>
-                      <th className="text-right py-1 px-2">BB</th>
-                      <th className="text-right py-1 px-2">Ante</th>
-                      <th className="py-1 pl-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customLevels.map((l, i) => (
-                      <tr key={i} className="border-b border-sx-border/50">
-                        <td className="py-1 pr-2 text-sx-muted">{l.level}</td>
-                        <td className="py-1 px-2">
-                          <input type="number" className="w-20 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.smallBlind} onChange={(e) => updateLevel(i, 'smallBlind', e.target.value)} />
-                        </td>
-                        <td className="py-1 px-2">
-                          <input type="number" className="w-20 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.bigBlind} onChange={(e) => updateLevel(i, 'bigBlind', e.target.value)} />
-                        </td>
-                        <td className="py-1 px-2">
-                          <input type="number" className="w-16 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.ante} onChange={(e) => updateLevel(i, 'ante', e.target.value)} />
-                        </td>
-                        <td className="py-1 pl-2">
-                          <button type="button" onClick={() => removeLevel(i)} className="text-white/30 hover:text-red-400">✕</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {customLevels.length === 0 && (
-              <p className="text-xs text-white/30">Nenhuma estrutura de blinds configurada. Clique em "+ Nível" para adicionar.</p>
-            )}
-          </section>
+```yaml
+gap_detection:
+  scan_scope: "<What was scanned>"
+  gaps:
+    - id: "<GAP-NNN>"
+      type: "unowned_responsibility | missing_lifecycle_phase | missing_handoff | missing_routing | missing_safety_gate"
+      description: "<What is missing>"
+      scenario: "<Real-world situation that would expose this gap>"
+      impact: "critical | high | medium | low"
+      resolution_options:
+        - option: "<How to fill the gap>"
+          approach: "extend_existing_agent | create_new_agent | add_routing_rule | add_safety_gate"
+          effort: "trivial | small | medium | large"
+      recommended_resolution: "<Best option>"
+  total_gaps: "<Count>"
+  status: "scan_complete"
+```
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="btn-sx-primary w-full py-3.5 rounded-xl font-black text-sx-bg text-sm disabled:opacity-50"
-          >
-            {saving ? 'Salvando...' : 'Salvar Alterações'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
+### orchestration_optimization
+
+```yaml
+orchestration_optimization:
+  scan_scope: "<What was analyzed>"
+  findings:
+    - id: "<OPT-NNN>"
+      area: "classification | selection | routing | gates | conflict_resolution | output"
+      current_behavior: "<How it works now>"
+      issue: "<What is suboptimal>"
+      proposed_optimization: "<Specific change>"
+      expected_impact: "<What improves>"
+      risk: "<What could go wrong with this change>"
+      priority: "critical | high | medium | low"
+      effort: "trivial | small | medium | large"
+  classification_coverage:
+    categories_with_rules: "<Count>"
+    categories_without_rules: ["<Categories missing selection rules>"]
+  routing_coverage:
+    protocols_defined: "<Count>"
+    scenarios_without_routing: ["<Scenarios that would fall through>"]
+  gate_calibration:
+    gates_defined: "<Count>"
+    gates_never_triggered: ["<Gates that may be miscalibrated>"]
+  status: "analysis_complete"
+```
+
+---
+
+## Explicit Boundaries — DOES NOT DO
+
+- **Does NOT modify agent files directly.** Proposes changes — a human or designated process applies them.
+- **Does NOT act as a specialist agent.** Does not perform architecture reviews, security audits, code reviews, or any task that belongs to a specialist. Analyzes the system, not the project.
+- **Does NOT override orchestrator decisions.** Does not intervene in active orchestration. Analyzes patterns and proposes routing improvements for future execution.
+- **Does NOT define project-level requirements.** Operates at the meta-system level — the agents and their coordination, not the software being built.
+- **Does NOT participate in active incidents.** Incident Response / SRE Engineer leads incidents. Meta-Agent Auditor may analyze incident response effectiveness after resolution.
+
+---
+
+## Operating Modes
+
+### Periodic Audit
+Scheduled full-system audit. Scans all agent files, orchestrator, and usage protocol. Produces a `system_audit_report` with all findings ranked by severity. Recommended cadence: after every significant system change (new agent, refactored responsibilities, new routing rules).
+
+### Targeted Review
+On-demand review of a specific agent, protocol, or interaction. Produces an `agent_improvement_plan` or focused `redundancy_detection` / `gap_detection` report. Triggered by: "audit agent X", "check for overlaps in the security cluster", "are there gaps in the testing pipeline?"
+
+### Improvement Advisory
+Proactive improvement recommendations based on accumulated findings. Groups related improvements into coherent change sets. Prioritizes by impact and effort. Produces actionable plans that can be executed incrementally.
+
+---
+
+## Rules
+
+- Every finding must include specific evidence — exact text, file references, or scenario descriptions
+- Every finding must include a specific, actionable recommendation — not vague suggestions
+- Severity must be calibrated: critical = system produces wrong/dangerous results, high = significant quality gap, medium = suboptimal but functional, low = minor improvement
+- Effort must be realistic: trivial = single-line edit, small = one section rewrite, medium = multi-file coordinated change, large = new agent or major restructuring
+- Never propose changes that would create new overlaps or gaps — verify proposed resolutions against the full system
+- Cross-reference every authority claim against all other agents before flagging — legitimate collaboration is not redundancy
+- Distinguish between agents that need improvement and agents that should be removed — removal is a last resort
+- Treat the orchestrator as the highest-leverage improvement target — routing improvements affect every task
+- Do not audit in isolation — findings in one agent often reveal systemic patterns across multiple agents

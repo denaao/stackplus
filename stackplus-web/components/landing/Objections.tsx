@@ -22,7 +22,7 @@ export function Objections() {
             Antes que você pense
           </span>
           <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-            "Ah, mas...".
+            &quot;Ah, mas...&quot;.
           </h2>
         </div>
 
@@ -37,7 +37,7 @@ export function Objections() {
                   💬
                 </span>
                 <div>
-                  <p className="text-lg font-semibold text-white">"{o.q}"</p>
+                  <p className="text-lg font-semibold text-white">&quot;{o.q}&quot;</p>
                   <p className="mt-2 flex items-start gap-2 text-base text-zinc-300">
                     <span className="flex-none font-bold text-sx-cyan">→</span>
                     <span>{o.a}</span>
@@ -46,8 +46,4 @@ export function Objections() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
-    </section>
-  )
-}
+ 
