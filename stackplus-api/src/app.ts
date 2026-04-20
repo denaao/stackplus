@@ -7,6 +7,11 @@ import { errorMiddleware } from './middlewares/error.middleware'
 
 const app = express()
 
+// Railway/Vercel colocam 1 proxy na frente. Sem isso, req.ip é sempre
+// o IP do proxy e rate limiters viram globais (todos os clientes
+// compartilham o mesmo contador). Valor 1 lê o primeiro hop de X-Forwarded-For.
+app.set('trust proxy', 1)
+
 app.use(helmet())
 const allowedOrigins = [
   process.env.FRONTEND_URL,
