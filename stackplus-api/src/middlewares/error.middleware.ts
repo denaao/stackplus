@@ -76,7 +76,16 @@ export function errorMiddleware(
   const status = resolveStatus(err)
   const message = extractMessage(err) || 'Erro interno do servidor'
 
-  console.error(`[ERROR] ${req.method} ${req.originalUrl} -> ${status} | ${message}`)
+  // Contexto do request — userId/role se autenticado, IP pra rastrear anônimos.
+  // Melhora drástica na capacidade de rastrear 401/403/500 em produção.
+  const authUser = (req as Request & { user?: { userId?: string; role?: string } }).user
+  const userId = authUser?.userId ?? 'anonymous'
+  const userRole = authUser?.role ?? '-'
+  const ip = req.ip || req.socket?.remoteAddress || '-'
+
+  console.error(
+    `[ERROR] ${req.method} ${req.originalUrl} -> ${status} | user=${userId} role=${userRole} ip=${ip} | ${message}`,
+  )
   if (err instanceof Error && err.stack) {
     console.error(err.stack)
   }
