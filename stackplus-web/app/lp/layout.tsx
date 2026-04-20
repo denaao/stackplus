@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://www.stackplus.com.br'),
   title: 'StackPlus — O jeito fácil de organizar seu home game de poker',
   description:
     'Organize seu home game como um profissional. Controle fichas, torneios e premiação em tempo real — sem planilha, sem confusão. Grátis durante o beta.',
