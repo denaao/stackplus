@@ -132,6 +132,19 @@ router.patch('/:id/members/:userId/role', authenticate, async (req: AuthRequest,
     memberUserId: req.params.userId,
     role: data.role,
   })
+
+  // SEC-008: audit trail pra mudança de papel (promover/rebaixar host).
+  const { logAudit } = await import('../../lib/audit')
+  await logAudit({
+    userId: req.user?.userId,
+    action: 'HOMEGAME_ROLE_CHANGE',
+    resource: 'HomeGameMember',
+    resourceId: req.params.userId,
+    metadata: { homeGameId: req.params.id, newRole: data.role },
+    ip: req.ip,
+    userAgent: String(req.headers['user-agent'] || ''),
+  })
+
   res.json(result)
 })
 

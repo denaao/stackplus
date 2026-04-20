@@ -146,6 +146,19 @@ router.post('/:comandaId/pix-out', async (req: AuthRequest, res: Response) => {
     amount: data.amount,
     createdByUserId: req.user!.userId,
   })
+
+  // SEC-008: audit trail pra transferência PIX outgoing (dinheiro saindo).
+  const { logAudit } = await import('../../lib/audit')
+  await logAudit({
+    userId: req.user?.userId,
+    action: 'COMANDA_PIX_OUT',
+    resource: 'Comanda',
+    resourceId: req.params.comandaId,
+    metadata: { amount: data.amount },
+    ip: req.ip,
+    userAgent: String(req.headers['user-agent'] || ''),
+  })
+
   res.status(201).json(result)
 })
 
@@ -167,11 +180,4 @@ router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) =>
 
 // POST /comanda/:comandaId/close
 router.post('/:comandaId/close', async (req: AuthRequest, res: Response) => {
-  const comanda = await ComandaService.closeComanda({
-    comandaId: req.params.comandaId,
-    closedByUserId: req.user!.userId,
-  })
-  res.json(comanda)
-})
-
-export default router
+  const com
