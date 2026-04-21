@@ -40,20 +40,32 @@ async function main() {
 }
 
 // Execução direta (npm run job:cleanup-refresh-tokens)
-// __filename não existe em ESM mas o projeto usa CJS (tsc + node).
 const isCli = require.main === module
 
 if (isCli) {
+  // Timeout agressivo: se algo segurar event loop (pino-pretty worker,
+  // socket.io pendurado, conexão zombie), aborta em 30s pra Cron não
+  // ficar preso em "Running" indefinidamente.
+  const timeoutMs = Number(process.env.CLEANUP_JOB_TIMEOUT_MS || 30_000)
+  const abortTimer = setTimeout(() => {
+    console.error(`[cleanup] timeout (${timeoutMs}ms) — forcando saida`)
+    process.exit(2)
+  }, timeoutMs)
+  abortTimer.unref()
+
   main()
-    .then((count) => {
+    .then(async (count) => {
       console.log(`[cleanup] deleted ${count} refresh token(s)`)
+      await prisma.$disconnect().catch(() => {})
+      clearTimeout(abortTimer)
       process.exit(0)
     })
-    .catch((err) => {
+    .catch(async (err) => {
       console.error('[cleanup] fatal error', err)
+      await prisma.$disconnect().catch(() => {})
+      clearTimeout(abortTimer)
       process.exit(1)
     })
-    .finally(() => prisma.$disconnect())
 }
 
 export { main as cleanupExpiredRefreshTokens }

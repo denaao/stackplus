@@ -1,0 +1,17 @@
+# Config do Railway Cron Service (cleanup de refresh tokens).
+#
+# Apontar este arquivo em Railway → CronSchedule → Settings → Config-as-Code
+# (campo "Config Path" ou similar): `stackplus-api/railway.cron.toml`.
+#
+# Diferenças do railway.toml principal:
+#   - startCommand roda apenas o job (não sobe server nem migrate)
+#   - restartPolicyType = "NEVER" — se falhar, esperar próxima execução
+#     (não re-tentar loop, senão pode consumir minutos do plano)
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm install --include=dev && npx prisma generate"
+
+[deploy]
+startCommand = "npm run job:cleanup-refresh-tokens"
+restartPolicyType = "NEVER"
