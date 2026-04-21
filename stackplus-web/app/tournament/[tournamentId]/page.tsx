@@ -210,7 +210,7 @@ export default function TournamentPage() {
             const members: HomeGameMember[] = Array.isArray(r.data.members) ? r.data.members : []
             const hostUser = r.data.host
             // Se o host não aparece em members (que é o caso padrão), injeta ele no topo.
-            const hostAsMember = hostUser && !members.some((m) => m?.user?.id === hostUser.id)
+            const hostAsMember: HomeGameMember[] = hostUser && !members.some((m) => m?.user?.id === hostUser.id)
               ? [{ id: `host-${hostUser.id}`, userId: hostUser.id, user: hostUser, paymentMode: null, role: 'HOST' }]
               : []
             setHomeGameMembers([...hostAsMember, ...members])
@@ -616,7 +616,9 @@ export default function TournamentPage() {
                   ) : (
                     <>
                       {filteredMembers.map((m) => {
-                        const u = m.user ?? m
+                        // m.user sempre vem populado pelo backend (include: user).
+                        // Fallback defensivo pra garantir renderização mesmo se faltar.
+                        const u = m.user ?? { id: m.userId, name: '', cpf: undefined as string | undefined }
                         return (
                           <button
                             key={u.id}

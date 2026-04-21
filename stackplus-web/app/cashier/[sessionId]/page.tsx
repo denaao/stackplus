@@ -669,6 +669,7 @@ export default function CashierPage() {
         // Continue with status polling even if snapshot reconciliation fails once.
       }
 
+      if (!prepaidChargeResult.charge) return
       const chargeId = prepaidChargeResult.charge.id
       const virtualAccount = prepaidChargeResult.charge.virtualAccount
       try {
@@ -691,10 +692,7 @@ export default function CashierPage() {
 
         setChargeStatusMessage(String(data?.message || 'Aguardando pagamento...'))
       } catch (err) {
-        const errorMessage = typeof err?.response?.data?.error === 'string'
-          ? err.response.data.error
-          : (typeof err?.message === 'string' ? err.message : 'Falha ao consultar status da cobrança.')
-        setChargeStatusMessage(errorMessage)
+        setChargeStatusMessage(getErrorMessage(err, 'Falha ao consultar status da cobrança.'))
       }
     }
 

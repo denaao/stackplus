@@ -226,8 +226,12 @@ export default function SangeurHomePage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
-  // Payload bruto da cobrança PIX — narrowing nos helpers extract*.
-  const [pixQrModal, setPixQrModal] = useState<unknown>(null)
+  // Payload da cobrança PIX ANNAPAY (shape varia entre endpoints).
+  const [pixQrModal, setPixQrModal] = useState<{
+    qrCodeBase64?: string
+    pixCopyPaste?: string
+    [key: string]: unknown
+  } | null>(null)
   const [closingReportModal, setClosingReportModal] = useState<ClosingReportData | null>(null)
 
   const pendingVoucherSales = useMemo(
@@ -1183,6 +1187,7 @@ export default function SangeurHomePage() {
                   </code>
                   <button
                     onClick={() => {
+                      if (!pixQrModal?.pixCopyPaste) return
                       navigator.clipboard.writeText(pixQrModal.pixCopyPaste)
                       setSuccess('Codigo copiado para a area de transferencia')
                     }}

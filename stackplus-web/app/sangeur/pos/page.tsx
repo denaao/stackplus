@@ -147,8 +147,12 @@ export default function SangeurPosPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
-  // Payload bruto da cobrança PIX — narrowing nos helpers extract*.
-  const [pixQrModal, setPixQrModal] = useState<unknown>(null)
+  // Payload da cobrança PIX ANNAPAY (shape varia entre endpoints).
+  const [pixQrModal, setPixQrModal] = useState<{
+    qrCodeBase64?: string
+    pixCopyPaste?: string
+    [key: string]: unknown
+  } | null>(null)
   const [pixSaleId, setPixSaleId] = useState<string | null>(null)
   const [pixStatusMsg, setPixStatusMsg] = useState('')
   const [confirmingPix, setConfirmingPix] = useState(false)
