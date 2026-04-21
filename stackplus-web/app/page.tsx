@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
 
 function maskCpf(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 11)
@@ -32,7 +33,7 @@ export default function LoginPage() {
     else router.replace('/dashboard')
   }, [user, router])
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault()
     setError('')
     setLoading(true)
@@ -46,8 +47,8 @@ export default function LoginPage() {
       if (role === 'ADMIN') router.push('/admin/dashboard')
       else if (role === 'CASHIER') router.push('/cashier/select')
       else router.push('/dashboard')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Credenciais inválidas')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Credenciais inválidas'))
     } finally {
       setLoading(false)
     }
@@ -120,7 +121,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            onClick={handleSubmit as any}
+            onClick={handleSubmit}
             className="btn-sx-primary w-full text-sx-bg font-black py-3.5 rounded-xl text-sm tracking-widest uppercase"
           >
             {loading ? 'Entrando...' : 'Entrar'}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 import AppLoading from '@/components/AppLoading'
+import { getErrorMessage } from '@/lib/errors'
 
 type PixType = 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM'
 
@@ -135,8 +136,8 @@ export default function ProfilePage() {
       setUser(data)
       setSuccess('Perfil atualizado com sucesso!')
       setTimeout(() => setSuccess(''), 3000)
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Erro ao salvar perfil')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao salvar perfil'))
     } finally {
       setSaving(false)
     }

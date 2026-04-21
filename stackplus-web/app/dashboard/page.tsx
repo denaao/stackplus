@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 import AppHeader from '@/components/AppHeader'
+import { getErrorMessage } from '@/lib/errors'
 
 interface HomeGame {
   id: string
@@ -66,8 +67,8 @@ export default function DashboardPage() {
       setPwdMsg({ tone: 'ok', text: 'Senha trocada com sucesso.' })
       setPwdCurrent(''); setPwdNew(''); setPwdConfirm('')
       setTimeout(() => { setPwdModalOpen(false); setPwdMsg(null) }, 1500)
-    } catch (err: any) {
-      setPwdMsg({ tone: 'error', text: err?.response?.data?.error ?? (typeof err === 'string' ? err : 'Falha ao trocar senha') })
+    } catch (err) {
+      setPwdMsg({ tone: 'error', text: getErrorMessage(err, 'Falha ao trocar senha') })
     } finally {
       setPwdSaving(false)
     }
@@ -92,8 +93,8 @@ export default function DashboardPage() {
       setJoinModalOpen(false)
       setJoinCode('')
       router.push(`/homegame/${data.id}/select`)
-    } catch (err: any) {
-      setJoinError(typeof err === 'string' ? err : 'Código inválido ou você já está neste home game.')
+    } catch (err) {
+      setJoinError(getErrorMessage(err, 'Código inválido ou você já está neste home game.'))
     } finally {
       setJoining(false)
     }

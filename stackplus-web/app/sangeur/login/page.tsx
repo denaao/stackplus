@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useSangeurAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
 
 export default function SangeurLoginPage() {
   const router = useRouter()
@@ -29,8 +30,8 @@ export default function SangeurLoginPage() {
       })
       setSangeurAuth(data.token, data.user, data.sangeur)
       router.push('/sangeur')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Erro ao entrar como SANGEUR')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao entrar como SANGEUR'))
     } finally {
       setLoading(false)
     }

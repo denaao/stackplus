@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
 import Link from 'next/link'
 
 type PixType = 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'RANDOM'
@@ -168,8 +169,8 @@ export default function RegisterPage() {
       })
       setAuth(data.token, data.user)
       router.push('/dashboard')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Erro ao cadastrar')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao cadastrar'))
     } finally {
       setLoading(false)
     }

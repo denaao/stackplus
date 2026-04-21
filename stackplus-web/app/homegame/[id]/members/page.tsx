@@ -6,6 +6,7 @@ import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
 import { useAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
 
 interface Member {
   id: string
@@ -53,8 +54,8 @@ export default function HomeGameMembersPage() {
       await api.patch(`/home-games/${id}/members/${memberUserId}/role`, { role: next })
       setFeedback({ tone: 'ok', message: `Papel atualizado.` })
       load()
-    } catch (err: any) {
-      setFeedback({ tone: 'error', message: typeof err === 'string' ? err : 'Nao foi possivel atualizar o papel.' })
+    } catch (err) {
+      setFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel atualizar o papel.') })
     } finally {
       setBusyUserId(null)
     }

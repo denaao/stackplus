@@ -5,17 +5,27 @@ import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 import AppHeader from '@/components/AppHeader'
+import { getErrorMessage } from '@/lib/errors'
 
 interface HomeGameMembership {
   id: string
   homeGame: { id: string; name: string; gameType?: 'CASH_GAME' | 'TOURNAMENT'; address: string; dayOfWeek: string; host: { name: string } }
 }
 
+interface PlayerStats {
+  totalSessions: number
+  wins: number
+  losses: number
+  totalResult: number
+}
+
+type StatCard = { label: string; value: string | number; color?: string }
+
 export default function PlayerDashboardPage() {
   const router = useRouter()
   const { user, logout } = useAuthStore()
   const [memberships, setMemberships] = useState<HomeGameMembership[]>([])
-  const [stats, setStats] = useState<any>(null)
+  const [stats, setStats] = useState<PlayerStats | null>(null)
   const [joinCode, setJoinCode] = useState('')
   const [joinError, setJoinError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -34,7 +44,7 @@ export default function PlayerDashboardPage() {
       await api.post('/home-games/join', { joinCode: joinCode.toUpperCase() })
       const { data } = await api.get('/home-games/member')
       setMemberships(data); setJoinCode('')
-    } catch (err: any) { setJoinError(typeof err === 'string' ? err : 'Código inválido') }
+    } catch (err) { setJoinError(getErrorMessage(err, 'Código inválido')) }
   }
 
   return (
@@ -47,15 +57,15 @@ export default function PlayerDashboardPage() {
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-8">
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
+            {([
               { label: 'Sessões', value: stats.totalSessions },
               { label: 'Vitórias', value: stats.wins },
               { label: 'Derrotas', value: stats.losses },
               { label: 'Resultado', value: `R$ ${stats.totalResult.toFixed(2)}`, color: stats.totalResult >= 0 ? 'text-sx-cyan' : 'text-red-400' },
-            ].map((s) => (
+            ] as StatCard[]).map((s) => (
               <div key={s.label} className="bg-sx-card border border-sx-border rounded-xl p-4">
                 <p className="text-xs text-sx-muted uppercase tracking-wide">{s.label}</p>
-                <p className={`text-xl font-bold mt-1 ${(s as any).color || ''}`}>{s.value}</p>
+                <p className={`text-xl font-bold mt-1 ${s.color ?? ''}`}>{s.value}</p>
               </div>
             ))}
           </div>

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
+import { getErrorMessage } from '@/lib/errors'
 
 export default function CreateHomeGamePage() {
   const router = useRouter()
@@ -17,8 +18,8 @@ export default function CreateHomeGamePage() {
     try {
       await api.post('/home-games', form)
       router.push('/dashboard')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Erro ao criar Home Game')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao criar Home Game'))
     } finally {
       setLoading(false)
     }
