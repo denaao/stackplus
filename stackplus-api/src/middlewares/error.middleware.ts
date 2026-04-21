@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { ZodError } from 'zod'
 import { Prisma } from '@prisma/client'
+import { captureError } from '../lib/sentry'
 
 function extractMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message
@@ -98,6 +99,19 @@ export function errorMiddleware(
     },
     message,
   )
+
+  // Sentry: capturamos apenas erros 500+. Erros 4xx sao comportamento esperado
+  // (input invalido do user, 401/403/404 etc) e geram ruido se forem reportados.
+  if (status >= 500) {
+    const requestId = (req.headers['x-request-id'] as string | undefined)
+      ?? (req as Request & { id?: string }).id
+    captureError(err, {
+      userId: authUser?.userId,
+      requestId,
+      route: `${req.method} ${req.route?.path ?? req.path}`,
+      status,
+    })
+  }
 
   if (err instanceof ZodError) {
     res.status(status).json({

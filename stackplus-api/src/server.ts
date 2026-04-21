@@ -2,8 +2,6 @@ import path from 'path'
 import fs from 'fs'
 import dotenv from 'dotenv'
 import http from 'http'
-import app from './app'
-import { initSocket } from './socket/socket'
 
 const dotenvCandidates = [
   path.resolve(__dirname, '../.env'),
@@ -17,6 +15,15 @@ if (dotenvPath) {
 } else {
   dotenv.config()
 }
+
+// IMPORTANTE: initSentry precisa rodar ANTES dos imports do app e do Prisma
+// para que o Sentry instrumente corretamente o Node runtime. Se SENTRY_DSN
+// não estiver definido, vira no-op.
+import { initSentry, flushSentry } from './lib/sentry'
+initSentry()
+
+import app from './app'
+import { initSocket } from './socket/socket'
 
 const PORT = process.env.PORT || 3001
 const WEBHOOK_SYNC_INTERVAL_MS = Number(process.env.ANNAPAY_WEBHOOK_SYNC_INTERVAL_MS || '0')
@@ -52,3 +59,13 @@ server.listen(PORT, () => {
     console.log('[annapay] auto webhook sync disabled (set ANNAPAY_AUTO_WEBHOOK_SYNC=true to enable)')
   }
 })
+
+// Graceful shutdown: drena eventos pendentes do Sentry antes de sair.
+// Railway manda SIGTERM; Ctrl+C local manda SIGINT.
+async function shutdown(signal: string) {
+  console.log(`[shutdown] received ${signal}, flushing Sentry...`)
+  await flushSentry(2000)
+  process.exit(0)
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
