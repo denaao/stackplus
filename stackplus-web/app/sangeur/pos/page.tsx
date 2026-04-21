@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useSangeurAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
+import { getStringByPaths } from '@/lib/payload'
 
 type PaymentMethod = 'PIX_QR' | 'VOUCHER' | 'CASH' | 'CARD'
 type FinancialModule = 'POSTPAID' | 'PREPAID' | 'HYBRID'
@@ -71,46 +73,39 @@ interface ShiftDetail {
   }>
 }
 
-function extractPixQrImage(payload: any): string | null {
-  const candidates = [
-    payload?.qrCodeBase64,
-    payload?.pixQrCodeBase64,
-    payload?.qrcode,
-    payload?.links?.qrCode,
-    payload?.pix?.qrcode,
-    payload?.charge?.qrcode,
-    payload?.charge?.qrCodeBase64,
-    payload?.charge?.links?.qrCode,
-    payload?.data?.qrcode,
-    payload?.data?.qrCodeBase64,
-  ]
-  for (const value of candidates) {
-    if (typeof value !== 'string' || !value.trim()) continue
-    if (value.startsWith('data:image')) return value
-    return `data:image/png;base64,${value}`
-  }
-  return null
+function extractPixQrImage(payload: unknown): string | null {
+  const raw = getStringByPaths(payload, [
+    ['qrCodeBase64'],
+    ['pixQrCodeBase64'],
+    ['qrcode'],
+    ['links', 'qrCode'],
+    ['pix', 'qrcode'],
+    ['charge', 'qrcode'],
+    ['charge', 'qrCodeBase64'],
+    ['charge', 'links', 'qrCode'],
+    ['data', 'qrcode'],
+    ['data', 'qrCodeBase64'],
+  ])
+  if (!raw) return null
+  if (raw.startsWith('data:image')) return raw
+  return `data:image/png;base64,${raw}`
 }
 
-function extractPixCopyPaste(payload: any): string | null {
-  const candidates = [
-    payload?.pixCopiaECola,
-    payload?.pixCopyPaste,
-    payload?.copyPaste,
-    payload?.copiaECola,
-    payload?.links?.emv,
-    payload?.pix?.copiaECola,
-    payload?.pix?.copyPaste,
-    payload?.charge?.pixCopiaECola,
-    payload?.charge?.links?.emv,
-    payload?.charge?.pix?.copiaECola,
-    payload?.data?.pixCopiaECola,
-    payload?.data?.copiaECola,
-  ]
-  for (const value of candidates) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-  return null
+function extractPixCopyPaste(payload: unknown): string | null {
+  return getStringByPaths(payload, [
+    ['pixCopiaECola'],
+    ['pixCopyPaste'],
+    ['copyPaste'],
+    ['copiaECola'],
+    ['links', 'emv'],
+    ['pix', 'copiaECola'],
+    ['pix', 'copyPaste'],
+    ['charge', 'pixCopiaECola'],
+    ['charge', 'links', 'emv'],
+    ['charge', 'pix', 'copiaECola'],
+    ['data', 'pixCopiaECola'],
+    ['data', 'copiaECola'],
+  ])
 }
 
 function formatCurrency(value: number) {
@@ -152,7 +147,8 @@ export default function SangeurPosPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pixQrModal, setPixQrModal] = useState<any>(null)
+  // Payload bruto da cobrança PIX — narrowing nos helpers extract*.
+  const [pixQrModal, setPixQrModal] = useState<unknown>(null)
   const [pixSaleId, setPixSaleId] = useState<string | null>(null)
   const [pixStatusMsg, setPixStatusMsg] = useState('')
   const [confirmingPix, setConfirmingPix] = useState(false)
@@ -239,8 +235,8 @@ export default function SangeurPosPage() {
         await loadOperational()
         if (activeShift?.sessionId) loadParticipants(activeShift.sessionId)
       }
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Falha ao confirmar pagamento')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Falha ao confirmar pagamento'))
     } finally {
       setConfirmingPix(false)
     }
@@ -260,8 +256,8 @@ export default function SangeurPosPage() {
       } else {
         setActiveShift(null)
       }
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Falha ao carregar dados')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Falha ao carregar dados'))
     } finally {
       setLoadingData(false)
     }
@@ -298,8 +294,8 @@ export default function SangeurPosPage() {
       setOpenShiftForm({ sessionId: '', initialChips: '', note: '' })
       setSuccess('Turno aberto')
       await loadOperational()
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Falha ao abrir turno')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Falha ao abrir turno'))
     } finally {
       setLoading(false)
     }
@@ -333,8 +329,8 @@ export default function SangeurPosPage() {
         setPixStatusMsg('Aguardando pagamento...')
       }
       setSuccess('Venda registrada')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Falha ao registrar venda')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Falha ao registrar venda'))
     } finally {
       setLoading(false)
     }
@@ -363,8 +359,8 @@ export default function SangeurPosPage() {
       setReloadForm({ chips: '', note: '' })
       setSuccess('Reforço registrado')
       setTab('VENDA')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Falha no reforço')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Falha no reforço'))
     } finally {
       setLoading(false)
     }
@@ -386,8 +382,8 @@ export default function SangeurPosPage() {
       setCloseForm({ returnedChips: '', note: '' })
       setSuccess('Turno encerrado')
       await loadOperational()
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Falha ao encerrar')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Falha ao encerrar'))
     } finally {
       setLoading(false)
     }
