@@ -7,6 +7,8 @@ import { joinSession, leaveSession, getSocket } from '@/services/socket'
 import { useAuthStore } from '@/store/useStore'
 import AppHeader from '@/components/AppHeader'
 import HomeGameTabs from '@/components/HomeGameTabs'
+import { getErrorMessage } from '@/lib/errors'
+import { findStringDeep, getStringByPaths, hasAnyKeyDeep } from '@/lib/payload'
 
 interface Member { id: string; name: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null }
 interface PlayerState {
@@ -37,11 +39,44 @@ interface RakebackAssignment {
   user: { id: string; name: string; email?: string }
 }
 
+interface CashierSession {
+  id: string
+  status: string
+  chipValue: string | null
+  financialModule?: 'POSTPAID' | 'PREPAID' | 'HYBRID'
+  gameType?: 'CASH_GAME' | 'TOURNAMENT'
+  caixinhaMode?: 'SPLIT' | 'INDIVIDUAL'
+  jackpotEnabled?: boolean
+  homeGame: {
+    id: string
+    hostId: string
+    name: string
+    chipValue: string
+    financialModule?: 'POSTPAID' | 'PREPAID' | 'HYBRID'
+    gameType?: 'CASH_GAME' | 'TOURNAMENT'
+    jackpotAccumulated?: string | number
+  }
+  participantAssignments?: Array<{ userId: string; user?: { id: string; name: string } }>
+  playerStates?: Array<{ user?: { id: string; name: string } }>
+  staffAssignments?: StaffAssignment[]
+  rakebackAssignments?: RakebackAssignment[]
+}
+
+interface PrepaidChargeInfo {
+  id: string
+  virtualAccount?: string | null
+  qrCodeBase64?: string | null
+  pixCopyPaste?: string | null
+  amount?: number
+  // Payload bruto da ANNAPAY — os extract* helpers fazem o narrowing.
+  [key: string]: unknown
+}
+
 interface PrepaidChargeResult {
   playerMode: 'POSTPAID' | 'PREPAID'
   requiresCharge: boolean
   amount: number
-  charge?: any
+  charge?: PrepaidChargeInfo
 }
 
 interface PendingPrepaidTransaction {
@@ -86,122 +121,59 @@ function formatDateTime(value: string) {
   })
 }
 
-function extractPixCopyPaste(payload: any): string | null {
-  const candidates = [
-    payload?.pixCopiaECola,
-    payload?.pixCopyPaste,
-    payload?.copyPaste,
-    payload?.copiaECola,
-    payload?.links?.emv,
-    payload?.pix?.copiaECola,
-    payload?.pix?.copyPaste,
-    payload?.charge?.pixCopiaECola,
-    payload?.charge?.links?.emv,
-    payload?.charge?.pix?.copiaECola,
-    payload?.data?.pixCopiaECola,
-  ]
-
-  for (const value of candidates) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-
-  return null
+function extractPixCopyPaste(payload: unknown): string | null {
+  return getStringByPaths(payload, [
+    ['pixCopiaECola'],
+    ['pixCopyPaste'],
+    ['copyPaste'],
+    ['copiaECola'],
+    ['links', 'emv'],
+    ['pix', 'copiaECola'],
+    ['pix', 'copyPaste'],
+    ['charge', 'pixCopiaECola'],
+    ['charge', 'links', 'emv'],
+    ['charge', 'pix', 'copiaECola'],
+    ['data', 'pixCopiaECola'],
+  ])
 }
 
-function extractPixQrImage(payload: any): string | null {
-  const candidates = [
-    payload?.qrCodeBase64,
-    payload?.pixQrCodeBase64,
-    payload?.qrcode,
-    payload?.links?.qrCode,
-    payload?.pix?.qrcode,
-    payload?.charge?.qrcode,
-    payload?.charge?.qrCodeBase64,
-    payload?.charge?.links?.qrCode,
-    payload?.data?.qrcode,
-  ]
-
-  for (const value of candidates) {
-    if (typeof value !== 'string' || !value.trim()) continue
-    if (value.startsWith('data:image')) return value
-    return `data:image/png;base64,${value}`
-  }
-
-  return null
+function extractPixQrImage(payload: unknown): string | null {
+  const raw = getStringByPaths(payload, [
+    ['qrCodeBase64'],
+    ['pixQrCodeBase64'],
+    ['qrcode'],
+    ['links', 'qrCode'],
+    ['pix', 'qrcode'],
+    ['charge', 'qrcode'],
+    ['charge', 'qrCodeBase64'],
+    ['charge', 'links', 'qrCode'],
+    ['data', 'qrcode'],
+  ])
+  if (!raw) return null
+  if (raw.startsWith('data:image')) return raw
+  return `data:image/png;base64,${raw}`
 }
 
-function extractCobStatus(payload: any): string | null {
-  const candidates = [
-    payload?.status,
-    payload?.situacao,
-    payload?.data?.status,
-    payload?.data?.situacao,
-    payload?.response?.status,
-    payload?.response?.situacao,
-    payload?.cob?.status,
-    payload?.cob?.situacao,
-    payload?.pix?.status,
-  ]
-
-  for (const value of candidates) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-
-  return null
+function extractCobStatus(payload: unknown): string | null {
+  return getStringByPaths(payload, [
+    ['status'],
+    ['situacao'],
+    ['data', 'status'],
+    ['data', 'situacao'],
+    ['response', 'status'],
+    ['response', 'situacao'],
+    ['cob', 'status'],
+    ['cob', 'situacao'],
+    ['pix', 'status'],
+  ])
 }
 
-function findStatusDeep(payload: any): string | null {
-  if (!payload || typeof payload !== 'object') return null
-
-  const stack: any[] = [payload]
-  while (stack.length > 0) {
-    const current = stack.pop()
-    if (!current || typeof current !== 'object') continue
-
-    if (Array.isArray(current)) {
-      for (const item of current) stack.push(item)
-      continue
-    }
-
-    const status = typeof current.status === 'string' ? current.status : null
-    if (status && status.trim()) return status.trim()
-
-    const situacao = typeof current.situacao === 'string' ? current.situacao : null
-    if (situacao && situacao.trim()) return situacao.trim()
-
-    for (const value of Object.values(current)) {
-      if (value && typeof value === 'object') stack.push(value)
-    }
-  }
-
-  return null
+function findStatusDeep(payload: unknown): string | null {
+  return findStringDeep(payload, ['status', 'situacao'])
 }
 
-function hasConfirmedPix(payload: any): boolean {
-  const stack: any[] = [payload]
-
-  while (stack.length > 0) {
-    const current = stack.pop()
-    if (!current || typeof current !== 'object') continue
-
-    if (Array.isArray(current)) {
-      for (const item of current) stack.push(item)
-      continue
-    }
-
-    const obj = current as Record<string, any>
-    const keys = Object.keys(obj)
-
-    if (keys.includes('endToEndId') || keys.includes('e2eId') || keys.includes('horario')) {
-      return true
-    }
-
-    for (const value of Object.values(obj)) {
-      if (value && typeof value === 'object') stack.push(value)
-    }
-  }
-
-  return false
+function hasConfirmedPix(payload: unknown): boolean {
+  return hasAnyKeyDeep(payload, ['endToEndId', 'e2eId', 'horario'])
 }
 
 function isPaidCobStatus(status: string | null): boolean {
@@ -225,7 +197,7 @@ function isPaidCobStatus(status: string | null): boolean {
   ].some((token) => normalized.includes(token))
 }
 
-function isPaidCobPayload(payload: any): boolean {
+function isPaidCobPayload(payload: unknown): boolean {
   const status = extractCobStatus(payload) || findStatusDeep(payload)
   if (isPaidCobStatus(status)) return true
   return hasConfirmedPix(payload)
@@ -256,7 +228,7 @@ export default function CashierPage() {
   const params = useParams()
   const { user, logout } = useAuthStore()
   const sessionId = params.sessionId as string
-  const [session, setSession] = useState<any>(null)
+  const [session, setSession] = useState<CashierSession | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [playerStates, setPlayerStates] = useState<PlayerState[]>([])
   const [transactions, setTransactions] = useState<CashierTransaction[]>([])
@@ -335,10 +307,12 @@ export default function CashierPage() {
 
       const allMembers: Member[] = Array.from(memberMap.values())
       const participantIds: string[] = Array.isArray(data.participantAssignments)
-        ? data.participantAssignments.map((assignment: any) => assignment.userId)
+        ? (data.participantAssignments as Array<{ userId: string }>).map((assignment) => assignment.userId)
         : []
       const playerStateIds: string[] = Array.isArray(data.playerStates)
-        ? data.playerStates.map((s: any) => s?.user?.id).filter(Boolean)
+        ? (data.playerStates as Array<{ user?: { id?: string } }>)
+            .map((s) => s?.user?.id)
+            .filter((id): id is string => Boolean(id))
         : []
       const allowedIds = new Set<string>([...participantIds, ...playerStateIds])
       const filteredMembers = allowedIds.size > 0
@@ -358,7 +332,7 @@ export default function CashierPage() {
     if (socket.connected) {
       joinSession(sessionId)
     }
-    socket.on('session:join:error', (payload: any) => {
+    socket.on('session:join:error', (payload: unknown) => {
       console.warn('[cashier] session:join:error', payload)
     })
     socket.on('transaction:new', ({ transaction, playerState }: { transaction: CashierTransaction; playerState: PlayerState }) => {
@@ -481,8 +455,8 @@ export default function CashierPage() {
       setForm({ userId: '', amount: '', chips: '', note: '' })
       setTransactionType('BUYIN')
       setTimeout(() => setSuccess(''), 2000)
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Erro ao registrar')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao registrar'))
     } finally {
       setLoading(false)
     }
@@ -511,8 +485,8 @@ export default function CashierPage() {
       await refreshCashierSnapshot()
       setCashoutPlayer(null)
       setCashoutChips('')
-    } catch (err: any) {
-      setCashoutError(typeof err === 'string' ? err : 'Erro ao registrar cashout')
+    } catch (err) {
+      setCashoutError(getErrorMessage(err, 'Erro ao registrar cashout'))
     } finally {
       setCashoutLoading(false)
     }
@@ -564,10 +538,8 @@ export default function CashierPage() {
       setPendingPrepaidTransaction(null)
       setPrepaidChargeResult(null)
       setTimeout(() => setSuccess(''), 2500)
-    } catch (err: any) {
-      const errorMessage = typeof err?.response?.data?.error === 'string'
-        ? err.response.data.error
-        : (typeof err?.message === 'string' ? err.message : '')
+    } catch (err) {
+      const errorMessage = getErrorMessage(err, '')
       const normalizedError = errorMessage.toLowerCase()
       const isAlreadyRegistered = normalizedError.includes('buy-in já realizado') || normalizedError.includes('buy-in ja realizado')
 
@@ -657,11 +629,8 @@ export default function CashierPage() {
       }
 
       setChargeStatusMessage(String(data?.message || 'Pagamento ainda não identificado.'))
-    } catch (err: any) {
-      const errorMessage = typeof err?.response?.data?.error === 'string'
-        ? err.response.data.error
-        : (typeof err?.message === 'string' ? err.message : 'Falha ao consultar status da cobrança.')
-      setChargeStatusMessage(errorMessage)
+    } catch (err) {
+      setChargeStatusMessage(getErrorMessage(err, 'Falha ao consultar status da cobrança.'))
     } finally {
       setCheckingChargeStatus(false)
     }
@@ -676,9 +645,8 @@ export default function CashierPage() {
       await refreshCashierSnapshot()
       setSuccess('Transação excluída e cálculos atualizados.')
       setTimeout(() => setSuccess(''), 2500)
-    } catch (err: any) {
-      const message = typeof err === 'string' ? err : 'Erro ao excluir transação'
-      setError(message)
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao excluir transação'))
     } finally {
       setDeletingTransactionId(null)
     }
@@ -722,7 +690,7 @@ export default function CashierPage() {
         }
 
         setChargeStatusMessage(String(data?.message || 'Aguardando pagamento...'))
-      } catch (err: any) {
+      } catch (err) {
         const errorMessage = typeof err?.response?.data?.error === 'string'
           ? err.response.data.error
           : (typeof err?.message === 'string' ? err.message : 'Falha ao consultar status da cobrança.')
@@ -876,7 +844,7 @@ export default function CashierPage() {
       await api.patch(`/sessions/${sessionId}/end`, payload)
       setSuccess('Sessão encerrada!')
       setTimeout(() => router.back(), 2000)
-    } catch (err: any) {
+    } catch (err) {
       setError('Erro ao encerrar sessão')
     } finally {
       setLoading(false)
