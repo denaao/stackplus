@@ -338,3 +338,45 @@ Após um incidente de produção, documentar:
 4. **Follow-up** (ajustes pra não repetir)
 
 Criar issue no GitHub com label `incident` ou nota em `docs/INCIDENTS.md` se começar a ter histórico.
+
+---
+
+## Histórico de incidentes
+
+### 2026-04-21 — Source Docker sequestrado (stackplus-api offline ~30min)
+
+**Sintoma**: frontend retornando 404 "Application not found" em todas as chamadas de API.
+
+**Causa raiz**: durante setup de um novo Cron Service no Railway, o painel do `stackplus-api` ficou com **Source Image = `evoapicloud/evolution-api:latest`** (imagem Docker pública da Evolution API, não do nosso repo). Deploy passou a rodar essa imagem aleatória em vez do nosso código → `prisma/schema.prisma not found`. Provável causa: clique errado no UI ao configurar o Cron, ou bug do Railway que confundiu serviços.
+
+**Ação**: Disconnect da Source Docker → Reconnect GitHub `denaao/stackplus` → Root Directory `stackplus-api`. Domain antigo `stackplus-api.up.railway.app` foi desvinculado; Railway gerou novo domain `stackplus-production-6b11.up.railway.app`. Variables preservadas automaticamente. Atualizado `NEXT_PUBLIC_API_URL` no Vercel + redeploy.
+
+**Follow-up**:
+- [x] Configurar Custom Domain permanente `api.stackplus.com.br` — CNAME `api` → `kmse1wns.up.railway.app` + TXT `_railway-verify.api` gerenciado pelo Vercel DNS (nameservers `ns1/2.vercel-dns.com`). SSL Let's Encrypt auto-renovável. (21/04 noite)
+- [x] Reconfigurar URL de webhook na ANNAPAY — `POST /api/banking/annapay/webhook/sync` com token ADMIN aponta pra `https://api.stackplus.com.br/api/banking/annapay/webhooks/cob`. (21/04 noite)
+- [x] Pausar/remover o Cron Service falho — **CronSchedule deletado do Railway**. (21/04 noite)
+- [x] Cleanup de refresh tokens vira execução manual semanal (documentada acima) até ter solução definitiva
+- [ ] Revisar periodicamente Railway → stackplus-api → Source pra confirmar que continua apontando pro repo correto
+
+### 2026-04-21 (continuação) — Env vars sujas sobreviveram à troca de Source
+
+**Sintoma** (descoberto durante Opção 1 acima): após adicionar custom domain `api.stackplus.com.br`, `/health` respondia OK mas `POST /auth/login` retornava `{"error":"secretOrPrivateKey must have a value"}`. Frontend em "Credenciais inválidas" genérico.
+
+**Causa raiz**: quando Source foi trocada de Docker (Evolution API hijacked) pra GitHub no incidente anterior, o Railway preservou **as env vars da source antiga** em vez de limpar. O serviço stackplus-api estava rodando com 18 variáveis da Evolution API (`AUTHENTICATION_API_KEY`, `CACHE_REDIS_*`, `DATABASE_PROVIDER`, `SERVER_TYPE`, `SERVER_URL`, etc.) e **sem as variáveis críticas do stackplus-api** (`JWT_SECRET`, `ANNAPAY_*`, `FRONTEND_URL`, `API_PUBLIC_URL`, `SANGEUR_WEBHOOK_SECRET`). Login funcionou pontualmente após o recovery porque `JWT_SECRET` foi criada manualmente pra virar ADMIN e sincronizar webhook, mas algum redeploy subsequente limpou.
+
+**Ação**:
+1. Recriei via Raw Editor do Railway todas as env vars do `.env.example` com valores de produção (`JWT_SECRET`, `JWT_EXPIRES_IN`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL_DAYS`, `NODE_ENV=production`, `FRONTEND_URL`, `API_PUBLIC_URL`, `EVOLUTION_API_*`, `ANNAPAY_*`, `SANGEUR_WEBHOOK_SECRET`).
+2. Validei login via `curl` direto na API (200 OK com token) antes de testar no frontend.
+3. Cleanup das 18 variáveis órfãs da Evolution API. Mantidas apenas `DATABASE_URL`, `EVOLUTION_INSTANCE_NAME`, `SENTRY_DSN` (nomes que coincidem com os que o stackplus-api espera).
+
+**Lição aprendida**: **trocar Source no Railway NÃO limpa env vars da source antiga**. Depois de qualquer troca de Source (Docker ↔ GitHub, ou repo A ↔ repo B), fazer auditoria manual: abrir Variables e conferir que a lista bate com o `.env.example` do repo atual. Variáveis com nomes não reconhecidos pelo código novo devem ser removidas explicitamente.
+
+**Sanity check pós-fix**:
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Invoke-RestMethod -Uri "https://api.stackplus.com.br/health" -Method Get
+
+# Login via API
+$body = @{ cpf = "CPF_ADMIN"; password = "SENHA" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://api.stackplus.com.br/api/auth/login" -Method Post -ContentType "application/json" -Body $body
+```
