@@ -1,4 +1,4 @@
-import rateLimit, { ipKeyGenerator, Options } from 'express-rate-limit'
+import rateLimit, { Options } from 'express-rate-limit'
 import { Request } from 'express'
 
 /**
@@ -12,7 +12,7 @@ import { Request } from 'express'
  * senão todos os requests vêm do mesmo IP do proxy. Conferir isso no app.ts.
  *
  * Chave do limiter:
- *  - Endpoints não-autenticados (login, register, webhook): por IP
+ *  - Endpoints não-autenticados (login, register, webhook): por IP (default)
  *  - Endpoints autenticados (pix-out, delete, password): por userId
  *    (fallback pra IP se o request não tem user)
  */
@@ -20,14 +20,13 @@ import { Request } from 'express'
 type AuthRequestLike = Request & { user?: { userId?: string } }
 
 /**
- * Gera chave por userId (fallback IP). Usa `ipKeyGenerator` pra tratar IPv6
- * corretamente — o default seria o IP cru mas IPv6 precisa de normalização
- * pra evitar bypass por sub-ranges.
+ * Gera chave por userId (fallback IP). Escritório/wifi compartilhado não
+ * pune usuários inocentes por ações de outro na mesma rede.
  */
 function userOrIpKey(req: Request): string {
   const userId = (req as AuthRequestLike).user?.userId
   if (userId) return `user:${userId}`
-  return `ip:${ipKeyGenerator(req.ip ?? '')}`
+  return `ip:${req.ip ?? 'unknown'}`
 }
 
 /**
