@@ -36,8 +36,10 @@ interface Session {
 
 interface AuthStore {
   token: string | null
+  refreshToken: string | null
   user: User | null
-  setAuth: (token: string, user: User) => void
+  setAuth: (token: string, user: User, refreshToken?: string | null) => void
+  setTokens: (token: string, refreshToken: string) => void
   setUser: (user: User) => void
   logout: () => void
 }
@@ -67,14 +69,41 @@ interface SangeurAuthStore {
   logoutSangeur: () => void
 }
 
+// Best-effort POST /auth/logout. Revoga refresh tokens no backend.
+// Usa fetch direto (não axios/api.ts) pra não criar dependência circular
+// store <-> api e não disparar o interceptor de refresh.
+function notifyLogoutBackend(token: string | null) {
+  if (!token || typeof window === 'undefined') return
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+  // Fire-and-forget: se falhar, tokens continuam no DB até expirar naturalmente.
+  fetch(`${baseURL}/auth/logout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    keepalive: true,
+  }).catch(() => {})
+}
+
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
+      refreshToken: null,
       user: null,
-      setAuth: (token, user) => set({ token, user }),
-      setUser: (user) => set((state) => ({ token: state.token, user })),
-      logout: () => set({ token: null, user: null }),
+      // setAuth aceita refreshToken opcional pra retrocompat — se o backend
+      // não enviar (ex.: endpoints antigos), mantém refreshToken atual.
+      setAuth: (token, user, refreshToken) =>
+        set((state) => ({
+          token,
+          user,
+          refreshToken: refreshToken ?? state.refreshToken,
+        })),
+      setTokens: (token, refreshToken) => set({ token, refreshToken }),
+      setUser: (user) => set((state) => ({ token: state.token, refreshToken: state.refreshToken, user })),
+      logout: () => {
+        // Avisa o backend pra revogar refresh tokens (SEC-004).
+        notifyLogoutBackend(get().token)
+        set({ token: null, refreshToken: null, user: null })
+      },
     }),
     { name: 'stackplus-auth' }
   )

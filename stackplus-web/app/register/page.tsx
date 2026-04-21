@@ -167,7 +167,7 @@ export default function RegisterPage() {
         pixType: form.pixType,
         pixKey: form.pixKey,
       })
-      setAuth(data.token, data.user)
+      setAuth(data.token, data.user, data.refreshToken ?? null)
       router.push('/dashboard')
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao cadastrar'))

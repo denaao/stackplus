@@ -42,7 +42,7 @@ export default function LoginPage() {
         cpf: form.cpf.replace(/\D/g, ''),
         password: form.password,
       })
-      setAuth(data.token, data.user)
+      setAuth(data.token, data.user, data.refreshToken ?? null)
       const role = data.user.role
       if (role === 'ADMIN') router.push('/admin/dashboard')
       else if (role === 'CASHIER') router.push('/cashier/select')
