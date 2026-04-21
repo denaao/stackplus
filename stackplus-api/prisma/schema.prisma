@@ -177,6 +177,34 @@ model User {
   comandaTransfersCreated ComandaTransfer[] @relation("ComandaTransferCreator")
   tournamentPlayers      TournamentPlayer[]
   auditLogs              AuditLog[]
+  refreshTokens          RefreshToken[]
+}
+
+// Refresh tokens para rotação de JWT (SEC-004).
+//
+// Fluxo:
+//  - Login emite { accessToken (15min), refreshToken (30d) }
+//  - Access token expirou → cliente chama /auth/refresh com refreshToken
+//  - /auth/refresh: valida hash, revoga o antigo, emite novo par
+//  - Logout: marca tokens do user como revokedAt
+//
+// O campo `tokenHash` guarda SHA-256 hex do token cru — evita que vazamento
+// da tabela exponha tokens válidos. Nunca armazenamos o token em claro.
+model RefreshToken {
+  id          String    @id @default(uuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  replacedBy  String?   // id do token novo quando rotaciona (trilha)
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 // Trilha de auditoria para operações financeiras e administrativas (SEC-008).

@@ -24,11 +24,13 @@ vi.mock('../../src/utils/jwt', () => ({
 }))
 
 // Stub do refresh-token helper — evita mock granular do crypto/db.
+// Factory fn do vi.mock e isolado: não pode referenciar consts externas
+// (vitest faz hoisting pra antes do module load). Por isso inline.
 vi.mock('../../src/lib/refresh-token', () => ({
-  emitRefreshTokenForUser: vi.fn(async () => ({
+  emitRefreshTokenForUser: vi.fn().mockResolvedValue({
     token: 'fake-refresh-token',
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-  })),
+  }),
   rotateRefreshToken: vi.fn(),
   revokeAllForUser: vi.fn(),
 }))

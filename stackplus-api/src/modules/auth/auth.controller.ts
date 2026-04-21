@@ -135,7 +135,32 @@ export async function register(req: Request, res: Response): Promise<void> {
 
 export async function login(req: Request, res: Response): Promise<void> {
   const { cpf, password } = loginSchema.parse(req.body)
-  const result = await AuthService.login(cpf, password)
+  const result = await AuthService.login(cpf, password, {
+    ip: req.ip ?? null,
+    userAgent: String(req.headers['user-agent'] ?? '') || null,
+  })
+  res.json(result)
+}
+
+const refreshSchema = z.object({
+  refreshToken: z.string().trim().min(1),
+})
+
+export async function refresh(req: Request, res: Response): Promise<void> {
+  const { refreshToken } = refreshSchema.parse(req.body)
+  const result = await AuthService.refreshSession(refreshToken, {
+    ip: req.ip ?? null,
+    userAgent: String(req.headers['user-agent'] ?? '') || null,
+  })
+  res.json(result)
+}
+
+export async function logout(req: AuthRequest, res: Response): Promise<void> {
+  if (!req.user?.userId) {
+    res.status(401).json({ error: 'Não autenticado' })
+    return
+  }
+  const result = await AuthService.logout(req.user.userId)
   res.json(result)
 }
 

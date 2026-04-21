@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma'
 import { hashPassword, comparePassword } from '../../utils/hash'
 import { signToken } from '../../utils/jwt'
+import { emitRefreshTokenForUser, revokeAllForUser, rotateRefreshToken } from '../../lib/refresh-token'
 import { PixKeyType, Role } from '@prisma/client'
 
 export async function register(data: {
@@ -38,10 +39,15 @@ export async function register(data: {
   })
 
   const token = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
-  return { user, token }
+  const refresh = await emitRefreshTokenForUser({ userId: user.id })
+  return { user, token, refreshToken: refresh.token, refreshTokenExpiresAt: refresh.expiresAt }
 }
 
-export async function login(cpf: string, password: string) {
+export async function login(
+  cpf: string,
+  password: string,
+  context?: { ip?: string | null; userAgent?: string | null },
+) {
   const cpfDigits = cpf.replace(/\D/g, '')
   const user = await prisma.user.findUnique({ where: { cpf: cpfDigits } })
   if (!user) throw new Error('Credenciais inválidas')
@@ -50,8 +56,58 @@ export async function login(cpf: string, password: string) {
   if (!valid) throw new Error('Credenciais inválidas')
 
   const token = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
+  const refresh = await emitRefreshTokenForUser({
+    userId: user.id,
+    ip: context?.ip ?? null,
+    userAgent: context?.userAgent ?? null,
+  })
   const { passwordHash, ...safeUser } = user
-  return { user: safeUser, token }
+  return {
+    user: safeUser,
+    token,
+    refreshToken: refresh.token,
+    refreshTokenExpiresAt: refresh.expiresAt,
+  }
+}
+
+/**
+ * Troca um refresh token válido por um par novo (access + refresh).
+ * Revoga o refresh antigo atomicamente.
+ */
+export async function refreshSession(
+  rawRefreshToken: string,
+  context?: { ip?: string | null; userAgent?: string | null },
+) {
+  const rotated = await rotateRefreshToken({
+    rawToken: rawRefreshToken,
+    ip: context?.ip ?? null,
+    userAgent: context?.userAgent ?? null,
+  })
+  if (!rotated) throw new Error('Refresh token inválido ou expirado')
+
+  const user = await prisma.user.findUnique({
+    where: { id: rotated.userId },
+    select: { id: true, email: true, role: true },
+  })
+  if (!user) throw new Error('Usuário não encontrado')
+
+  const accessToken = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
+  return {
+    token: accessToken,
+    refreshToken: rotated.newToken,
+    refreshTokenExpiresAt: rotated.newExpiresAt,
+  }
+}
+
+/**
+ * Logout: revoga todos os refresh tokens ativos do usuário.
+ * Access tokens continuam válidos até expirar (15min) — trade-off de
+ * performance vs segurança. Se precisar matar sessão imediatamente, adicionar
+ * blacklist de access tokens (custa lookup em cada request).
+ */
+export async function logout(userId: string) {
+  const revoked = await revokeAllForUser(userId)
+  return { revoked }
 }
 
 export async function getMe(userId: string) {
