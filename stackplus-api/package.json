@@ -19,7 +19,8 @@
     "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "db:status": "prisma migrate status --schema prisma/schema.prisma",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "job:cleanup-refresh-tokens": "tsx src/jobs/cleanup-expired-refresh-tokens.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
