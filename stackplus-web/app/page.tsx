@@ -25,11 +25,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   // Se já está logado, redireciona direto pro destino certo em vez de mostrar o login.
+  // ADMIN e PLAYER caem no mesmo /dashboard — não há painel admin dedicado (ainda).
+  // O role ADMIN serve apenas pra autorização em endpoints sensiveis da API.
   useEffect(() => {
     if (!user) return
     const role = user.role
-    if (role === 'ADMIN') router.replace('/admin/dashboard')
-    else if (role === 'CASHIER') router.replace('/cashier/select')
+    if (role === 'CASHIER') router.replace('/cashier/select')
     else router.replace('/dashboard')
   }, [user, router])
 
@@ -44,8 +45,7 @@ export default function LoginPage() {
       })
       setAuth(data.token, data.user, data.refreshToken ?? null)
       const role = data.user.role
-      if (role === 'ADMIN') router.push('/admin/dashboard')
-      else if (role === 'CASHIER') router.push('/cashier/select')
+      if (role === 'CASHIER') router.push('/cashier/select')
       else router.push('/dashboard')
     } catch (err) {
       setError(getErrorMessage(err, 'Credenciais inválidas'))
