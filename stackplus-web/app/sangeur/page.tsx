@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useSangeurAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
 
 type PaymentMethod = 'PIX_QR' | 'VOUCHER' | 'CASH' | 'CARD'
 
@@ -225,7 +226,8 @@ export default function SangeurHomePage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pixQrModal, setPixQrModal] = useState<any>(null)
+  // Payload bruto da cobrança PIX — narrowing nos helpers extract*.
+  const [pixQrModal, setPixQrModal] = useState<unknown>(null)
   const [closingReportModal, setClosingReportModal] = useState<ClosingReportData | null>(null)
 
   const pendingVoucherSales = useMemo(
@@ -300,8 +302,8 @@ export default function SangeurHomePage() {
         } else {
           setActiveShift(null)
         }
-      } catch (err: any) {
-        setError(typeof err === 'string' ? err : 'Nao foi possivel carregar os dados operacionais')
+      } catch (err) {
+        setError(getErrorMessage(err, 'Nao foi possivel carregar os dados operacionais'))
       } finally {
         setLoadingData(false)
       }
@@ -342,14 +344,12 @@ export default function SangeurHomePage() {
         players: Array.isArray(data?.players) ? data.players : [],
         candidates: Array.isArray(data?.candidates) ? data.candidates : [],
       })
-    } catch (err: any) {
+    } catch (err) {
       // O interceptor do services/api.ts rejeita com string, não com Error.
-      const baseMsg = typeof err === 'string'
-        ? err
-        : (err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Falha ao carregar jogadores')
+      const baseMsg = getErrorMessage(err, 'Falha ao carregar jogadores')
       const msg = `${baseMsg} (sessionId=${sessionId})`
       console.error('[sangeur] loadParticipants failed:', err)
-      setParticipantsError(String(msg))
+      setParticipantsError(msg)
       setParticipants({ players: [], candidates: [] })
     } finally {
       setLoadingParticipants(false)
@@ -384,8 +384,8 @@ export default function SangeurHomePage() {
       setMustChangePassword(false)
       setPasswordForm({ currentPassword: '', newPassword: '', confirmNewPassword: '' })
       setSuccess('Senha alterada com sucesso. A POS esta liberada para uso.')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Nao foi possivel alterar a senha')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Nao foi possivel alterar a senha'))
     } finally {
       setLoading(false)
     }
@@ -424,8 +424,8 @@ export default function SangeurHomePage() {
 
       const sessionsResponse = await api.get(`/sangeur/home-games/${sangeur.homeGameId}/sessions`)
       setSessions(Array.isArray(sessionsResponse.data) ? sessionsResponse.data : [])
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Nao foi possivel abrir o turno')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Nao foi possivel abrir o turno'))
     } finally {
       setLoading(false)
     }
@@ -470,8 +470,8 @@ export default function SangeurHomePage() {
 
       if (pixData) setPixQrModal(pixData)
       setSuccess('Venda registrada com sucesso.')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Nao foi possivel registrar a venda')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Nao foi possivel registrar a venda'))
     } finally {
       setLoading(false)
     }
@@ -518,8 +518,8 @@ export default function SangeurHomePage() {
       setActiveShift(data)
       setReloadForm({ chips: '', note: '' })
       setSuccess('Reforco de fichas registrado com sucesso.')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Nao foi possivel registrar o reforco')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Nao foi possivel registrar o reforco'))
     } finally {
       setLoading(false)
     }
@@ -604,8 +604,8 @@ export default function SangeurHomePage() {
       popup.document.open()
       popup.document.write(printHtml)
       popup.document.close()
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Nao foi possivel gerar a felipeta do vale')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Nao foi possivel gerar a felipeta do vale'))
     }
   }
 
@@ -618,8 +618,8 @@ export default function SangeurHomePage() {
       await api.patch(`/sangeur/sales/${saleId}/settle`, {})
       await refreshShift(activeShift.id)
       setSuccess('Vale liquidado com sucesso.')
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Nao foi possivel liquidar o vale')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Nao foi possivel liquidar o vale'))
     } finally {
       setLoading(false)
     }
@@ -636,8 +636,8 @@ export default function SangeurHomePage() {
       }
       await refreshShift(activeShift.id)
       setSuccess(`${saleIds.length} vale(s) liquidado(s) com sucesso.`)
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Nao foi possivel liquidar os vales')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Nao foi possivel liquidar os vales'))
       await refreshShift(activeShift.id)
     } finally {
       setLoading(false)
@@ -773,8 +773,8 @@ export default function SangeurHomePage() {
 
       const sessionsResponse = await api.get(`/sangeur/home-games/${sangeur.homeGameId}/sessions`)
       setSessions(Array.isArray(sessionsResponse.data) ? sessionsResponse.data : [])
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : 'Nao foi possivel encerrar o turno')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Nao foi possivel encerrar o turno'))
     } finally {
       setLoading(false)
     }
