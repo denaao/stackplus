@@ -75,15 +75,15 @@ function Test-FileIntegrity {
 
 $targets = @()
 if ($Path -eq ".") {
-    $targets += Get-ChildItem -LiteralPath "stackplus-api/src" -Recurse -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
-    $targets += Get-ChildItem -LiteralPath "stackplus-web/app" -Recurse -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
-    $targets += Get-ChildItem -LiteralPath "stackplus-web/components" -Recurse -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
-    $targets += Get-ChildItem -LiteralPath "stackplus-web/lib" -Recurse -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
-    $targets += Get-ChildItem -LiteralPath "stackplus-web/hooks" -Recurse -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
-    $targets += Get-ChildItem -LiteralPath "stackplus-web/services" -Recurse -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
-    $targets += Get-ChildItem -LiteralPath "stackplus-web/store" -Recurse -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
+    $targets += Get-ChildItem -LiteralPath "stackplus-api/src" -Recurse -File -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
+    $targets += Get-ChildItem -LiteralPath "stackplus-web/app" -Recurse -File -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
+    $targets += Get-ChildItem -LiteralPath "stackplus-web/components" -Recurse -File -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
+    $targets += Get-ChildItem -LiteralPath "stackplus-web/lib" -Recurse -File -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
+    $targets += Get-ChildItem -LiteralPath "stackplus-web/hooks" -Recurse -File -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
+    $targets += Get-ChildItem -LiteralPath "stackplus-web/services" -Recurse -File -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
+    $targets += Get-ChildItem -LiteralPath "stackplus-web/store" -Recurse -File -Include "*.ts","*.tsx" -ErrorAction SilentlyContinue
 } else {
-    $targets = Get-ChildItem -LiteralPath $Path -Recurse -Include "*.ts","*.tsx"
+    $targets = Get-ChildItem -LiteralPath $Path -Recurse -File -Include "*.ts","*.tsx"
 }
 
 $issues = @()
