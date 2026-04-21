@@ -1164,6 +1164,8 @@ export default function SangeurHomePage() {
 
             {pixQrModal.qrCodeBase64 && (
               <div className="flex justify-center bg-white p-4 rounded-lg">
+                {/* QR code base64 — <Image> do next/image não otimiza data URIs */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`data:image/png;base64,${pixQrModal.qrCodeBase64}`}
                   alt="QR Code PIX"

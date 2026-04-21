@@ -807,6 +807,8 @@ export default function SangeurPosPage() {
                 <>
                   {qrImg && (
                     <div className="flex justify-center rounded-xl bg-white p-4">
+                      {/* QR code data-URI/base64 — <Image> do next/image não otimiza esses casos */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={qrImg} alt="QR Code PIX" className="h-52 w-52" />
                     </div>
                   )}

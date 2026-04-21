@@ -26,7 +26,7 @@ export default function PlayerDashboardPage() {
       api.get('/home-games/member'),
       api.get(`/users/${user.id}/stats`),
     ]).then(([m, s]) => { setMemberships(m.data); setStats(s.data) }).finally(() => setLoading(false))
-  }, [user])
+  }, [user, router])
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault(); setJoinError('')

@@ -838,7 +838,10 @@ export default function SessionManagePage() {
     const currentIsHost = user?.id === session.homeGame.hostId
     if (!currentIsHost || session.status !== 'FINISHED') return
     loadBankBalance()
-  }, [session?.id, session?.status, user?.id])
+    // loadBankBalance é estavel o suficiente pra nao incluir na dep — executar
+    // uma vez por (sessionId, status, userId) é o comportamento desejado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, session?.status, session?.homeGame?.hostId, user?.id])
 
   if (loading) return <AppLoading />
   if (!session) return null

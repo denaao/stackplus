@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
@@ -30,15 +30,15 @@ export default function HomeGameMembersPage() {
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{ tone: 'ok' | 'error'; message: string } | null>(null)
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true)
     api.get(`/home-games/${id}`)
       .then((r) => setGame(r.data))
       .catch(() => router.push('/dashboard'))
       .finally(() => setLoading(false))
-  }
+  }, [id, router])
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load() }, [load])
 
   const isOwner = !!user && !!game && user.id === game.host.id
 

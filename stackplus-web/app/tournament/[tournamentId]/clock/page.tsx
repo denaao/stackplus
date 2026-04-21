@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Image from 'next/image'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
 
@@ -301,9 +302,11 @@ export default function TournamentClockPage() {
           {t.name}
         </h1>
         {/* Logo SX — direita */}
-        <img
+        <Image
           src="/sx-poker-logo.png"
           alt="SX Poker"
+          width={112}
+          height={56}
           style={{ height: 'clamp(36px, 4vw, 56px)', width: 'auto', objectFit: 'contain' }}
         />
       </div>

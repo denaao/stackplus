@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
@@ -119,7 +119,7 @@ export default function ComandaDetailPage() {
   const [pixCopied, setPixCopied] = useState(false)
   const [pixPaidConfirmed, setPixPaidConfirmed] = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const { data } = await api.get(`/comanda/${comandaId}`)
       setComanda(data)
@@ -143,9 +143,9 @@ export default function ComandaDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [comandaId])
 
-  useEffect(() => { load() }, [comandaId])
+  useEffect(() => { load() }, [load])
 
   // Polling do status do PIX enquanto o modal de cobrança estiver aberto.
   // A cada 3s consulta o banco; se retornar PAID, marca como confirmado,
@@ -178,7 +178,7 @@ export default function ComandaDetailPage() {
     // checa imediatamente também
     poll()
     return () => { cancelled = true; clearInterval(interval) }
-  }, [pixChargeResult, pixPaidConfirmed])
+  }, [pixChargeResult, pixPaidConfirmed, load])
 
   const handleClose = async () => {
     if (!confirm('Fechar esta comanda?')) return
@@ -563,6 +563,8 @@ export default function ComandaDetailPage() {
 
             {!pixPaidConfirmed && pixChargeResult.qrCodeBase64 && (
               <div className="rounded-lg bg-white p-3">
+                {/* QR code data-URI — <Image> do next/image não otimiza esses casos */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={pixChargeResult.qrCodeBase64} alt="QR Code PIX" className="w-full h-auto" />
               </div>
             )}

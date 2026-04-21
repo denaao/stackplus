@@ -137,7 +137,7 @@ function useTimer(
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [levelStartedAt, breakStartedAt, isOnBreak, isPaused, pausedAt])
+  }, [levelStartedAt, breakStartedAt, isOnBreak, isPaused, pausedAt, startStr])
 
   const safeMins = (isOnBreak ? (breakDurationMinutes || 15) : (minutesPerLevel || 15))
   const totalSeconds = safeMins * 60
@@ -1009,6 +1009,9 @@ function TimerCard({ tournament, currentBlind, onAdvance, onPrevious, onBreak, o
         onAdvance()
       }
     }
+    // nextBreak/onAdvance/onBreak sao capturados no closure; dispara apenas
+    // quando os sinais primarios (overTime/isBreak/isPaused/actionLoading) mudam.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overTime, isBreak, isPaused, actionLoading])
   // Auto-encerra intervalo quando o tempo do break esgota
   useEffect(() => {
@@ -1016,6 +1019,7 @@ function TimerCard({ tournament, currentBlind, onAdvance, onPrevious, onBreak, o
       autoBreakEndedRef.current = true
       onEndBreak()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overTime, isBreak, isPaused, actionLoading])
 
   const accent = isBreak ? 'border-yellow-700 bg-yellow-900/20' : 'border-white/8 bg-sx-card'

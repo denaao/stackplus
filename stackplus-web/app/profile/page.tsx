@@ -90,7 +90,7 @@ export default function ProfilePage() {
         pixKey: data.pixKey || '',
       })
     }).finally(() => setLoading(false))
-  }, [user])
+  }, [user, router])
 
   function handlePixTypeChange(pixType: PixType) {
     setForm((prev) => ({ ...prev, pixType, pixKey: '' }))

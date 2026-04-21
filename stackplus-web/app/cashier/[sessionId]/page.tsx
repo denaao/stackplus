@@ -737,6 +737,10 @@ export default function CashierPage() {
       stopped = true
       clearInterval(timer)
     }
+    // reconcilePendingPrepaidFromSnapshot e refreshCashierSnapshot sao callbacks do escopo
+    // mas nao estao memoizados. Incluir na dep causaria re-execucao em cada render.
+    // O polling e intencionalmente disparado por mudancas no modal/charge/id apenas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPrepaidModal, prepaidChargeResult?.charge?.id, autoProcessingPaidCharge, registeringPendingPrepaid])
 
   const chipValue = session ? parseFloat(session.chipValue || session.homeGame.chipValue) : 1
@@ -1443,6 +1447,8 @@ export default function CashierPage() {
 
             {extractPixQrImage(prepaidChargeResult?.charge) ? (
               <div style={{ background: '#fff', borderRadius: '12px', padding: '12px', marginBottom: '14px' }}>
+                {/* QR code data-URI — <Image> do next/image não otimiza esses casos */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={extractPixQrImage(prepaidChargeResult?.charge) || ''} alt="QR Code PIX" style={{ width: '100%', height: 'auto', display: 'block' }} />
               </div>
             ) : (
