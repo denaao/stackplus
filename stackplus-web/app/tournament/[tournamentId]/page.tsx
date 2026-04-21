@@ -4,6 +4,7 @@ import React, { Fragment, useCallback, useEffect, useRef, useState } from 'react
 import { useParams, useRouter } from 'next/navigation'
 import api from '@/services/api'
 import AppLoading from '@/components/AppLoading'
+import { getErrorMessage } from '@/lib/errors'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,8 +32,14 @@ interface Tournament {
   name: string
   status: 'REGISTRATION' | 'RUNNING' | 'ON_BREAK' | 'FINISHED' | 'CANCELED'
   buyInAmount: string
+  buyInTaxAmount: string | null
+  buyInTaxChips: number | null
   rebuyAmount: string | null
+  rebuyTaxAmount: string | null
+  rebuyTaxChips: number | null
   addonAmount: string | null
+  addonTaxAmount: string | null
+  addonTaxChips: number | null
   bountyAmount: string | null
   rake: string
   startingChips: number
@@ -67,6 +74,16 @@ interface Tournament {
 interface PayoutSuggestion {
   prizePool: string
   suggestion: Array<{ position: number; amount: number; percent: number }>
+}
+
+// Membro do home game (formato devolvido por GET /home-games/:id).
+// O host é injetado ad-hoc com id "host-<uid>", por isso id é string livre.
+interface HomeGameMember {
+  id: string
+  userId: string
+  user?: { id: string; name: string; cpf?: string }
+  paymentMode?: 'POSTPAID' | 'PREPAID' | null
+  role?: 'HOST' | 'PLAYER'
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -171,7 +188,7 @@ export default function TournamentPage() {
   const [registerSuccess, setRegisterSuccess] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [playerSearch, setPlayerSearch] = useState('')
-  const [homeGameMembers, setHomeGameMembers] = useState<any[]>([])
+  const [homeGameMembers, setHomeGameMembers] = useState<HomeGameMember[]>([])
   const [selectedTab, setSelectedTab] = useState<'playing' | 'eliminated'>('playing')
   const [eliminateModal, setEliminateModal] = useState<TournamentPlayer | null>(null)
   const [eliminatorId, setEliminatorId] = useState('')
@@ -190,10 +207,10 @@ export default function TournamentPage() {
       if (res.data.homeGameId && homeGameMembers.length === 0) {
         api.get(`/home-games/${res.data.homeGameId}`)
           .then((r) => {
-            const members = Array.isArray(r.data.members) ? r.data.members : []
+            const members: HomeGameMember[] = Array.isArray(r.data.members) ? r.data.members : []
             const hostUser = r.data.host
             // Se o host não aparece em members (que é o caso padrão), injeta ele no topo.
-            const hostAsMember = hostUser && !members.some((m: any) => m?.user?.id === hostUser.id)
+            const hostAsMember = hostUser && !members.some((m) => m?.user?.id === hostUser.id)
               ? [{ id: `host-${hostUser.id}`, userId: hostUser.id, user: hostUser, paymentMode: null, role: 'HOST' }]
               : []
             setHomeGameMembers([...hostAsMember, ...members])
@@ -220,14 +237,14 @@ export default function TournamentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament?.status, load])
 
-  const action = async (fn: () => Promise<any>, key: string) => {
+  const action = async (fn: () => Promise<unknown>, key: string) => {
     setActionLoading(key)
     setError(null)
     try {
       await fn()
       await load()
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : (err?.message || 'Erro'))
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro'))
     } finally {
       setActionLoading(null)
     }
@@ -260,7 +277,7 @@ export default function TournamentPage() {
   function calcRegisterChips(type: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE' | null) {
     if (!tournament) return 0
     const base = tournament.startingChips
-    const taxChips = (tournament as any).buyInTaxChips ?? 0
+    const taxChips = tournament.buyInTaxChips ?? 0
     const bonus = tournament.doubleBuyInBonusChips ?? 0
     if (type === 'DOUBLE') return (base + taxChips) * 2 + bonus
     if (type === 'NORMAL_WITH_TAX') return base + taxChips
@@ -269,7 +286,7 @@ export default function TournamentPage() {
   function calcRegisterAmount(type: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE' | null) {
     if (!tournament) return 0
     const base = Number(tournament.buyInAmount)
-    const tax = (tournament as any).buyInTaxAmount ?? 0
+    const tax = tournament.buyInTaxAmount ?? 0
     if (type === 'DOUBLE') return base * 2 + Number(tax)
     if (type === 'NORMAL_WITH_TAX') return base + Number(tax)
     return base
@@ -305,8 +322,8 @@ export default function TournamentPage() {
   // Membros filtrados: remove quem já está inscrito no torneio
   const registeredPlayerIds = new Set(tournament?.players.map((p) => p.playerId) ?? [])
   const filteredMembers = homeGameMembers
-    .filter((m: any) => !registeredPlayerIds.has(m.user?.id ?? m.userId))
-    .filter((m: any) => {
+    .filter((m: HomeGameMember) => !registeredPlayerIds.has(m.user?.id ?? m.userId))
+    .filter((m: HomeGameMember) => {
       const name: string = m.user?.name ?? ''
       return name.toLowerCase().includes(playerSearch.toLowerCase())
     })
@@ -598,7 +615,7 @@ export default function TournamentPage() {
                     </div>
                   ) : (
                     <>
-                      {filteredMembers.map((m: any) => {
+                      {filteredMembers.map((m) => {
                         const u = m.user ?? m
                         return (
                           <button
@@ -783,8 +800,8 @@ export default function TournamentPage() {
                 {/* Seleção de tipo de buy-in */}
                 <BuyInSelector
                   baseAmount={Number(tournament.buyInAmount)}
-                  taxAmount={Number((tournament as any).buyInTaxAmount ?? 0)}
-                  taxChips={Number((tournament as any).buyInTaxChips ?? 0)}
+                  taxAmount={Number(tournament.buyInTaxAmount ?? 0)}
+                  taxChips={Number(tournament.buyInTaxChips ?? 0)}
                   startingChips={tournament.startingChips}
                   doubleBonusChips={tournament.doubleBuyInBonusChips ?? 0}
                   selected={registerBuyInType ?? 'NORMAL'}
@@ -834,9 +851,9 @@ export default function TournamentPage() {
       {/* Rebuy modal */}
       {rebuyModal && (() => {
         const baseAmount = Number(tournament.rebuyAmount)
-        const taxAmount = Number((tournament as any).rebuyTaxAmount ?? 0)
+        const taxAmount = Number(tournament.rebuyTaxAmount ?? 0)
         const baseChips = tournament.rebuyChips ?? tournament.startingChips
-        const taxChips = Number((tournament as any).rebuyTaxChips ?? 0)
+        const taxChips = Number(tournament.rebuyTaxChips ?? 0)
         return (
           <ActionModal
             title={`Rebuy — ${rebuyModal.player.name}`}
@@ -859,9 +876,9 @@ export default function TournamentPage() {
       {/* Addon modal */}
       {addonModal && (() => {
         const baseAmount = Number(tournament.addonAmount)
-        const taxAmount = Number((tournament as any).addonTaxAmount ?? 0)
+        const taxAmount = Number(tournament.addonTaxAmount ?? 0)
         const baseChips = tournament.addonChips ?? tournament.startingChips
-        const taxChips = Number((tournament as any).addonTaxChips ?? 0)
+        const taxChips = Number(tournament.addonTaxChips ?? 0)
         return (
           <ActionModal
             title={`Add-on — ${addonModal.player.name}`}
