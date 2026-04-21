@@ -7,6 +7,7 @@ import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
 import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
 
 interface ComandaItem {
   id: string
@@ -124,13 +125,14 @@ export default function ComandaDetailPage() {
       const { data } = await api.get(`/comanda/${comandaId}`)
       setComanda(data)
       // Verifica automaticamente se os PIX pendentes foram pagos.
-      const pendingPixItems = (data.items ?? []).filter(
-        (i: any) => i.paymentStatus === 'PENDING' &&
+      const items: ComandaItem[] = Array.isArray(data.items) ? data.items : []
+      const pendingPixItems = items.filter(
+        (i) => i.paymentStatus === 'PENDING' &&
           (i.type === 'PAYMENT_PIX_SPOT' || i.type === 'PAYMENT_PIX_TERM'),
       )
       if (pendingPixItems.length > 0) {
         const results = await Promise.all(
-          pendingPixItems.map((i: any) =>
+          pendingPixItems.map((i) =>
             api.get(`/comanda/items/${i.id}/pix-status`).then(r => r.data).catch(() => null),
           ),
         )
@@ -186,8 +188,8 @@ export default function ComandaDetailPage() {
     try {
       await api.post(`/comanda/${comandaId}/close`)
       load()
-    } catch (e: any) {
-      setError(e.toString())
+    } catch (e) {
+      setError(getErrorMessage(e, 'Erro'))
     } finally {
       setClosing(false)
     }
@@ -207,8 +209,8 @@ export default function ComandaDetailPage() {
       setPaymentAmount('')
       setPaymentDesc('')
       load()
-    } catch (e: any) {
-      setError(e.toString())
+    } catch (e) {
+      setError(getErrorMessage(e, 'Erro'))
     } finally {
       setSaving(false)
     }
@@ -240,8 +242,8 @@ export default function ComandaDetailPage() {
         itemId: data.item.id,
       })
       load()
-    } catch (e: any) {
-      setError(typeof e === 'string' ? e : 'Falha ao gerar cobrança PIX')
+    } catch (e) {
+      setError(getErrorMessage(e, 'Falha ao gerar cobrança PIX'))
       setPixChargeKind(null)
     } finally {
       setPixChargeLoading(null)
@@ -265,14 +267,13 @@ export default function ComandaDetailPage() {
       // Recarrega depois de 4s e 10s pra capturar a mudança de PENDING→PAID do background.
       setTimeout(() => load(), 4000)
       setTimeout(() => load(), 10000)
-    } catch (e: any) {
-      // Extrai mensagem do backend (axios error) ou fallback genérico.
-      const msg = e?.response?.data?.error
-        ?? e?.response?.data?.message
-        ?? (e?.code === 'ECONNABORTED' ? 'O banco não respondeu a tempo (timeout 35s). Tente de novo.' : null)
-        ?? (typeof e === 'string' ? e : null)
-        ?? e?.message
-        ?? 'Não foi possível enviar o PIX. Verifique se o jogador tem chave PIX cadastrada.'
+    } catch (e) {
+      // Timeout do axios tem code=ECONNABORTED — trata antes de cair no fallback.
+      const isTimeout = e && typeof e === 'object' && 'code' in e
+        && (e as { code?: string }).code === 'ECONNABORTED'
+      const msg = isTimeout
+        ? 'O banco não respondeu a tempo (timeout 35s). Tente de novo.'
+        : getErrorMessage(e, 'Não foi possível enviar o PIX. Verifique se o jogador tem chave PIX cadastrada.')
       setError(msg)
     } finally {
       setSendingPix(false)

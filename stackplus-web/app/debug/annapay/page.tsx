@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
+import { getAxiosErrorDetails } from '@/lib/errors'
 
 type LogItem = {
   id: string
@@ -10,7 +11,7 @@ type LogItem = {
   source: 'cob' | 'settle' | 'statements'
   ok: boolean
   statusCode?: number
-  payload: any
+  payload: unknown
 }
 
 function pretty(payload: unknown): string {
@@ -61,13 +62,8 @@ export default function AnnapayDebugPage() {
         params: virtualAccount.trim() ? { virtualAccount: virtualAccount.trim() } : undefined,
       })
       pushLog({ source: 'cob', ok: true, payload: data })
-    } catch (err: any) {
-      pushLog({
-        source: 'cob',
-        ok: false,
-        statusCode: err?.response?.status,
-        payload: err?.response?.data || err?.message || 'Erro desconhecido',
-      })
+    } catch (err) {
+      pushLog({ source: 'cob', ok: false, ...getAxiosErrorDetails(err) })
     }
   }
 
@@ -83,13 +79,8 @@ export default function AnnapayDebugPage() {
         virtualAccount: virtualAccount.trim() || undefined,
       })
       pushLog({ source: 'settle', ok: true, payload: data })
-    } catch (err: any) {
-      pushLog({
-        source: 'settle',
-        ok: false,
-        statusCode: err?.response?.status,
-        payload: err?.response?.data || err?.message || 'Erro desconhecido',
-      })
+    } catch (err) {
+      pushLog({ source: 'settle', ok: false, ...getAxiosErrorDetails(err) })
     }
   }
 
@@ -105,13 +96,8 @@ export default function AnnapayDebugPage() {
         },
       })
       pushLog({ source: 'statements', ok: true, payload: data })
-    } catch (err: any) {
-      pushLog({
-        source: 'statements',
-        ok: false,
-        statusCode: err?.response?.status,
-        payload: err?.response?.data || err?.message || 'Erro desconhecido',
-      })
+    } catch (err) {
+      pushLog({ source: 'statements', ok: false, ...getAxiosErrorDetails(err) })
     }
   }
 

@@ -7,6 +7,7 @@ import AppHeader from '@/components/AppHeader'
 import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
 import { useHomeGameRole } from '@/hooks/useHomeGameRole'
+import { getErrorMessage } from '@/lib/errors'
 
 interface Comanda {
   id: string
@@ -173,8 +174,8 @@ function ComandasContent() {
     try {
       const { data } = await api.post('/comanda/cashbox/close', { homeGameId })
       setCashboxReport(data)
-    } catch (err: any) {
-      setCashboxError(err?.response?.data?.error ?? err?.message ?? 'Erro ao fechar caixa')
+    } catch (err) {
+      setCashboxError(getErrorMessage(err, 'Erro ao fechar caixa'))
     } finally {
       setClosingCashbox(false)
     }
@@ -444,11 +445,12 @@ function ComandasContent() {
                       // Atualiza o saldo mostrado no card
                       const r = await api.get(`/comanda/bank?homeGameId=${homeGameId}`)
                       setBankBalance(Number(r.data?.balance ?? 0))
-                    } catch (err: any) {
-                      const status = err?.response?.status
-                      const body = err?.response?.data
-                      const msg = typeof err === 'string' ? err
-                        : body?.error ?? body?.message ?? err?.message ?? JSON.stringify(body ?? {})
+                    } catch (err) {
+                      // Narrow pra extrair status HTTP quando for erro axios.
+                      const status = (err && typeof err === 'object' && 'response' in err)
+                        ? (err as { response?: { status?: number } }).response?.status
+                        : undefined
+                      const msg = getErrorMessage(err, 'Erro ao reconciliar')
                       alert(`Falha ao reconciliar\nStatus: ${status ?? '?'}\nMensagem: ${msg}`)
                       console.error('[reconcile]', err)
                     }
@@ -639,8 +641,8 @@ function ComandasContent() {
                                 await api.post(`/comanda/${c.id}/close`)
                                 // Re-gera relatório pra refletir mudança
                                 handleCloseCashbox()
-                              } catch (err: any) {
-                                alert(err?.response?.data?.error ?? err?.message ?? 'Falha ao fechar comanda')
+                              } catch (err) {
+                                alert(getErrorMessage(err, 'Falha ao fechar comanda'))
                               }
                             }}
                             className="px-2 py-1 text-[11px] font-bold rounded border border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"

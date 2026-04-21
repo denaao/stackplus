@@ -6,6 +6,7 @@ import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
 import { useAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
 
 interface BlindLevel {
   level: number
@@ -102,13 +103,17 @@ export default function EditTournamentPage() {
           setCustomLevels(t.blindLevels.map((l: BlindLevel) => ({ ...l })))
         }
         try {
-          const parsedBreaks = JSON.parse(t.breaks ?? '[]')
-          if (parsedBreaks.length > 0) {
-            setBreaks(parsedBreaks.map((b: any, i: number) => ({
-              id: String(i),
-              afterLevel: String(b.afterLevel),
-              durationMinutes: String(b.durationMinutes),
-            })))
+          // breaks no backend e String (JSON) — parse e narrow manual.
+          const parsedBreaks: unknown = JSON.parse(t.breaks ?? '[]')
+          if (Array.isArray(parsedBreaks) && parsedBreaks.length > 0) {
+            setBreaks(parsedBreaks.map((b, i) => {
+              const obj = (b && typeof b === 'object') ? b as { afterLevel?: unknown; durationMinutes?: unknown } : {}
+              return {
+                id: String(i),
+                afterLevel: String(obj.afterLevel ?? ''),
+                durationMinutes: String(obj.durationMinutes ?? ''),
+              }
+            }))
           }
         } catch {}
       })
@@ -137,7 +142,8 @@ export default function EditTournamentPage() {
     setError(null)
     setSaving(true)
     try {
-      const payload: any = {
+      // Payload do PATCH /tournaments/:id — todos os campos opcionais exceto base.
+      const payload: Record<string, unknown> = {
         name: form.name,
         buyInAmount: parseFloat(form.buyInAmount),
         rake: parseFloat(form.rake) || 0,
@@ -167,8 +173,8 @@ export default function EditTournamentPage() {
 
       await api.patch(`/tournaments/${tournamentId}`, payload)
       router.push(`/tournament/${tournamentId}`)
-    } catch (err: any) {
-      setError(err.message || 'Erro ao salvar torneio')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao salvar torneio'))
     } finally {
       setSaving(false)
     }
