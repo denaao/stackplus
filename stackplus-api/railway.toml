@@ -4,14 +4,7 @@ builder = "NIXPACKS"
 # O tsc (TypeScript) é devDep e precisa estar presente pro `npm run build`.
 buildCommand = "npm install --include=dev && npm run build && npx prisma generate"
 
-# startCommand NÃO está aqui intencionalmente. Múltiplos services (stackplus-api,
-# CronSchedule) usam o mesmo repo/root, então definir aqui força todos usarem
-# o mesmo comando. Configuração correta é por service no Railway UI:
-#
-#   stackplus-api:  npx prisma migrate deploy --schema prisma/schema.prisma && node dist/server.js
-#   CronSchedule:   npm run job:cleanup-refresh-tokens
-#
-# Ambos já estão em railway.cron.toml (cron) e como documentação no RUNBOOK.
 [deploy]
+startCommand = "npx prisma migrate deploy --schema prisma/schema.prisma && node dist/server.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
