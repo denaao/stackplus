@@ -5,6 +5,9 @@ const prismaMock = {
     findUnique: vi.fn(),
     create: vi.fn(),
   },
+  refreshToken: {
+    create: vi.fn(),
+  },
 }
 
 vi.mock('../../src/lib/prisma', () => ({
@@ -18,6 +21,16 @@ vi.mock('../../src/utils/hash', () => ({
 
 vi.mock('../../src/utils/jwt', () => ({
   signToken: vi.fn(() => 'fake-token'),
+}))
+
+// Stub do refresh-token helper — evita mock granular do crypto/db.
+vi.mock('../../src/lib/refresh-token', () => ({
+  emitRefreshTokenForUser: vi.fn(async () => ({
+    token: 'fake-refresh-token',
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  })),
+  rotateRefreshToken: vi.fn(),
+  revokeAllForUser: vi.fn(),
 }))
 
 describe('auth.service register', () => {
@@ -56,5 +69,7 @@ describe('auth.service register', () => {
     expect(prismaMock.user.create.mock.calls[0][0].data.cpf).toBe('12345678901')
     expect(result.user.role).toBe('PLAYER')
     expect(result.token).toBe('fake-token')
+    // SEC-004: register tambem emite refresh token.
+    expect(result.refreshToken).toBe('fake-refresh-token')
   })
 })
