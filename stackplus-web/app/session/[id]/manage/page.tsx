@@ -8,6 +8,7 @@ import { getSocket } from '@/services/socket'
 import { useAuthStore } from '@/store/useStore'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
+import { getStringByPaths } from '@/lib/payload'
 
 type PdfFontWeight = 'normal' | 'bold'
 
@@ -103,8 +104,8 @@ interface FinancialReportItem {
   amount: number
   mode: 'POSTPAID' | 'PREPAID'
   skippedReason?: string
-  charge?: any
-  payoutOrder?: any
+  charge?: unknown
+  payoutOrder?: unknown
 }
 
 interface ReconciliationItem {
@@ -147,53 +148,41 @@ type FeedbackState = {
   message: string
 } | null
 
-function extractPixOrderId(payload: any): string | null {
-  const candidates = [
-    payload?.id,
-    payload?.pixId,
-    payload?.orderId,
-    payload?.order_id,
-    payload?.data?.id,
-    payload?.data?.pixId,
-    payload?.response?.id,
-    payload?.response?.pixId,
-    payload?.result?.id,
-  ]
-  for (const value of candidates) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-  return null
+function extractPixOrderId(payload: unknown): string | null {
+  return getStringByPaths(payload, [
+    ['id'],
+    ['pixId'],
+    ['orderId'],
+    ['order_id'],
+    ['data', 'id'],
+    ['data', 'pixId'],
+    ['response', 'id'],
+    ['response', 'pixId'],
+    ['result', 'id'],
+  ])
 }
 
-function extractPixCopyPaste(payload: any): string | null {
-  const candidates = [
-    payload?.pixCopyPaste,
-    payload?.pixCopiaECola,
-    payload?.copyPaste,
-    payload?.copiaECola,
-    payload?.pix?.copiaECola,
-    payload?.charge?.pixCopiaECola,
-    payload?.data?.pixCopiaECola,
-  ]
-  for (const value of candidates) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-  return null
+function extractPixCopyPaste(payload: unknown): string | null {
+  return getStringByPaths(payload, [
+    ['pixCopyPaste'],
+    ['pixCopiaECola'],
+    ['copyPaste'],
+    ['copiaECola'],
+    ['pix', 'copiaECola'],
+    ['charge', 'pixCopiaECola'],
+    ['data', 'pixCopiaECola'],
+  ])
 }
 
-function extractPayoutPixKey(payload: any): string | null {
-  const candidates = [
-    payload?.destinatario?.chave,
-    payload?.recipient?.key,
-    payload?.chave,
-    payload?.pixKey,
-    payload?.data?.destinatario?.chave,
-    payload?.response?.destinatario?.chave,
-  ]
-  for (const value of candidates) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-  }
-  return null
+function extractPayoutPixKey(payload: unknown): string | null {
+  return getStringByPaths(payload, [
+    ['destinatario', 'chave'],
+    ['recipient', 'key'],
+    ['chave'],
+    ['pixKey'],
+    ['data', 'destinatario', 'chave'],
+    ['response', 'destinatario', 'chave'],
+  ])
 }
 
 function formatCurrency(value: number) {
@@ -225,17 +214,22 @@ function parseMoneyValue(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function extractBankBalance(payload: any): number | null {
+function extractBankBalance(payload: unknown): number | null {
+  if (!payload || typeof payload !== 'object') return null
+  const obj = payload as Record<string, unknown>
+  const data = (obj.data && typeof obj.data === 'object') ? obj.data as Record<string, unknown> : {}
+  const conta = (obj.conta && typeof obj.conta === 'object') ? obj.conta as Record<string, unknown> : {}
+
   const candidates = [
-    payload?.saldo,
-    payload?.balance,
-    payload?.availableBalance,
-    payload?.disponivel,
-    payload?.valor,
-    payload?.data?.saldo,
-    payload?.data?.balance,
-    payload?.data?.availableBalance,
-    payload?.conta?.saldo,
+    obj.saldo,
+    obj.balance,
+    obj.availableBalance,
+    obj.disponivel,
+    obj.valor,
+    data.saldo,
+    data.balance,
+    data.availableBalance,
+    conta.saldo,
   ]
 
   for (const candidate of candidates) {
