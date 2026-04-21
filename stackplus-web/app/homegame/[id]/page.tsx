@@ -765,12 +765,24 @@ export default function HomeGamePage() {
 
 // ─── Tournaments Section ──────────────────────────────────────────────────────
 
+// Subset dos campos de Tournament usados na lista resumida do home game.
+interface TournamentSummary {
+  id: string
+  name: string
+  status: 'REGISTRATION' | 'RUNNING' | 'ON_BREAK' | 'FINISHED' | 'CANCELED'
+  buyInAmount: string
+  startingChips: number
+  startedAt: string | null
+  finishedAt: string | null
+  _count?: { players?: number }
+}
+
 function TournamentsSection({ homeGameId, isHost, router }: {
   homeGameId: string
   isHost: boolean
-  router: any
+  router: ReturnType<typeof useRouter>
 }) {
-  const [tournaments, setTournaments] = useState<any[]>([])
+  const [tournaments, setTournaments] = useState<TournamentSummary[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {

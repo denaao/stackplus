@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import { useAuthStore } from '@/store/useStore'
+import { getErrorMessage } from '@/lib/errors'
 
 interface BlindLevel {
   level: number
@@ -158,7 +159,7 @@ function CreateTournamentContent() {
     setError(null)
     setSaving(true)
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         homeGameId,
         name: form.name,
         buyInAmount: parseFloat(form.buyInAmount),
@@ -194,8 +195,8 @@ function CreateTournamentContent() {
 
       const res = await api.post('/tournaments', payload)
       router.push(`/tournament/${res.data.id}`)
-    } catch (err: any) {
-      setError(err.message || 'Erro ao criar torneio')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao criar torneio'))
     } finally {
       setSaving(false)
     }

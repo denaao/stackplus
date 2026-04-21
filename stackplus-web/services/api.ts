@@ -45,11 +45,13 @@ api.interceptors.response.use(
     const data = error.response?.data
     const details = Array.isArray(data?.details)
       ? data.details
-          .map((item: any) => {
+          .map((item: unknown) => {
             if (!item) return null
             if (typeof item === 'string') return item
-            const path = typeof item.path === 'string' ? item.path : null
-            const message = typeof item.message === 'string' ? item.message : null
+            if (typeof item !== 'object') return null
+            const obj = item as { path?: unknown; message?: unknown }
+            const path = typeof obj.path === 'string' ? obj.path : null
+            const message = typeof obj.message === 'string' ? obj.message : null
             if (path && message) return `${path}: ${message}`
             return message
           })

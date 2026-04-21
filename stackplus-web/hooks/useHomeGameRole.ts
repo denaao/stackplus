@@ -41,8 +41,8 @@ export function useHomeGameRole(homeGameId: string | null | undefined): HomeGame
       .get('/home-games/mine/with-roles')
       .then((r) => {
         const d = r.data
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const matches = (arr: any) => Array.isArray(arr) && arr.some((g: { id: string }) => g.id === homeGameId)
+        const matches = (arr: unknown) =>
+          Array.isArray(arr) && arr.some((g: { id: string }) => g.id === homeGameId)
         if (matches(d.asOwner)) setRole('OWNER')
         else if (matches(d.asCoHost)) setRole('COHOST')
         else if (matches(d.asPlayer)) setRole('PLAYER')
