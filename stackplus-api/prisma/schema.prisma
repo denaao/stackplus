@@ -540,6 +540,8 @@ model Transaction {
   @@index([createdAt])
   @@index([sessionId, createdAt])
   @@index([sessionId, userId, createdAt])
+  // PERF: historico do jogador cross-session (ranking, stats globais).
+  @@index([userId, createdAt])
 }
 
 model PrepaidChargePending {
@@ -632,6 +634,8 @@ model Comanda {
   @@index([homeGameId])
   @@index([status])
   @@index([playerId, homeGameId, status])
+  // PERF: listagem de comandas do home game filtrando por status (OPEN/CLOSED).
+  @@index([homeGameId, status])
 }
 
 model ComandaItem {
@@ -665,6 +669,12 @@ model ComandaItem {
   @@index([sessionId])
   @@index([paymentStatus])
   @@index([paymentReference])
+  // PERF: relatorio cashbox filtra por periodo (createdAt range).
+  @@index([createdAt])
+  // PERF: load de comanda busca itens pendentes especificamente.
+  @@index([comandaId, paymentStatus])
+  // PERF: reconcile global por (paymentStatus PAID, type IN PIX_*).
+  @@index([paymentStatus, type])
 }
 
 model ComandaTransfer {
