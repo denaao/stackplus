@@ -7,12 +7,15 @@
 #   ./scripts/check-truncation.ps1 -Path stackplus-web  # apenas frontend
 #   ./scripts/check-truncation.ps1 -Fix               # restaura arquivos truncados do git HEAD
 #
-# Heurísticas de truncamento:
-#   1. Arquivo .ts/.tsx NAO termina com `}`, `)`, `>`, `;` ou caractere valido
-#   2. Ultima linha tem string aberta, JSX tag sem fechar, ou termina no meio
-#   3. Arquivo com >500 linhas e tamanho < 80% do que esta no git HEAD
+# Heuristicas (do mais confiavel pro menos):
+#   1. Arquivo vazio
+#   2. Tamanho < 70% do tracked no git HEAD (arquivo tracked)
+#   3. Ultima linha termina com operador incompleto (=, +, -, &&, ||, etc)
+#   4. Contagem de { e } muito desbalanceada
 #
-# Nao detecta 100%, mas pega os casos mais grosseiros rapidamente.
+# Nao detecta 100%, mas pega os casos mais grosseiros. Falsos positivos
+# preferem ser "suspicious" em vez de "truncated" — so o -Fix restaura os
+# marcados como "truncated".
 
 param(
     [string]$Path = ".",
@@ -24,48 +27,69 @@ $ErrorActionPreference = "Stop"
 function Test-FileIntegrity {
     param([string]$FilePath)
 
-    if (-not (Test-Path -LiteralPath $FilePath)) {
-        return @{ Status = "missing"; Reason = "file not found" }
+    if (-not (Test-Path -LiteralPath $FilePath -PathType Leaf)) {
+        return @{ Status = "ok"; Reason = "" }  # nao e file — ignora
     }
 
     $content = [System.IO.File]::ReadAllText($FilePath, [System.Text.UTF8Encoding]::new($false))
-    $lines = $content -split "`n"
-    $lineCount = $lines.Count
-    $size = (Get-Item -LiteralPath $FilePath).Length
+    $size = $content.Length
 
     # 1. Arquivo vazio
     if ($size -eq 0) {
         return @{ Status = "truncated"; Reason = "empty file" }
     }
 
-    # 2. Termina no meio de string/identificador
-    $lastLine = ($lines[-2..-1] -join "`n").TrimEnd()  # ultimas 2 linhas + trim
-    $validEnders = @('}', ')', '>', ';', ']', '`', '"', "'")
-    $lastChar = if ($lastLine) { $lastLine[-1] } else { '' }
-
-    if ($validEnders -notcontains $lastChar -and $lastLine.Length -gt 0) {
-        return @{ Status = "suspicious"; Reason = "ends with '$lastChar' (not closing char)" }
-    }
-
-    # 3. String literal sem fechar no final
-    if ($lastLine -match '"[^"]*$' -or $lastLine -match "'[^']*$") {
-        return @{ Status = "truncated"; Reason = "unterminated string literal" }
-    }
-
-    # 4. JSX tag sem fechar
-    if ($lastLine -match '<[a-zA-Z][^>]*$') {
-        return @{ Status = "truncated"; Reason = "unterminated JSX tag" }
-    }
-
-    # 5. Comparacao com git HEAD (se estiver em repo git)
+    # 2. Comparacao com git HEAD — criterio mais confiavel
     try {
         $relPath = Resolve-Path -LiteralPath $FilePath -Relative
-        $gitSize = (git show "HEAD:$relPath" 2>$null | Measure-Object -Character).Characters
-        if ($gitSize -and $size -lt ($gitSize * 0.8) -and $lineCount -gt 500) {
-            return @{ Status = "truncated"; Reason = "size $size < 80% of HEAD size $gitSize ($lineCount lines)" }
+        $gitContent = git show "HEAD:$relPath" 2>$null
+        if ($gitContent) {
+            $gitSize = ($gitContent | Out-String).Length
+            # Se arquivo tracked perdeu >30% do tamanho, provavelmente truncou
+            if ($gitSize -gt 2000 -and $size -lt ($gitSize * 0.7)) {
+                return @{
+                    Status = "truncated"
+                    Reason = "size $size bytes < 70% of HEAD ($gitSize bytes)"
+                }
+            }
         }
     } catch {
-        # Nao e git repo ou arquivo novo — ignora
+        # nao e repo git ou arquivo novo — segue pras outras heuristicas
+    }
+
+    # 3. Ultima linha termina com operador incompleto
+    $lines = $content -split "`n"
+    $lastLine = ""
+    for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+        $l = $lines[$i].TrimEnd()
+        if ($l.Length -gt 0) { $lastLine = $l; break }
+    }
+
+    $incompleteOperators = @('=', '+', '-', '*', '/', '&', '|', ',', '.', '<', ':', '?')
+    if ($lastLine.Length -gt 0) {
+        $lastChar = $lastLine[-1]
+        if ($incompleteOperators -contains [string]$lastChar) {
+            # Ignora comentarios de uma linha que terminam com operador por coincidencia
+            if ($lastLine -notmatch '^\s*//' -and $lastLine -notmatch '\*/\s*$') {
+                return @{
+                    Status = "suspicious"
+                    Reason = "last line ends with incomplete operator '$lastChar'"
+                }
+            }
+        }
+    }
+
+    # 4. Braces desbalanceadas (ignora strings/comentarios = heuristica bruta)
+    # So flaga se diferenca for grande — arquivos tipicos sao razoavelmente balanceados
+    # mesmo ignorando strings.
+    $openBraces = ($content.ToCharArray() | Where-Object { $_ -eq '{' }).Count
+    $closeBraces = ($content.ToCharArray() | Where-Object { $_ -eq '}' }).Count
+    $diff = [Math]::Abs($openBraces - $closeBraces)
+    if ($diff -gt 5) {
+        return @{
+            Status = "suspicious"
+            Reason = "unbalanced braces: $openBraces open vs $closeBraces close (diff $diff)"
+        }
     }
 
     return @{ Status = "ok"; Reason = "" }
@@ -86,18 +110,22 @@ if ($Path -eq ".") {
     $targets = Get-ChildItem -LiteralPath $Path -Recurse -File -Include "*.ts","*.tsx"
 }
 
-$issues = @()
+$truncated = @()
+$suspicious = @()
 $checked = 0
 
 foreach ($file in $targets) {
     if ($file.FullName -match "node_modules|\.next|dist|\.git") { continue }
     $checked++
     $result = Test-FileIntegrity -FilePath $file.FullName
-    if ($result.Status -ne "ok") {
-        $rel = Resolve-Path -LiteralPath $file.FullName -Relative
-        $issues += [PSCustomObject]@{
-            Path   = $rel
-            Status = $result.Status
+    if ($result.Status -eq "truncated") {
+        $truncated += [PSCustomObject]@{
+            Path   = (Resolve-Path -LiteralPath $file.FullName -Relative)
+            Reason = $result.Reason
+        }
+    } elseif ($result.Status -eq "suspicious") {
+        $suspicious += [PSCustomObject]@{
+            Path   = (Resolve-Path -LiteralPath $file.FullName -Relative)
             Reason = $result.Reason
         }
     }
@@ -105,30 +133,38 @@ foreach ($file in $targets) {
 
 Write-Host ""
 Write-Host "Verificados: $checked arquivos"
-Write-Host "Com problemas: $($issues.Count)"
+Write-Host "Truncados (alta confianca): $($truncated.Count)"
+Write-Host "Suspeitos (pode ser falso positivo): $($suspicious.Count)"
 Write-Host ""
 
-if ($issues.Count -eq 0) {
+if ($truncated.Count -eq 0 -and $suspicious.Count -eq 0) {
     Write-Host "[OK] Nenhum arquivo suspeito." -ForegroundColor Green
     exit 0
 }
 
-$issues | Format-Table -AutoSize
+if ($truncated.Count -gt 0) {
+    Write-Host "=== TRUNCADOS ===" -ForegroundColor Red
+    $truncated | Format-Table -AutoSize
+}
 
-if ($Fix) {
+if ($suspicious.Count -gt 0) {
+    Write-Host "=== SUSPEITOS ===" -ForegroundColor Yellow
+    $suspicious | Format-Table -AutoSize
+}
+
+if ($Fix -and $truncated.Count -gt 0) {
     Write-Host ""
-    Write-Host "Restaurando arquivos suspeitos do git HEAD..." -ForegroundColor Yellow
-    foreach ($issue in $issues) {
-        if ($issue.Status -eq "truncated") {
-            Write-Host "  git checkout HEAD -- $($issue.Path)"
-            git checkout HEAD -- $issue.Path 2>&1 | Out-Null
-        }
+    Write-Host "Restaurando arquivos TRUNCADOS do git HEAD..." -ForegroundColor Yellow
+    foreach ($issue in $truncated) {
+        Write-Host "  git checkout HEAD -- $($issue.Path)"
+        git checkout HEAD -- $issue.Path 2>&1 | Out-Null
     }
-    Write-Host "[OK] Restaurados." -ForegroundColor Green
-} else {
+    Write-Host "[OK] Restaurados. Suspeitos nao foram tocados." -ForegroundColor Green
+} elseif ($truncated.Count -gt 0) {
     Write-Host ""
-    Write-Host "Para restaurar automaticamente do git HEAD, rode:" -ForegroundColor Yellow
+    Write-Host "Para restaurar arquivos truncados do git HEAD, rode:" -ForegroundColor Yellow
     Write-Host "  ./scripts/check-truncation.ps1 -Fix"
 }
 
-exit 1
+if ($truncated.Count -gt 0) { exit 1 }
+exit 0

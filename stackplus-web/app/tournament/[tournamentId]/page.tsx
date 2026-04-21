@@ -215,6 +215,9 @@ export default function TournamentPage() {
     if (!tournament || !['RUNNING', 'ON_BREAK'].includes(tournament.status)) return
     const id = setInterval(load, 30000)
     return () => clearInterval(id)
+    // Dispara apenas quando o status muda; incluir o objeto tournament completo
+    // causaria re-agendamento do interval a cada atualizacao parcial.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament?.status, load])
 
   const action = async (fn: () => Promise<any>, key: string) => {
