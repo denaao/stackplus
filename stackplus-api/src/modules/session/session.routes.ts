@@ -1,5 +1,6 @@
 import { Router, Response } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
+import { destructiveLimiter } from '../../middlewares/rate-limit.middleware'
 import * as SessionService from './session.service'
 import { z } from 'zod'
 import { emitSessionFinished } from '../../socket/socket'
@@ -144,7 +145,7 @@ router.put('/:id/participants', authenticate, async (req: AuthRequest, res: Resp
   res.json(session)
 })
 
-router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, destructiveLimiter, async (req: AuthRequest, res: Response) => {
   try {
     await SessionService.deleteSession(req.params.id, req.user!.userId)
 

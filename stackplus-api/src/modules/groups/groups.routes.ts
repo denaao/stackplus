@@ -1,5 +1,6 @@
 import { Router, Response } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
+import { destructiveLimiter } from '../../middlewares/rate-limit.middleware'
 import { prisma } from '../../lib/prisma'
 import { isHomeGameHost } from '../../lib/homegame-auth'
 
@@ -35,7 +36,7 @@ router.get('/:homeGameId/members', authenticate, async (req: AuthRequest, res: R
   res.json(members)
 })
 
-router.delete('/:homeGameId/members/:userId', authenticate, async (req: AuthRequest, res: Response) => {
+router.delete('/:homeGameId/members/:userId', authenticate, destructiveLimiter, async (req: AuthRequest, res: Response) => {
   const homeGame = await prisma.homeGame.findUnique({
     where: { id: req.params.homeGameId },
     select: { id: true, hostId: true },

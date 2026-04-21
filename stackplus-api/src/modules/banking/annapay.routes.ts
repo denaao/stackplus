@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize } from '../../middlewares/auth.middleware'
+import { webhookLimiter, settleLimiter } from '../../middlewares/rate-limit.middleware'
 import * as AnnapayController from './annapay.controller'
 
 const router = Router()
@@ -44,7 +45,7 @@ const pixSchema = z.object({
   }),
 })
 
-router.post('/webhooks/cob', async (req, _res, next) => {
+router.post('/webhooks/cob', webhookLimiter, async (req, _res, next) => {
   req.body = z.record(z.string(), z.unknown()).or(z.array(z.unknown())).parse(req.body)
   return next()
 }, AnnapayController.handleCobWebhook)
@@ -133,7 +134,7 @@ router.post('/prepaid/purchase-charge', async (req, _res, next) => {
   return next()
 }, AnnapayController.generatePrepaidPurchaseCharge)
 
-router.post('/prepaid/settle/:chargeId', async (req, _res, next) => {
+router.post('/prepaid/settle/:chargeId', settleLimiter, async (req, _res, next) => {
   req.params = z.object({
     chargeId: z.string().trim().min(1),
   }).parse(req.params)
@@ -144,7 +145,7 @@ router.post('/prepaid/settle/:chargeId', async (req, _res, next) => {
   return next()
 }, AnnapayController.settlePrepaidCharge)
 
-router.post('/prepaid/settle', async (req, _res, next) => {
+router.post('/prepaid/settle', settleLimiter, async (req, _res, next) => {
   req.body = z.object({
     chargeId: z.string().trim().min(1),
     virtualAccount: z.string().trim().optional(),

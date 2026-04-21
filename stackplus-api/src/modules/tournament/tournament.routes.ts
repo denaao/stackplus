@@ -1,6 +1,7 @@
 import { Router, Response } from 'express'
 import { z } from 'zod'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
+import { destructiveLimiter } from '../../middlewares/rate-limit.middleware'
 import * as TournamentService from './tournament.service'
 
 const router = Router()
@@ -237,7 +238,7 @@ router.post('/:tournamentId/players', async (req: AuthRequest, res: Response) =>
 })
 
 // DELETE /tournaments/players/:tournamentPlayerId (cancel registration)
-router.delete('/players/:tournamentPlayerId', async (req: AuthRequest, res: Response) => {
+router.delete('/players/:tournamentPlayerId', destructiveLimiter, async (req: AuthRequest, res: Response) => {
   const result = await TournamentService.cancelRegistration({
     tournamentPlayerId: req.params.tournamentPlayerId,
     registeredByUserId: req.user!.userId,

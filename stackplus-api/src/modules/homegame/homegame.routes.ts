@@ -1,5 +1,6 @@
 import { Router, Response } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
+import { destructiveLimiter } from '../../middlewares/rate-limit.middleware'
 import * as HomeGameService from './homegame.service'
 import { z } from 'zod'
 
@@ -103,7 +104,7 @@ router.patch('/:id/sangeurs/:userId/reset-password', authenticate, async (req: A
   res.json(result)
 })
 
-router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, destructiveLimiter, async (req: AuthRequest, res: Response) => {
   await HomeGameService.deleteHomeGame(req.params.id, req.user!.userId)
 
   // SEC-008: audit trail pra delete de home game (destrutivo e em cascata).

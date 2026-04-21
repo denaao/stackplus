@@ -1,5 +1,6 @@
 import { Router, Response } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
+import { destructiveLimiter } from '../../middlewares/rate-limit.middleware'
 import * as CashierService from './cashier.service'
 import * as SangeurService from '../sangeur/sangeur.service'
 import { z } from 'zod'
@@ -49,7 +50,7 @@ router.get('/sessions/:sessionId/sangeur-sales', authenticate, async (req: AuthR
   res.json(sales)
 })
 
-router.delete('/transaction/:transactionId', authenticate, async (req: AuthRequest, res: Response) => {
+router.delete('/transaction/:transactionId', authenticate, destructiveLimiter, async (req: AuthRequest, res: Response) => {
   const result = await CashierService.deleteTransaction(req.params.transactionId)
 
   // SEC-008: audit trail pra delete de transação (operação financeira reversa).

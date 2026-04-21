@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { loginLimiter, registerLimiter } from '../../src/middlewares/rate-limit.middleware'
+import {
+  loginLimiter,
+  registerLimiter,
+  webhookLimiter,
+  passwordChangeLimiter,
+  pixOutLimiter,
+  destructiveLimiter,
+  settleLimiter,
+} from '../../src/middlewares/rate-limit.middleware'
 
 /**
  * Smoke test do rate-limit middleware (SEC-005).
@@ -10,14 +18,21 @@ import { loginLimiter, registerLimiter } from '../../src/middlewares/rate-limit.
  */
 
 describe('rate-limit middleware', () => {
-  it('exports loginLimiter como middleware Express (req, res, next)', () => {
-    expect(typeof loginLimiter).toBe('function')
-    // Middlewares Express têm aridade 3 (req, res, next)
-    expect(loginLimiter.length).toBe(3)
-  })
+  const limiters = {
+    loginLimiter,
+    registerLimiter,
+    webhookLimiter,
+    passwordChangeLimiter,
+    pixOutLimiter,
+    destructiveLimiter,
+    settleLimiter,
+  }
 
-  it('exports registerLimiter como middleware Express', () => {
-    expect(typeof registerLimiter).toBe('function')
-    expect(registerLimiter.length).toBe(3)
-  })
+  for (const [name, limiter] of Object.entries(limiters)) {
+    it(`exports ${name} como middleware Express (req, res, next)`, () => {
+      expect(typeof limiter).toBe('function')
+      // Middlewares Express têm aridade 3 (req, res, next)
+      expect(limiter.length).toBe(3)
+    })
+  }
 })

@@ -1,6 +1,7 @@
 import { Router, Response } from 'express'
 import { z } from 'zod'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
+import { pixOutLimiter } from '../../middlewares/rate-limit.middleware'
 import * as ComandaService from './comanda.service'
 
 const router = Router()
@@ -136,7 +137,7 @@ router.post('/:comandaId/items', async (req: AuthRequest, res: Response) => {
 })
 
 // POST /comanda/:comandaId/pix-out
-router.post('/:comandaId/pix-out', async (req: AuthRequest, res: Response) => {
+router.post('/:comandaId/pix-out', pixOutLimiter, async (req: AuthRequest, res: Response) => {
   const data = z.object({
     amount: z.number().positive(),
   }).parse(req.body)
