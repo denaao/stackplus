@@ -157,6 +157,7 @@ model User {
   hostedGames     HomeGame[]
   memberships     HomeGameMember[]
   transactions    Transaction[]
+  registeredTransactions Transaction[]  @relation("RegisteredTransactions")
   cashierSessions Session[]       @relation("CashierSessions")
   playerStates    PlayerSessionState[]
   sessionStaffAssignments SessionStaff[]
@@ -526,13 +527,13 @@ model Transaction {
   chips        Decimal         @db.Decimal(10, 2)
   note         String?
   registeredBy String
-  // 'C' (cashier) | 'S' (sangeur). Nullable durante DATA-001 Deploy A;
-  // vira NOT NULL no Deploy B, após cleanup dos prefixos legacy.
-  origin       String?
+  // 'C' (cashier) | 'S' (sangeur). DATA-001 Deploy B: NOT NULL + check constraint.
+  origin       String
   createdAt    DateTime        @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id])
-  user    User    @relation(fields: [userId], references: [id])
+  session          Session @relation(fields: [sessionId], references: [id])
+  user             User    @relation(fields: [userId], references: [id])
+  registeredByUser User    @relation("RegisteredTransactions", fields: [registeredBy], references: [id])
   sangeurSale SangeurSale? @relation("SangeurSaleTransaction")
 
   @@index([sessionId, userId])
@@ -542,6 +543,8 @@ model Transaction {
   @@index([sessionId, userId, createdAt])
   // PERF: historico do jogador cross-session (ranking, stats globais).
   @@index([userId, createdAt])
+  // DATA-001 Deploy B: acelera join via FK em registeredBy.
+  @@index([registeredBy])
 }
 
 model PrepaidChargePending {
