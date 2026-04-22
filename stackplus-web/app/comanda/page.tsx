@@ -8,6 +8,7 @@ import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
 import { useHomeGameRole } from '@/hooks/useHomeGameRole'
 import { getErrorMessage } from '@/lib/errors'
+import { useConfirm, useAlert } from '@/components/ConfirmDialog'
 
 interface Comanda {
   id: string
@@ -85,6 +86,8 @@ function ComandasContent() {
   const isHistoryMode = !!playerIdParam
   const { user, logout } = useAuthStore()
 
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const { alert, dialog: alertDialog } = useAlert()
   const [comandas, setComandas] = useState<Comanda[]>([])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
     isHistoryMode ? 'CLOSED' : 'OPEN'
@@ -212,6 +215,7 @@ function ComandasContent() {
 
   return (
     <div className="min-h-screen bg-sx-bg text-white">
+      {confirmDialog}{alertDialog}
       <AppHeader
         title="Comandas"
         onBack={() => router.back()}
@@ -441,7 +445,7 @@ function ComandasContent() {
                     if (!homeGameId) return
                     try {
                       const { data } = await api.post('/comanda/bank/reconcile', { homeGameId })
-                      alert(`Reconciliação OK. Lançamentos criados: ${data.reconciledCount}. Novo saldo: R$ ${Number(data.newBalance).toFixed(2)}`)
+                      await alert(`Reconciliação OK. Lançamentos criados: ${data.reconciledCount}. Novo saldo: R$ ${Number(data.newBalance).toFixed(2)}`, { title: 'Reconciliação concluída' })
                       // Atualiza o saldo mostrado no card
                       const r = await api.get(`/comanda/bank?homeGameId=${homeGameId}`)
                       setBankBalance(Number(r.data?.balance ?? 0))
@@ -451,7 +455,7 @@ function ComandasContent() {
                         ? (err as { response?: { status?: number } }).response?.status
                         : undefined
                       const msg = getErrorMessage(err, 'Erro ao reconciliar')
-                      alert(`Falha ao reconciliar\nStatus: ${status ?? '?'}\nMensagem: ${msg}`)
+                      await alert(`Falha ao reconciliar\nStatus: ${status ?? '?'}\nMensagem: ${msg}`, { title: 'Erro' })
                       console.error('[reconcile]', err)
                     }
                   }}
@@ -636,13 +640,14 @@ function ComandasContent() {
                           <button
                             type="button"
                             onClick={async () => {
-                              if (!confirm(`Fechar a comanda de ${c.playerName}?`)) return
+                              const ok = await confirm(`Fechar a comanda de ${c.playerName}?`, { title: 'Fechar comanda', confirmLabel: 'Fechar', danger: true })
+                              if (!ok) return
                               try {
                                 await api.post(`/comanda/${c.id}/close`)
                                 // Re-gera relatório pra refletir mudança
                                 handleCloseCashbox()
                               } catch (err) {
-                                alert(getErrorMessage(err, 'Falha ao fechar comanda'))
+                                await alert(getErrorMessage(err, 'Falha ao fechar comanda'), { title: 'Erro' })
                               }
                             }}
                             className="px-2 py-1 text-[11px] font-bold rounded border border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"

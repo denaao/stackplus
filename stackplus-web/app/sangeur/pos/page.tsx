@@ -6,6 +6,7 @@ import api from '@/services/api'
 import { useSangeurAuthStore } from '@/store/useStore'
 import { getErrorMessage } from '@/lib/errors'
 import { getStringByPaths } from '@/lib/payload'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 type PaymentMethod = 'PIX_QR' | 'VOUCHER' | 'CASH' | 'CARD'
 type FinancialModule = 'POSTPAID' | 'PREPAID' | 'HYBRID'
@@ -129,6 +130,7 @@ export default function SangeurPosPage() {
   const user = useSangeurAuthStore((s) => s.user)
   const sangeur = useSangeurAuthStore((s) => s.sangeur)
   const logoutSangeur = useSangeurAuthStore((s) => s.logoutSangeur)
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const [sessions, setSessions] = useState<OperationalSession[]>([])
   const [activeShift, setActiveShift] = useState<ShiftDetail | null>(null)
@@ -451,7 +453,8 @@ export default function SangeurPosPage() {
     if (!activeShift) return
     const returnedChips = Number(closeForm.returnedChips || 0)
     if (returnedChips < 0) return setError('Devolução inválida')
-    if (!confirm('Encerrar turno? Essa ação não pode ser desfeita.')) return
+    const ok = await confirm('Encerrar turno? Essa ação não pode ser desfeita.', { title: 'Encerrar turno', confirmLabel: 'Encerrar turno', cancelLabel: 'Cancelar', danger: true })
+    if (!ok) return
     setLoading(true)
     try {
       await api.post(`/sangeur/shifts/${activeShift.id}/close`, {
@@ -481,6 +484,7 @@ export default function SangeurPosPage() {
 
   return (
     <div className="min-h-screen bg-sx-card text-zinc-100">
+      {confirmDialog}
       <div className="relative mx-auto flex min-h-screen w-full max-w-[430px] flex-col bg-sx-bg shadow-2xl shadow-black/40">
       {/* Header compacto */}
       <div className="sticky top-0 z-20 border-b border-sx-border bg-sx-bg/95 backdrop-blur">

@@ -8,6 +8,7 @@ import AppLoading from '@/components/AppLoading'
 import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
 import { getErrorMessage } from '@/lib/errors'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface ComandaItem {
   id: string
@@ -100,6 +101,7 @@ export default function ComandaDetailPage() {
   const [closing, setClosing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [openDates, setOpenDates] = useState<Set<string>>(new Set())
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [showAddPayment, setShowAddPayment] = useState(false)
   const [paymentType, setPaymentType] = useState<string>('PAYMENT_CASH')
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -199,7 +201,8 @@ export default function ComandaDetailPage() {
   }
 
   const handleClose = async () => {
-    if (!confirm('Fechar esta comanda?')) return
+    const ok = await confirm('Tem certeza que deseja fechar esta comanda?', { title: 'Fechar comanda', confirmLabel: 'Fechar', danger: true })
+    if (!ok) return
     setClosing(true)
     try {
       await api.post(`/comanda/${comandaId}/close`)
@@ -314,6 +317,7 @@ export default function ComandaDetailPage() {
 
   return (
     <div className="min-h-screen bg-sx-bg text-white">
+      {confirmDialog}
       <AppHeader
         onBack={() => router.back()}
         userName={user?.name}

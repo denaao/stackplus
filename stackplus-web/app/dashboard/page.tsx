@@ -6,6 +6,7 @@ import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 import AppHeader from '@/components/AppHeader'
 import { getErrorMessage } from '@/lib/errors'
+import { useConfirm, useAlert } from '@/components/ConfirmDialog'
 
 interface HomeGame {
   id: string
@@ -22,6 +23,8 @@ interface HomeGame {
 export default function DashboardPage() {
   const router = useRouter()
   const { token, user, setAuth, logout } = useAuthStore()
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const { alert, dialog: alertDialog } = useAlert()
   const [asOwner, setAsOwner] = useState<HomeGame[]>([])
   const [asCoHost, setAsCoHost] = useState<HomeGame[]>([])
   const [asPlayer, setAsPlayer] = useState<HomeGame[]>([])
@@ -126,21 +129,30 @@ export default function DashboardPage() {
   }
 
   async function handleDeleteHomeGame(game: HomeGame) {
-    const confirmed = confirm('Excluir o Home Game inteiro e todos os dados vinculados? Esta acao nao pode ser desfeita.')
-    if (!confirmed) return
-    const typedName = prompt(`Para confirmar, digite exatamente o nome do Home Game:\n\n${game.name}`)
-    if (typedName !== game.name) { alert('Nome nao confere. Exclusao cancelada.'); return }
+    const ok1 = await confirm(
+      `Excluir o Home Game "${game.name}" e todos os dados vinculados? Esta ação não pode ser desfeita.`,
+      { title: 'Excluir Home Game', confirmLabel: 'Sim, excluir', danger: true }
+    )
+    if (!ok1) return
+    const ok2 = await confirm(
+      `Tem certeza absoluta? Sessões, comandas e torneios de "${game.name}" serão apagados permanentemente.`,
+      { title: 'Confirmar exclusão', confirmLabel: 'Excluir permanentemente', danger: true }
+    )
+    if (!ok2) return
     setDeletingId(game.id)
     try {
       await api.delete(`/home-games/${game.id}`)
       setAsOwner((prev) => prev.filter((g) => g.id !== game.id))
-    } catch { alert('Nao foi possivel excluir o Home Game') } finally { setDeletingId(null) }
+    } catch {
+      await alert('Não foi possível excluir o Home Game.', { title: 'Erro' })
+    } finally { setDeletingId(null) }
   }
 
   const gameTypeLabel: Record<'CASH_GAME' | 'TOURNAMENT', string> = { CASH_GAME: 'Cash Game', TOURNAMENT: 'Torneio' }
 
   return (
     <div className="min-h-screen bg-sx-bg">
+      {confirmDialog}{alertDialog}
       <AppHeader
         userName={user?.name}
         onLogout={handleLogout}

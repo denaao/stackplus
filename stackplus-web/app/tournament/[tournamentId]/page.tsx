@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import api from '@/services/api'
 import AppLoading from '@/components/AppLoading'
 import { getErrorMessage } from '@/lib/errors'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,6 +173,7 @@ function useTimer(
 export default function TournamentPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>()
   const router = useRouter()
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [payout, setPayout] = useState<PayoutSuggestion | null>(null)
   const [loading, setLoading] = useState(true)
@@ -373,7 +375,7 @@ export default function TournamentPage() {
 
   return (
     <div className="min-h-screen bg-sx-bg text-white pb-8">
-
+      {confirmDialog}
       {/* Header */}
       <div className="bg-sx-card border-b border-sx-border px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
@@ -488,9 +490,9 @@ export default function TournamentPage() {
             activePlayers.length >= 2 &&
             activePlayers.every((p) => !!p.prizeAmount) && (
             <button
-              onClick={() => {
-                if (confirm('Encerrar o torneio? Os jogadores ativos serão marcados com as posições finais.'))
-                  action(() => api.post(`/tournaments/${tournamentId}/finish-by-deal`), 'finish-deal')
+              onClick={async () => {
+                const ok = await confirm('Encerrar o torneio? Os jogadores ativos serão marcados com as posições finais.', { title: 'Encerrar torneio', confirmLabel: 'Encerrar', danger: true })
+                if (ok) action(() => api.post(`/tournaments/${tournamentId}/finish-by-deal`), 'finish-deal')
               }}
               disabled={!!actionLoading}
               className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-sm font-semibold disabled:opacity-50"
@@ -547,9 +549,9 @@ export default function TournamentPage() {
                 const amount = prompt(`Prêmio para ${p.player.name} (R$):`)
                 if (amount) action(() => api.post(`/tournaments/players/${p.id}/prize`, { prizeAmount: parseFloat(amount) }), `prize-${p.id}`)
               }}
-              onCancelRegistration={() => {
-                if (confirm(`Cancelar inscrição de ${p.player.name}? O buy-in será estornado.`))
-                  action(() => api.delete(`/tournaments/players/${p.id}`), `cancel-${p.id}`)
+              onCancelRegistration={async () => {
+                const ok = await confirm(`Cancelar inscrição de ${p.player.name}? O buy-in será estornado.`, { title: 'Cancelar inscrição', confirmLabel: 'Cancelar inscrição', danger: true })
+                if (ok) action(() => api.delete(`/tournaments/players/${p.id}`), `cancel-${p.id}`)
               }}
             />
           ))}

@@ -7,6 +7,7 @@ import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
 import { useAuthStore } from '@/store/useStore'
 import { getErrorMessage } from '@/lib/errors'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface Member {
   id: string
@@ -26,6 +27,7 @@ export default function HomeGameMembersPage() {
   const { id } = useParams<{ id: string }>()
   const { user, logout } = useAuthStore()
 
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [game, setGame] = useState<HomeGame | null>(null)
   const [loading, setLoading] = useState(true)
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
@@ -46,7 +48,8 @@ export default function HomeGameMembersPage() {
   const handleToggleRole = async (memberUserId: string, currentRole: 'PLAYER' | 'HOST') => {
     const next = currentRole === 'HOST' ? 'PLAYER' : 'HOST'
     const action = next === 'HOST' ? 'promover a co-host' : 'rebaixar a jogador'
-    if (!confirm(`Tem certeza que quer ${action} este membro?`)) return
+    const ok = await confirm(`Tem certeza que quer ${action} este membro?`, { title: 'Alterar papel', confirmLabel: 'Confirmar' })
+    if (!ok) return
 
     setBusyUserId(memberUserId)
     setFeedback(null)
@@ -70,6 +73,7 @@ export default function HomeGameMembersPage() {
 
   return (
     <div className="min-h-screen bg-sx-bg text-white">
+      {confirmDialog}
       <AppHeader
         title="Membros do Home Game"
         onBack={() => router.push(`/homegame/${id}/select`)}
