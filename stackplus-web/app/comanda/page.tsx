@@ -133,7 +133,7 @@ function ComandasContent() {
             }
           }
           data = Array.from(latest.values())
-            .sort((a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime())
+            .sort((a, b) => a.player.name.localeCompare(b.player.name, 'pt-BR'))
         }
         setComandas(data)
       })
