@@ -869,4 +869,43 @@ function TournamentsSection({ homeGameId, isHost, router }: {
         <div className="space-y-3">
           {tournaments.map((t) => {
             const isActive = t.status === 'RUNNING' || t.status === 'REGISTRATION' || t.status === 'ON_BREAK'
-            const barColor = 
+            const barColor = t.status === 'RUNNING' ? '#00C8E0'
+              : t.status === 'REGISTRATION' ? '#60a5fa'
+              : t.status === 'ON_BREAK' ? '#00C8E0'
+              : 'rgba(255,255,255,0.15)'
+            return (
+              <div
+                key={t.id}
+                onClick={() => router.push(`/tournament/${t.id}`)}
+                className="relative rounded-xl overflow-hidden cursor-pointer group transition-all"
+                style={{
+                  background: 'linear-gradient(135deg, #0C2438 0%, #071828 60%, #050D15 100%)',
+                  border: '1px solid rgba(0,200,224,0.12)',
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(0,200,224,0.3)' }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(0,200,224,0.12)' }}
+              >
+                <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: barColor }} />
+                <div className="pl-4 pr-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-white">{t.name}</p>
+                    <p className="text-xs text-sx-muted mt-0.5">
+                      {t._count?.players ?? 0} jogadores • Buy-in R$ {Number(t.buyInAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${statusBadge[t.status] ?? 'text-sx-muted bg-white/5'}`}>
+                      {statusLabel[t.status] ?? t.status}
+                    </span>
+                    <span className="text-sx-muted group-hover:text-sx-cyan transition-colors text-sm">→</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
