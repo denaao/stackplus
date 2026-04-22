@@ -7,6 +7,8 @@ import routes from './routes'
 import { errorMiddleware } from './middlewares/error.middleware'
 import { requestLogger } from './middlewares/request-logger.middleware'
 import { openApiSpec } from './openapi/spec'
+import { prisma } from './lib/prisma'
+import { signToken, verifyToken } from './utils/jwt'
 
 const app = express()
 
@@ -67,6 +69,81 @@ app.use(
 )
 
 app.get('/health', (_, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
+
+/**
+ * Health check profundo: valida internals que `/health` simples não cobre.
+ *
+ * Motivação: no incidente de 21/04, o serviço respondia /health (200 OK) mas
+ * POST /auth/login quebrava com "secretOrPrivateKey must have a value"
+ * porque JWT_SECRET foi perdida após troca de Source no Railway. Um monitor
+ * externo (Better Stack) batendo aqui detecta esse tipo de falha silenciosa.
+ *
+ * Checks atuais:
+ *  - database: SELECT 1 via Prisma (conectividade + credenciais)
+ *  - jwt:      sign+verify roundtrip (JWT_SECRET presente e funcional)
+ *  - env:     variáveis críticas do runtime presentes e não-vazias
+ *
+ * Segurança: expõe apenas flags ok/hint no response. Detalhes de erro vão
+ * pro log interno (pino). Nomes de env vars podem aparecer no hint quando
+ * ausentes — não é informação sensível (os NOMES são públicos, só valores
+ * que não podem vazar).
+ *
+ * Retorna 200 se tudo OK, 503 se qualquer check falhar. Keyword "ok":true
+ * no body pra monitores com validação por keyword.
+ */
+app.get('/health/deep', async (req, res) => {
+  const checks: Record<string, { ok: boolean; hint?: string }> = {}
+
+  // 1. Database connectivity
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    checks.database = { ok: true }
+  } catch (err) {
+    req.log?.error({ err }, '[health/deep] database check failed')
+    checks.database = { ok: false, hint: 'db-unreachable' }
+  }
+
+  // 2. JWT sign+verify roundtrip
+  try {
+    const token = signToken({
+      userId: 'healthcheck',
+      email: 'healthcheck@internal',
+      role: 'HEALTHCHECK',
+    })
+    const decoded = verifyToken(token)
+    checks.jwt = decoded.userId === 'healthcheck'
+      ? { ok: true }
+      : { ok: false, hint: 'roundtrip-mismatch' }
+  } catch (err) {
+    req.log?.error({ err }, '[health/deep] jwt check failed')
+    checks.jwt = { ok: false, hint: 'jwt-unconfigured' }
+  }
+
+  // 3. Critical env vars present
+  const criticalEnvs = [
+    'DATABASE_URL',
+    'JWT_SECRET',
+    'ANNAPAY_CLIENT_ID',
+    'ANNAPAY_CLIENT_SECRET',
+    'ANNAPAY_WEBHOOK_SECRET',
+    'FRONTEND_URL',
+    'API_PUBLIC_URL',
+    'SANGEUR_WEBHOOK_SECRET',
+  ]
+  const missingEnvs = criticalEnvs.filter((name) => !process.env[name]?.trim())
+  checks.env = missingEnvs.length === 0
+    ? { ok: true }
+    : { ok: false, hint: `missing:${missingEnvs.join(',')}` }
+
+  const allOk = Object.values(checks).every((c) => c.ok)
+  const status = allOk ? 200 : 503
+
+  res.status(status).json({
+    ok: allOk,
+    timestamp: new Date().toISOString(),
+    checks,
+  })
+})
 
 app.use(errorMiddleware)
 

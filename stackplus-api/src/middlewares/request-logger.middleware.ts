@@ -19,8 +19,12 @@ export const requestLogger = pinoHttp({
     return id
   },
   // Pulamos healthchecks e assets pra não poluir o log.
+  // /health/deep: chamado a cada 3min por monitor externo (Better Stack).
   autoLogging: {
-    ignore: (req) => req.url === '/health' || req.url === '/favicon.ico',
+    ignore: (req) =>
+      req.url === '/health' ||
+      req.url === '/health/deep' ||
+      req.url === '/favicon.ico',
   },
   customLogLevel: (_req, res, err) => {
     if (err || res.statusCode >= 500) return 'error'
