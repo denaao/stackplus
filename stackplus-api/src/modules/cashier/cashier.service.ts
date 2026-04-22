@@ -311,10 +311,4 @@ export async function deleteTransaction(transactionId: string) {
       },
     })
 
-    return {
-      deleted: true,
-      sessionId: target.sessionId,
-      userId: target.userId,
-    }
-  })
-}
+    return 

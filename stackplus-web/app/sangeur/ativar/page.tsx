@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import { getErrorMessage } from '@/lib/errors'
 
 type TokenState = 'loading' | 'valid' | 'invalid' | 'expired'
 
-export default function SangeurAtivarPage() {
+function SangeurAtivarContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token') || ''
@@ -173,3 +173,5 @@ export default function SangeurAtivarPage() {
     </div>
   )
 }
+
+e

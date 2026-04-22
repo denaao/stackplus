@@ -209,11 +209,4 @@ router.post('/shifts/:shiftId/close', async (req: AuthRequest, res: Response) =>
   const shift = await SangeurService.closeShift({
     shiftId: req.params.shiftId,
     userId: req.user!.userId,
-    returnedChips: data.returnedChips,
-    note: data.note,
-  })
-
-  res.json(shift)
-})
-
-export default router
+    returnedChips

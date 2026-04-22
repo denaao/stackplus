@@ -446,44 +446,4 @@ export async function resetSangeurPassword(input: {
   await ensureHostAndMember(input.homeGameId, input.hostId, input.memberUserId)
 
   // Reset via QR Code — novo token de ativação para a SANGEUR redefinir sua senha
-  const activationToken = generateActivationToken()
-  const activationTokenExpiresAt = new Date(Date.now() + 30 * 60 * 1000) // 30 minutos
-  const placeholderHash = await hashPassword(randomBytes(32).toString('hex'))
-
-  const access = await prisma.homeGameSangeurAccess.update({
-    where: {
-      homeGameId_userId: {
-        homeGameId: input.homeGameId,
-        userId: input.memberUserId,
-      },
-    },
-    data: {
-      passwordHash: placeholderHash,
-      mustChangePassword: true,
-      isActive: false,
-      lastLoginAt: null,
-      activationToken,
-      activationTokenExpiresAt,
-    },
-    select: {
-      id: true,
-      homeGameId: true,
-      userId: true,
-      username: true,
-      isActive: true,
-      mustChangePassword: true,
-      lastLoginAt: true,
-      createdAt: true,
-      updatedAt: true,
-      user: { select: { id: true, name: true, email: true } },
-    },
-  })
-
-  const activationQrCode = await buildActivationQrCode(activationToken)
-
-  return {
-    access,
-    activationToken,
-    activationQrCode,
-  }
-}
+  const activationToken 

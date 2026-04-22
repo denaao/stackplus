@@ -1,5 +1,16 @@
 'use client'
 
+/**
+ * Error boundary catastrofico — acionado APENAS se o layout root do Next
+ * crashar. Na maioria dos crashes, app/error.tsx captura primeiro. Esse
+ * aqui é o ultimo recurso: precisa renderizar seu proprio <html>/<body>
+ * porque o layout root morreu.
+ *
+ * Mantem visual brandado mas sem depender de tokens Tailwind (caso o CSS
+ * bundle tambem tenha falhado) — inline styles pra garantir que algo
+ * aparece mesmo no pior cenario.
+ */
+
 import { useEffect } from 'react'
 
 export default function GlobalError({
@@ -10,31 +21,90 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error('Global app error:', error)
+    console.error('[global error]', error)
   }, [error])
 
   return (
     <html lang="pt-BR">
-      <body className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-6">
-        <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-4">
-          <p className="text-xs tracking-[0.2em] text-yellow-400 font-bold">STACKPLUS</p>
-          <h1 className="text-2xl font-black">Algo deu errado</h1>
-          <p className="text-sm text-zinc-400">
-            Ocorreu um erro inesperado na aplicação. Tente recarregar a tela.
+      <body
+        style={{
+          minHeight: '100vh',
+          background: '#050D15',
+          color: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          margin: 0,
+        }}
+      >
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '480px',
+            background: '#071828',
+            border: '1px solid #132A40',
+            borderRadius: '16px',
+            padding: '28px',
+          }}
+        >
+          <p style={{ fontSize: '11px', letterSpacing: '0.2em', color: '#00C8E0', fontWeight: 700, margin: 0 }}>
+            STACK+
           </p>
-          {error?.digest ? (
-            <p className="text-xs text-zinc-500">Ref: {error.digest}</p>
-          ) : null}
-          <div className="flex gap-2">
+          <h1 style={{ fontSize: '22px', fontWeight: 900, marginTop: '8px', marginBottom: '14px' }}>
+            Algo deu errado
+          </h1>
+          <p style={{ fontSize: '14px', color: '#4A7A90', lineHeight: 1.5, marginBottom: '18px' }}>
+            Encontramos um erro critico na aplicacao. Tenta recarregar a pagina.
+            Se o problema persistir, abra em uma aba anonima ou limpe o cache.
+          </p>
+          {error?.digest && (
+            <div
+              style={{
+                background: '#0A1F30',
+                border: '1px solid #1A3550',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                marginBottom: '18px',
+              }}
+            >
+              <p style={{ fontSize: '10px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>
+                Codigo do erro
+              </p>
+              <p style={{ fontFamily: 'monospace', fontSize: '12px', color: '#00C8E0', margin: '4px 0 0', wordBreak: 'break-all' }}>
+                {error.digest}
+              </p>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={reset}
-              className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-yellow-300 transition-colors"
+              style={{
+                background: '#00C8E0',
+                color: '#050D15',
+                fontWeight: 700,
+                fontSize: '14px',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+              }}
             >
               Tentar novamente
             </button>
             <button
               onClick={() => window.location.reload()}
-              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-200 hover:bg-zinc-800 transition-colors"
+              style={{
+                background: '#0C2238',
+                color: '#ffffff',
+                fontWeight: 700,
+                fontSize: '14px',
+                padding: '10px 20px',
+                border: '1px solid #1A3550',
+                borderRadius: '8px',
+                cursor: 'pointer',
+              }}
             >
               Recarregar página
             </button>

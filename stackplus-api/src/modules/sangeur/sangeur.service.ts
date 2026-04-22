@@ -1032,7 +1032,4 @@ export async function getSangeurPixChargeDetails(chargeId: string) {
   try {
     return await AnnapayService.getCobById(chargeId)
   } catch (error) {
-    logger.error({ err: error }, '[sangeur] failed to fetch charge details')
-    throw new Error('Falha ao buscar detalhes da cobrança PIX')
-  }
-}
+    logger.error({ err: error }, '[sangeur]
