@@ -133,7 +133,7 @@ function ComandasContent() {
             }
           }
           data = Array.from(latest.values())
-            .sort((a, b) => a.player.name.localeCompare(b.player.name, 'pt-BR'))
+            .sort((a, b) => a.player.name.localeCompare(b.player.name, 'pt-BR', { sensitivity: 'base' }))
         }
         setComandas(data)
       })
