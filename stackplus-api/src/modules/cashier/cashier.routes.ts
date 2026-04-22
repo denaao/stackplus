@@ -75,4 +75,10 @@ router.delete('/transaction/:transactionId', authenticate, destructiveLimiter, a
     const ranking = await getRanking(result.sessionId)
     emitSessionRankingUpdated(result.sessionId, ranking)
   } catch (error) {
-    req.log?.warn({ err: error }, '[cashier] 
+    req.log?.warn({ err: error }, '[cashier] realtime broadcast failed after delete')
+  }
+
+  res.json(result)
+})
+
+export default router

@@ -268,4 +268,15 @@ export async function changeSangeurPassword(input: {
   await prisma.homeGameSangeurAccess.update({
     where: {
       homeGameId_userId: {
-        homeGame
+        homeGameId: input.homeGameId,
+        userId: input.userId,
+      },
+    },
+    data: {
+      passwordHash: newPasswordHash,
+      mustChangePassword: false,
+    },
+  })
+
+  return { success: true }
+}
