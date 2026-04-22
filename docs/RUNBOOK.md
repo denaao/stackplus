@@ -328,6 +328,67 @@ Detalhes da investigação: [docs/TRUNCATION-BUG.md](./TRUNCATION-BUG.md).
 
 ---
 
+## Health checks e monitoring externo
+
+### Endpoints de health check
+
+**`GET /health`** (check raso, sem autenticação)
+
+Retorna 200 sempre que o processo Node está vivo e respondendo. Útil pra
+balanceadores / probes de liveness. **Não detecta falhas de configuração**:
+no incidente de 21/04, `/health` respondia OK enquanto `JWT_SECRET` estava
+ausente e qualquer login quebrava.
+
+**`GET /health/deep`** (check profundo, sem autenticação)
+
+Retorna 200 se todos os checks passam, 503 se qualquer falhar. Checks atuais:
+
+| Check      | O que valida                                        | Hint em caso de falha |
+| ---------- | --------------------------------------------------- | --------------------- |
+| `database` | `SELECT 1` via Prisma (conectividade + credenciais) | `db-unreachable`      |
+| `jwt`      | Roundtrip sign+verify com `JWT_SECRET`              | `jwt-unconfigured` ou `roundtrip-mismatch` |
+| `env`      | Variáveis críticas presentes e não-vazias           | `missing:VAR1,VAR2,...` |
+
+**Variáveis críticas verificadas em `env`:**
+`DATABASE_URL`, `JWT_SECRET`, `ANNAPAY_CLIENT_ID`, `ANNAPAY_CLIENT_SECRET`,
+`ANNAPAY_WEBHOOK_SECRET`, `FRONTEND_URL`, `API_PUBLIC_URL`,
+`SANGEUR_WEBHOOK_SECRET`.
+
+Pra adicionar/remover variáveis da lista, editar `criticalEnvs` em
+`stackplus-api/src/app.ts`.
+
+**Exposição segura:** endpoint público não-autenticado. Expõe apenas flags
+`ok` + `hint` curto. Detalhes de erro do Prisma/JWT vão pro log interno via
+pino (buscáveis no Railway + correlacionáveis com Sentry via `requestId`).
+
+### Monitoring externo — Better Stack
+
+Conta: https://betterstack.com/uptime (free tier, 10 monitors, checks 30s mínimo).
+
+Monitors ativos:
+
+| Monitor                                   | Frequência | Keyword      | O que pega                  |
+| ----------------------------------------- | ---------- | ------------ | --------------------------- |
+| `https://api.stackplus.com.br/health/deep`| 3min       | `"ok":true`  | DB/JWT/env criticos         |
+| `https://stackplus-web-chi.vercel.app`    | 3min       | (status 200) | Frontend up                 |
+
+Alertas via email. Escalation policy: imediato no incident, notifica também
+no resolved.
+
+**Status page pública**: `status.stackplus.com.br` (CNAME gerenciado no
+Vercel DNS apontando pro Better Stack).
+
+### Resposta a alerta de `/health/deep` 503
+
+1. Abre o email do Better Stack → vê qual hint está no payload
+2. Mapeamento rápido:
+   - `db-unreachable` → Railway → Postgres → Logs; problema pode ser Railway degradation ou ssl handshake
+   - `jwt-unconfigured` → Railway → stackplus-api → Variables → confere `JWT_SECRET` presente e não-vazio
+   - `missing:VAR1,...` → Railway → Variables → recria as vars listadas a partir do `.env.example`
+3. Após fix, Better Stack auto-resolve em 1 check cycle (≤3min)
+
+---
+
 ## Checklist pós-incidente
 
 Após um incidente de produção, documentar:
