@@ -1424,25 +1424,40 @@ function InlineLimitsEditor({ tournament, onSave, actionLoading }: {
     setEditing(false)
   }
 
-  const miniInput = { width: '40px', background: '#0A1F30', border: '1px solid #1A3550', borderRadius: '4px', padding: '2px 4px', fontSize: '12px', textAlign: 'center' as const, color: 'white', outline: 'none' }
+  const miniInput = { width: '52px', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.4)', borderRadius: '6px', padding: '3px 6px', fontSize: '13px', textAlign: 'center' as const, color: 'white', outline: 'none' }
 
   if (editing) {
     return (
       <div className="flex items-center gap-3 flex-wrap">
         {!!tournament.rebuyAmount && (
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-white/40">Rebuy até</span>
-            <input type="number" min={1} style={miniInput} value={rebuyUntil} onChange={(e) => setRebuyUntil(e.target.value)} placeholder="∞" />
+            <span className="text-xs text-white/40">Rebuy até nível</span>
+            <input
+              type="number"
+              min={1}
+              style={miniInput}
+              value={rebuyUntil}
+              onChange={(e) => setRebuyUntil(e.target.value)}
+              placeholder="∞"
+              autoFocus
+            />
           </div>
         )}
         {!!tournament.addonAmount && (
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-white/40">Addon após</span>
-            <input type="number" min={1} style={miniInput} value={addonAfter} onChange={(e) => setAddonAfter(e.target.value)} placeholder="—" />
+            <span className="text-xs text-white/40">Addon após nível</span>
+            <input
+              type="number"
+              min={1}
+              style={miniInput}
+              value={addonAfter}
+              onChange={(e) => setAddonAfter(e.target.value)}
+              placeholder="—"
+            />
           </div>
         )}
-        <button onClick={handleSave} disabled={!!actionLoading} className="text-xs text-sx-cyan disabled:opacity-50">✓ ok</button>
-        <button onClick={() => setEditing(false)} className="text-xs text-white/30 hover:text-white">✕</button>
+        <button onClick={handleSave} disabled={!!actionLoading} className="text-xs font-bold text-sx-cyan disabled:opacity-50 hover:text-white">✓ salvar</button>
+        <button onClick={() => setEditing(false)} className="text-xs text-white/30 hover:text-white">cancelar</button>
       </div>
     )
   }
@@ -1450,16 +1465,34 @@ function InlineLimitsEditor({ tournament, onSave, actionLoading }: {
   return (
     <div className="flex items-center gap-3 flex-wrap">
       {!!tournament.rebuyAmount && (
-        <span className="text-xs text-white/40">
-          Rebuy até <span className="text-white/70 font-medium">{tournament.rebuyUntilLevel ?? '∞'}</span>
-        </span>
+        <button
+          onClick={() => setEditing(true)}
+          className="flex items-center gap-1 text-xs text-white/40 hover:text-sx-cyan transition-colors group"
+          title="Clique para editar"
+        >
+          Rebuy até{' '}
+          <span className="text-white/70 font-medium group-hover:text-sx-cyan">
+            {tournament.rebuyUntilLevel ?? '∞'}
+          </span>
+          <span className="text-white/20 group-hover:text-sx-cyan ml-0.5">✎</span>
+        </button>
       )}
       {!!tournament.addonAmount && (
-        <span className="text-xs text-white/40">
-          Addon após <span className="text-white/70 font-medium">{tournament.addonAfterLevel ?? '—'}</span>
-        </span>
+        <button
+          onClick={() => setEditing(true)}
+          className="flex items-center gap-1 text-xs text-white/40 hover:text-sx-cyan transition-colors group"
+          title="Clique para editar"
+        >
+          Addon após{' '}
+          <span className="text-white/70 font-medium group-hover:text-sx-cyan">
+            {tournament.addonAfterLevel ?? '—'}
+          </span>
+          <span className="text-white/20 group-hover:text-sx-cyan ml-0.5">✎</span>
+        </button>
       )}
-      <button onClick={() => setEditing(true)} className="text-xs text-sx-cyan hover:text-white">✎</button>
+      {!tournament.rebuyAmount && !tournament.addonAmount && (
+        <span className="text-xs text-white/20">Sem rebuy/addon configurado</span>
+      )}
     </div>
   )
 }
