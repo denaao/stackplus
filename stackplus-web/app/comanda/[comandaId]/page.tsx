@@ -99,6 +99,7 @@ export default function ComandaDetailPage() {
   const [loading, setLoading] = useState(true)
   const [closing, setClosing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [openDates, setOpenDates] = useState<Set<string>>(new Set())
   const [showAddPayment, setShowAddPayment] = useState(false)
   const [paymentType, setPaymentType] = useState<string>('PAYMENT_CASH')
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -181,6 +182,21 @@ export default function ComandaDetailPage() {
     poll()
     return () => { cancelled = true; clearInterval(interval) }
   }, [pixChargeResult, pixPaidConfirmed, load])
+
+  // Abre a data mais recente por default quando a comanda carrega.
+  useEffect(() => {
+    if (!comanda || comanda.items.length === 0) return
+    const firstDate = Object.keys(groupByDate(comanda.items))[0]
+    setOpenDates(prev => prev.size === 0 && firstDate ? new Set([firstDate]) : prev)
+  }, [comanda?.id])
+
+  const toggleDate = (date: string) => {
+    setOpenDates(prev => {
+      const next = new Set(prev)
+      if (next.has(date)) next.delete(date); else next.add(date)
+      return next
+    })
+  }
 
   const handleClose = async () => {
     if (!confirm('Fechar esta comanda?')) return
@@ -420,19 +436,43 @@ export default function ComandaDetailPage() {
               Nenhuma movimentação
             </div>
           ) : (
-            <div className="space-y-4">
-              {Object.entries(grouped).map(([date, items]) => (
-                <div key={date}>
-                  <div className="text-xs text-white/30 uppercase tracking-widest mb-2 px-1">{date}</div>
-                  <div className="rounded-xl overflow-hidden border border-white/5">
-                    {items.map((item, i) => {
+            <div className="space-y-3">
+              {Object.entries(grouped).map(([date, items]) => {
+                const isOpen = openDates.size === 0 ? false : openDates.has(date)
+                const dayDebits = items.filter(i => typeIsDebit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
+                const dayCredits = items.filter(i => typeIsCredit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
+                return (
+                  <div key={date} className="rounded-xl overflow-hidden border border-white/5">
+                    {/* Cabeçalho da data — sempre visível, clicável */}
+                    <button
+                      type="button"
+                      onClick={() => toggleDate(date)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-sx-card hover:bg-white/[0.04] transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-white/50 uppercase tracking-widest font-medium">{date}</span>
+                        <span className="text-xs text-white/30">{items.length} lançamento{items.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {dayDebits > 0 && (
+                          <span className="text-xs font-semibold text-red-400">− {fmtMoney(dayDebits)}</span>
+                        )}
+                        {dayCredits > 0 && (
+                          <span className="text-xs font-semibold text-sx-cyan">+ {fmtMoney(dayCredits)}</span>
+                        )}
+                        <span className="text-white/30 text-sm">{isOpen ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
+
+                    {/* Lançamentos — visíveis só quando aberto */}
+                    {isOpen && items.map((item, i) => {
                       const isCredit = typeIsCredit(item.type)
                       const isDebit = typeIsDebit(item.type)
                       const amountColor = isCredit ? 'text-sx-cyan' : isDebit ? 'text-red-400' : 'text-zinc-300'
                       const sign = isCredit ? '+' : isDebit ? '−' : ''
-                      const rowBg = i % 2 === 0 ? 'bg-sx-card' : 'bg-white/[0.03]'
+                      const rowBg = i % 2 === 0 ? 'bg-white/[0.03]' : 'bg-transparent'
                       return (
-                        <div key={item.id} className={`${rowBg} px-4 py-3 flex items-center justify-between gap-3`}>
+                        <div key={item.id} className={`${rowBg} px-4 py-3 flex items-center justify-between gap-3 border-t border-white/[0.04]`}>
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium">{typeLabel[item.type] ?? item.type}</div>
                             <div className="text-xs text-white/40 mt-0.5 truncate">
@@ -463,17 +503,15 @@ export default function ComandaDetailPage() {
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className={`text-sm font-bold tabular-nums ${amountColor}`}>
-                              {sign} {fmtMoney(item.amount)}
-                            </div>
+                          <div className={`text-sm font-bold tabular-nums shrink-0 ${amountColor}`}>
+                            {sign} {fmtMoney(item.amount)}
                           </div>
                         </div>
                       )
                     })}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
