@@ -1,8 +1,10 @@
-import { Router, Response } from 'express'
+import { Router, Response, Request } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
 import { destructiveLimiter } from '../../middlewares/rate-limit.middleware'
 import * as HomeGameService from './homegame.service'
 import { z } from 'zod'
+import { prisma } from '../../lib/prisma'
+import { hashPassword } from '../../utils/hash'
 
 const router = Router()
 
@@ -157,8 +159,4 @@ router.post('/join', authenticate, async (req: AuthRequest, res: Response) => {
 
 // Dashboard unificado: retorna meus home games separados por papel.
 router.get('/mine/with-roles', authenticate, async (req: AuthRequest, res: Response) => {
-  const result = await HomeGameService.getMyHomeGamesWithRoles(req.user!.userId)
-  res.json(result)
-})
-
-export default router
+  const result = await HomeGam

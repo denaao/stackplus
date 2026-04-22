@@ -289,12 +289,13 @@ export default function SessionManagePage() {
   const [sangeurMembers, setSangeurMembers] = useState<SangeurMember[]>([])
   const [sangeurUserId, setSangeurUserId] = useState('')
   const [sangeurUsername, setSangeurUsername] = useState('')
-  const [sangeurPassword, setSangeurPassword] = useState('')
   const [sangeurLoading, setSangeurLoading] = useState(false)
   const [sangeurActionUserId, setSangeurActionUserId] = useState<string | null>(null)
   const [sangeurError, setSangeurError] = useState<string | null>(null)
-  const [sangeurIssuedCredential, setSangeurIssuedCredential] = useState<{ userName: string; username: string; temporaryPassword: string } | null>(null)
+  const [sangeurIssuedCredential, setSangeurIssuedCredential] = useState<{ userName: string; username: string; activationQrCode: string; activationToken: string } | null>(null)
   const [sangeurCopied, setSangeurCopied] = useState<string | null>(null)
+  const [sangeurQrCodes, setSangeurQrCodes] = useState<Record<string, string>>({}) // userId → qrCode base64
+  const [showHabilitarForm, setShowHabilitarForm] = useState(false)
 
   async function copySangeur(key: string, value: string) {
     try {
@@ -414,12 +415,26 @@ export default function SessionManagePage() {
     setSangeurIssuedCredential(null)
     setSangeurUserId('')
     setSangeurUsername('')
-    setSangeurPassword('')
     setSangeurLoading(true)
     try {
       const { data } = await api.get(`/home-games/${session.homeGame.id}`)
-      setSangeurAccesses(data.sangeurAccesses || [])
+      const accesses: SangeurAccess[] = data.sangeurAccesses || []
+      setSangeurAccesses(accesses)
       setSangeurMembers(Array.isArray(data.members) ? data.members : [])
+
+      // Gera QR individual para cada SANGEUR ativa (homeGameId + username embutidos)
+      const activeAccesses = accesses.filter((a) => a.isActive)
+      const qrResults = await Promise.all(
+        activeAccesses.map((a) =>
+          api
+            .get(`/home-games/${session.homeGame.id}/sangeur-login-qr?username=${encodeURIComponent(a.username)}`)
+            .then((r) => ({ userId: a.userId, qrCode: r.data.qrCode }))
+            .catch(() => ({ userId: a.userId, qrCode: null }))
+        )
+      )
+      const qrMap: Record<string, string> = {}
+      qrResults.forEach(({ userId, qrCode }) => { if (qrCode) qrMap[userId] = qrCode })
+      setSangeurQrCodes(qrMap)
       setShowSangeurModal(true)
     } catch (err) {
       setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel carregar dados do SANGEUR.') })
@@ -447,23 +462,23 @@ export default function SessionManagePage() {
     setSangeurError(null)
     setSangeurLoading(true)
     try {
-      const payload: Record<string, string> = {
+      const payload = {
         userId: sangeurUserId,
         username: sangeurUsername.trim(),
       }
-      if (sangeurPassword.trim()) payload.password = sangeurPassword.trim()
 
       const { data } = await api.post(`/home-games/${session.homeGame.id}/sangeurs`, payload)
       applySangeurAccess(data.access)
       setSangeurIssuedCredential({
         userName: data.access.user.name,
         username: data.access.username,
-        temporaryPassword: data.temporaryPassword,
+        activationQrCode: data.activationQrCode,
+        activationToken: data.activationToken,
       })
-      setSangeurPassword('')
       setSangeurUserId('')
       setSangeurUsername('')
-      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada com sucesso.' })
+      setShowHabilitarForm(false)
+      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada. Mostre o QR Code para ela criar a senha.' })
     } catch (err) {
       setSangeurError(getErrorMessage(err, 'Nao foi possivel habilitar a SANGEUR.'))
     } finally {
@@ -496,9 +511,10 @@ export default function SessionManagePage() {
       setSangeurIssuedCredential({
         userName: data.access.user.name,
         username: data.access.username,
-        temporaryPassword: data.temporaryPassword,
+        activationQrCode: data.activationQrCode,
+        activationToken: data.activationToken,
       })
-      setPageFeedback({ tone: 'success', message: 'Senha temporaria da SANGEUR redefinida.' })
+      setPageFeedback({ tone: 'success', message: 'Novo QR Code gerado. A SANGEUR deve escaneá-lo para criar a senha.' })
     } catch (err) {
       setSangeurError(getErrorMessage(err, 'Nao foi possivel redefinir a senha da SANGEUR.'))
     } finally {
@@ -1457,99 +1473,83 @@ export default function SessionManagePage() {
               </button>
             </div>
 
-            <div className="mt-5 rounded-xl border border-sx-cyan/30 bg-sx-cyan/5 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-sx-cyan">Home Game ID (para login na POS)</p>
-              <div className="mt-2 flex items-center gap-2">
-                <code className="flex-1 truncate rounded-lg border border-sx-border2 bg-sx-card px-3 py-2 font-mono text-xs text-zinc-200">{session.homeGame.id}</code>
+
+            <div className="mt-5">
+              {!showHabilitarForm ? (
                 <button
                   type="button"
-                  onClick={() => copySangeur('homeGameId', session.homeGame.id)}
-                  className="rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 px-3 py-2 text-xs font-bold text-sx-cyan hover:bg-sx-cyan/20"
+                  onClick={() => setShowHabilitarForm(true)}
+                  className="w-full rounded-xl border border-dashed border-sx-cyan/30 py-3 text-sm font-bold text-sx-cyan hover:bg-sx-cyan/5"
                 >
-                  {sangeurCopied === 'homeGameId' ? 'Copiado!' : 'Copiar'}
+                  + Habilitar nova SANGEUR
                 </button>
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-3 rounded-xl border border-white/8 bg-black/20 p-4">
-              <p className="text-xs font-bold uppercase tracking-widest text-white/40">Habilitar novo acesso</p>
-
-              <div className="space-y-1">
-                <label className="text-xs uppercase tracking-wide text-sx-muted">Participante SANGEUR</label>
-                <select
-                  value={sangeurUserId}
-                  onChange={(e) => setSangeurUserId(e.target.value)}
-                  className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                >
-                  <option value="">Selecione um membro…</option>
-                  {sangeurMembers.map((m) => (
-                    <option key={m.id} value={m.user.id}>{m.user.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
-                  <input
-                    type="text"
-                    value={sangeurUsername}
-                    onChange={(e) => setSangeurUsername(e.target.value)}
-                    className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs uppercase tracking-wide text-sx-muted">Senha (opcional)</label>
-                  <input
-                    type="text"
-                    value={sangeurPassword}
-                    onChange={(e) => setSangeurPassword(e.target.value)}
-                    placeholder="Gerada se vazio"
-                    className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {sangeurError && (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-                  {sangeurError}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={handleEnableSangeur}
-                disabled={sangeurLoading}
-                className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 px-3 py-2 text-sm font-bold text-sx-cyan hover:bg-sx-cyan/20 disabled:opacity-50"
-              >
-                {sangeurLoading ? 'Salvando…' : 'Habilitar SANGEUR'}
-              </button>
-
-              {sangeurIssuedCredential && (
-                <div className="space-y-2 rounded-lg border border-sx-cyan/30 bg-sx-cyan/10 p-3">
-                  <p className="text-xs font-bold text-sx-cyan">Credencial de {sangeurIssuedCredential.userName}</p>
-                  <div className="flex items-center gap-2">
-                    <span className="w-16 text-[10px] uppercase tracking-wide text-sx-cyan/70">Usuário</span>
-                    <code className="flex-1 truncate rounded border border-sx-border2 bg-sx-card px-2 py-1 font-mono text-xs text-zinc-200">{sangeurIssuedCredential.username}</code>
-                    <button
-                      type="button"
-                      onClick={() => copySangeur('username', sangeurIssuedCredential.username)}
-                      className="rounded border border-sx-cyan/40 bg-sx-cyan/10 px-2 py-1 text-[11px] font-bold text-sx-cyan hover:bg-sx-cyan/20"
-                    >
-                      {sangeurCopied === 'username' ? 'Copiado!' : 'Copiar'}
-                    </button>
+              ) : (
+                <div className="space-y-3 rounded-xl border border-white/8 bg-black/20 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-widest text-white/40">Habilitar novo acesso</p>
+                    <button type="button" onClick={() => setShowHabilitarForm(false)} className="text-[11px] text-sx-muted hover:text-zinc-300">Cancelar</button>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-16 text-[10px] uppercase tracking-wide text-sx-cyan/70">Senha</span>
-                    <code className="flex-1 truncate rounded border border-sx-border2 bg-sx-card px-2 py-1 font-mono text-xs text-zinc-200">{sangeurIssuedCredential.temporaryPassword}</code>
-                    <button
-                      type="button"
-                      onClick={() => copySangeur('password', sangeurIssuedCredential.temporaryPassword)}
-                      className="rounded border border-sx-cyan/40 bg-sx-cyan/10 px-2 py-1 text-[11px] font-bold text-sx-cyan hover:bg-sx-cyan/20"
+
+                  <div className="space-y-1">
+                    <label className="text-xs uppercase tracking-wide text-sx-muted">Participante SANGEUR</label>
+                    <select
+                      value={sangeurUserId}
+                      onChange={(e) => setSangeurUserId(e.target.value)}
+                      className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
                     >
-                      {sangeurCopied === 'password' ? 'Copiado!' : 'Copiar'}
-                    </button>
+                      <option value="">Selecione um membro…</option>
+                      {sangeurMembers.map((m) => (
+                        <option key={m.id} value={m.user.id}>{m.user.name}</option>
+                      ))}
+                    </select>
                   </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
+                    <input
+                      type="text"
+                      value={sangeurUsername}
+                      onChange={(e) => setSangeurUsername(e.target.value)}
+                      className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
+                    />
+                  </div>
+
+                  {sangeurError && (
+                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                      {sangeurError}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleEnableSangeur}
+                    disabled={sangeurLoading}
+                    className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 px-3 py-2 text-sm font-bold text-sx-cyan hover:bg-sx-cyan/20 disabled:opacity-50"
+                  >
+                    {sangeurLoading ? 'Salvando…' : 'Habilitar SANGEUR'}
+                  </button>
+
+                  {sangeurIssuedCredential && (
+                    <div className="rounded-lg border border-sx-cyan/30 bg-sx-cyan/5 p-4 space-y-3">
+                      <p className="text-[11px] font-bold text-sx-cyan uppercase tracking-widest">
+                        QR Code de ativação — {sangeurIssuedCredential.userName}
+                      </p>
+                      <p className="text-[11px] text-sx-muted">
+                        Mostre este QR Code para a SANGEUR escanear. Ela criará a própria senha. Válido por 30 minutos.
+                      </p>
+                      <div className="flex justify-center py-2">
+                        <img
+                          src={sangeurIssuedCredential.activationQrCode}
+                          alt="QR Code de ativação SANGEUR"
+                          className="rounded-lg"
+                          style={{ width: 200, height: 200 }}
+                        />
+                      </div>
+                      <p className="text-center text-[10px] text-sx-muted">
+                        Usuário POS: <span className="font-mono text-sx-cyan">{sangeurIssuedCredential.username}</span>
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1561,34 +1561,48 @@ export default function SessionManagePage() {
               ) : (
                 <div className="space-y-2">
                   {sangeurAccesses.map((access) => (
-                    <div key={access.id} className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2 text-xs">
-                      <div>
-                        <p className="font-bold text-zinc-200">{access.user.name}</p>
-                        <p className="text-sx-muted font-mono">{access.username}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-sx-cyan/15 text-sx-cyan' : 'bg-sx-border2 text-sx-muted'}`}>
-                          {access.isActive ? 'Ativo' : 'Inativo'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleResetSangeurPassword(access.userId)}
-                          disabled={sangeurActionUserId === access.userId}
-                          className="rounded border border-sx-border2 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-sx-input disabled:opacity-50"
-                        >
-                          Reset
-                        </button>
-                        {access.isActive && (
+                    <div key={access.id} className="rounded-xl border border-white/8 bg-black/20 text-xs overflow-hidden">
+                      <div className="flex items-center justify-between gap-2 px-3 py-2">
+                        <div>
+                          <p className="font-bold text-zinc-200">{access.user.name}</p>
+                          <p className="text-sx-muted font-mono">{access.username}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-sx-cyan/15 text-sx-cyan' : 'bg-sx-border2 text-sx-muted'}`}>
+                            {access.isActive ? 'Ativo' : 'Inativo'}
+                          </span>
                           <button
                             type="button"
-                            onClick={() => handleDisableSangeur(access.userId)}
+                            onClick={() => handleResetSangeurPassword(access.userId)}
                             disabled={sangeurActionUserId === access.userId}
-                            className="rounded border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                            className="rounded border border-sx-border2 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-sx-input disabled:opacity-50"
                           >
-                            Desativar
+                            Reset
                           </button>
-                        )}
+                          {access.isActive && (
+                            <button
+                              type="button"
+                              onClick={() => handleDisableSangeur(access.userId)}
+                              disabled={sangeurActionUserId === access.userId}
+                              className="rounded border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                            >
+                              Desativar
+                            </button>
+                          )}
+                        </div>
                       </div>
+                      {access.isActive && sangeurQrCodes[access.userId] && (
+                        <div className="border-t border-white/8 bg-sx-cyan/5 px-3 py-3 flex flex-col items-center gap-2">
+                          <p className="text-[10px] uppercase tracking-widest text-sx-cyan/70">QR Code de acesso ao POS</p>
+                          <img
+                            src={sangeurQrCodes[access.userId]}
+                            alt={`QR Code ${access.username}`}
+                            className="rounded-lg"
+                            style={{ width: 160, height: 160 }}
+                          />
+                          <p className="text-[10px] text-sx-muted">Ela escaneia → cai no login → só digita a senha</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

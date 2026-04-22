@@ -99,6 +99,7 @@ router.post('/shifts/:shiftId/sales', async (req: AuthRequest, res: Response) =>
     playerName: z.string().trim().max(120).optional(),
     note: z.string().trim().max(300).optional(),
     paymentReference: z.string().trim().max(200).optional(),
+    signatureData: z.string().max(500000).optional(),
   }).parse(req.body)
 
   const result = await SangeurService.registerSale({
@@ -110,6 +111,7 @@ router.post('/shifts/:shiftId/sales', async (req: AuthRequest, res: Response) =>
     playerName: data.playerName,
     note: data.note,
     paymentReference: data.paymentReference,
+    signatureData: data.signatureData,
   })
 
   // Realtime broadcast: reusa o canal do caixa (transaction:new) para atualizar
@@ -207,11 +209,4 @@ router.post('/shifts/:shiftId/close', async (req: AuthRequest, res: Response) =>
   const shift = await SangeurService.closeShift({
     shiftId: req.params.shiftId,
     userId: req.user!.userId,
-    returnedChips: data.returnedChips,
-    note: data.note,
-  })
-
-  res.json(shift)
-})
-
-export default router
+    returnedChips

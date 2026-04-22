@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useSangeurAuthStore } from '@/store/useStore'
@@ -157,6 +157,17 @@ export default function SangeurPosPage() {
   const [pixStatusMsg, setPixStatusMsg] = useState('')
   const [confirmingPix, setConfirmingPix] = useState(false)
 
+  // Assinatura (pós-pago)
+  const [signatureModal, setSignatureModal] = useState(false)
+  const [pendingSaleData, setPendingSaleData] = useState<{
+    chips: number; paymentMethod: PaymentMethod; note: string; paymentReference: string
+    player: SessionPlayer | SessionCandidate
+  } | null>(null)
+  const signatureCanvasRef = useRef<HTMLCanvasElement>(null)
+  const isDrawingRef = useRef(false)
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null)
+  const [hasSignature, setHasSignature] = useState(false)
+
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeShift?.sessionId) || null,
     [sessions, activeShift]
@@ -305,11 +316,76 @@ export default function SangeurPosPage() {
     }
   }
 
+  const playerIsPostpaid = (player: SessionPlayer | SessionCandidate | null): boolean => {
+    if (!player) return false
+    const mode = (player as SessionPlayer).paymentMode
+    if (mode) return mode === 'POSTPAID'
+    return isPostpaidSession
+  }
+
+  async function submitSaleWithSignature(signatureData?: string) {
+    if (!activeShift || !pendingSaleData) return
+    const { chips, paymentMethod, note, paymentReference, player } = pendingSaleData
+    setLoading(true)
+    try {
+      const { data } = await api.post(`/sangeur/shifts/${activeShift.id}/sales`, {
+        chips,
+        paymentMethod,
+        sessionUserId: player.userId,
+        playerName: player.name,
+        note: note || undefined,
+        paymentReference: paymentReference || undefined,
+        signatureData: signatureData || undefined,
+      })
+      const shiftData = data.shift || data
+      const pixData = data.pixQrData
+      setActiveShift(shiftData)
+      setSaleForm({ chips: '', paymentMethod: defaultPaymentMethod, note: '', paymentReference: '' })
+      setSelectedPlayer(null)
+      setPendingSaleData(null)
+      setSignatureModal(false)
+      setHasSignature(false)
+      if (shiftData?.sessionId) loadParticipants(shiftData.sessionId)
+      if (pixData) {
+        setPixQrModal(pixData)
+        setPixSaleId(data.sale?.id || null)
+        setPixStatusMsg('Aguardando pagamento...')
+      }
+      setSuccess('Assinatura coletada! Venda registrada.')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Falha ao registrar venda'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleRegisterSale(e: React.FormEvent) {
     e.preventDefault()
     if (!activeShift || !selectedPlayer) return
     const chips = Number(saleForm.chips || 0)
     if (chips <= 0) return setError('Informe as fichas')
+
+    // Pós-pago: exige assinatura antes de registrar
+    if (playerIsPostpaid(selectedPlayer)) {
+      setPendingSaleData({
+        chips,
+        paymentMethod: saleForm.paymentMethod,
+        note: saleForm.note,
+        paymentReference: saleForm.paymentReference,
+        player: selectedPlayer,
+      })
+      setHasSignature(false)
+      setSignatureModal(true)
+      // Limpa o canvas quando abrir
+      setTimeout(() => {
+        const canvas = signatureCanvasRef.current
+        if (canvas) {
+          const ctx = canvas.getContext('2d')
+          ctx?.clearRect(0, 0, canvas.width, canvas.height)
+        }
+      }, 50)
+      return
+    }
 
     setLoading(true)
     try {
@@ -784,6 +860,122 @@ export default function SangeurPosPage() {
         </div>
       )}
       </div>
+
+      {/* Modal Assinatura — Pós-pago */}
+      {signatureModal && pendingSaleData && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-sx-bg">
+          {/* Cabeçalho */}
+          <div className="flex items-center justify-between border-b border-sx-border px-4 py-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-sx-muted">Autorização de compra</p>
+              <p className="text-base font-black text-zinc-100">{pendingSaleData.player.name}</p>
+              <p className="text-sm text-sx-cyan font-bold">
+                {pendingSaleData.chips} fichas
+                {chipValue > 0 ? ` · ${formatCurrency(pendingSaleData.chips * chipValue)}` : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setSignatureModal(false); setPendingSaleData(null) }}
+              className="rounded-lg border border-sx-border2 px-3 py-2 text-xs font-bold text-zinc-300"
+            >
+              Cancelar
+            </button>
+          </div>
+
+          {/* Instrução */}
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center">
+            <p className="text-sm font-bold text-amber-300">Assine abaixo para autorizar a transação</p>
+            <p className="text-xs text-amber-400/70 mt-0.5">Pós-pago • {PAYMENT_LABELS[pendingSaleData.paymentMethod]}</p>
+          </div>
+
+          {/* Canvas de assinatura */}
+          <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-4">
+            <div className="relative w-full max-w-[430px] rounded-xl border-2 border-dashed border-sx-border2 bg-sx-card overflow-hidden"
+              style={{ height: 220 }}>
+              <canvas
+                ref={signatureCanvasRef}
+                width={800}
+                height={440}
+                style={{ width: '100%', height: '100%', touchAction: 'none', cursor: 'crosshair' }}
+                onPointerDown={(e) => {
+                  const canvas = signatureCanvasRef.current
+                  if (!canvas) return
+                  isDrawingRef.current = true
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  lastPosRef.current = {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY,
+                  }
+                  canvas.setPointerCapture(e.pointerId)
+                }}
+                onPointerMove={(e) => {
+                  if (!isDrawingRef.current) return
+                  const canvas = signatureCanvasRef.current
+                  if (!canvas || !lastPosRef.current) return
+                  const ctx = canvas.getContext('2d')
+                  if (!ctx) return
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  const x = (e.clientX - rect.left) * scaleX
+                  const y = (e.clientY - rect.top) * scaleY
+                  ctx.beginPath()
+                  ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y)
+                  ctx.lineTo(x, y)
+                  ctx.strokeStyle = '#00C8E0'
+                  ctx.lineWidth = 3
+                  ctx.lineCap = 'round'
+                  ctx.lineJoin = 'round'
+                  ctx.stroke()
+                  lastPosRef.current = { x, y }
+                  setHasSignature(true)
+                }}
+                onPointerUp={() => { isDrawingRef.current = false; lastPosRef.current = null }}
+              />
+              {!hasSignature && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <p className="text-sm text-sx-muted/50 select-none">Assine aqui</p>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const canvas = signatureCanvasRef.current
+                if (canvas) {
+                  const ctx = canvas.getContext('2d')
+                  ctx?.clearRect(0, 0, canvas.width, canvas.height)
+                  setHasSignature(false)
+                }
+              }}
+              className="text-xs text-sx-muted hover:text-zinc-300 underline"
+            >
+              Limpar assinatura
+            </button>
+          </div>
+
+          {/* Botão de confirmar */}
+          <div className="border-t border-sx-border px-4 py-4">
+            <button
+              type="button"
+              disabled={!hasSignature || loading}
+              onClick={() => {
+                const canvas = signatureCanvasRef.current
+                if (!canvas) return
+                const signatureData = canvas.toDataURL('image/png')
+                submitSaleWithSignature(signatureData)
+              }}
+              className="w-full rounded-xl bg-sx-cyan py-4 text-lg font-black text-sx-bg disabled:opacity-40"
+            >
+              {loading ? 'Registrando...' : 'Confirmar e registrar'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal PIX QR */}
       {pixQrModal && (

@@ -1,16 +1,21 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import { useSangeurAuthStore } from '@/store/useStore'
 import { getErrorMessage } from '@/lib/errors'
 
 export default function SangeurLoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const setSangeurAuth = useSangeurAuthStore((s) => s.setSangeurAuth)
   const token = useSangeurAuthStore((s) => s.token)
-  const [form, setForm] = useState({ homeGameId: '', username: '', password: '' })
+  const [form, setForm] = useState({
+    homeGameId: searchParams.get('homeGameId') || '',
+    username: searchParams.get('username') || '',
+    password: '',
+  })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 

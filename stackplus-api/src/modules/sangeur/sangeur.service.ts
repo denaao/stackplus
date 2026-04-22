@@ -413,6 +413,7 @@ export async function registerSale(input: {
   playerName?: string
   note?: string
   paymentReference?: string
+  signatureData?: string
 }) {
   const shift = await getShiftByIdForSangeur(input.shiftId, input.userId)
   if (shift.status !== SangeurShiftStatus.OPEN) throw new Error('Turno SANGEUR já encerrado')
@@ -580,6 +581,7 @@ export async function registerSale(input: {
         voucherCode: input.paymentMethod === SangeurPaymentMethod.VOUCHER ? generateVoucherCode() : null,
         playerName: resolvedPlayerName,
         note: input.note?.trim() || null,
+        ...(input.signatureData ? { signatureData: input.signatureData } : {}),
         settledAt: paymentStatus === SangeurPaymentStatus.PAID ? new Date() : null,
         createdByUserId: input.userId,
       },
@@ -1030,7 +1032,4 @@ export async function getSangeurPixChargeDetails(chargeId: string) {
   try {
     return await AnnapayService.getCobById(chargeId)
   } catch (error) {
-    logger.error({ err: error }, '[sangeur] failed to fetch charge details')
-    throw new Error('Falha ao buscar detalhes da cobrança PIX')
-  }
-}
+    logger.error({ err: error }, '[sangeur]

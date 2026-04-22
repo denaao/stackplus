@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import api from '@/services/api'
 import { joinSession, leaveSession, getSocket } from '@/services/socket'
@@ -254,6 +254,17 @@ export default function CashierPage() {
   const [autoProcessingPaidCharge, setAutoProcessingPaidCharge] = useState(false)
   const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null)
 
+  // Assinatura pós-pago
+  const [signatureModal, setSignatureModal] = useState(false)
+  const [pendingSignatureTx, setPendingSignatureTx] = useState<{
+    sessionId: string; userId: string; type: 'BUYIN' | 'REBUY' | 'JACKPOT'
+    amount: number; chips: number; note?: string
+  } | null>(null)
+  const signatureCanvasRef = useRef<HTMLCanvasElement>(null)
+  const isDrawingRef = useRef(false)
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null)
+  const [hasSignature, setHasSignature] = useState(false)
+
   async function refreshCashierSnapshot() {
     const [sessionResponse, transactionsResponse] = await Promise.all([
       api.get(`/sessions/${sessionId}`),
@@ -438,6 +449,29 @@ export default function CashierPage() {
         setChargeStatusMessage('')
         setShowPrepaidModal(true)
         setSuccess('Cobrança pré-paga gerada. Após receber o pagamento, confirme o registro da compra.')
+        return
+      }
+
+      // Pós-pago: exige assinatura do jogador antes de registrar compra de fichas
+      if (isPrepaidPurchase && playerMode === 'POSTPAID') {
+        setPendingSignatureTx({
+          sessionId,
+          userId: form.userId,
+          type: transactionType as 'BUYIN' | 'REBUY',
+          amount,
+          chips: parsedChips,
+          note: form.note || undefined,
+        })
+        setHasSignature(false)
+        setSignatureModal(true)
+        setLoading(false)
+        setTimeout(() => {
+          const canvas = signatureCanvasRef.current
+          if (canvas) {
+            const ctx = canvas.getContext('2d')
+            ctx?.clearRect(0, 0, canvas.width, canvas.height)
+          }
+        }, 50)
         return
       }
 
@@ -633,6 +667,35 @@ export default function CashierPage() {
       setChargeStatusMessage(getErrorMessage(err, 'Falha ao consultar status da cobrança.'))
     } finally {
       setCheckingChargeStatus(false)
+    }
+  }
+
+  async function submitTransactionWithSignature(signatureData?: string) {
+    if (!pendingSignatureTx) return
+    setLoading(true)
+    try {
+      const { data } = await api.post('/cashier/transaction', {
+        sessionId: pendingSignatureTx.sessionId,
+        userId: pendingSignatureTx.userId,
+        type: pendingSignatureTx.type,
+        amount: pendingSignatureTx.amount,
+        chips: pendingSignatureTx.chips,
+        note: pendingSignatureTx.note,
+        signatureData: signatureData || undefined,
+      })
+      applyRegisterResult(data as CashierRegisterResponse)
+      await refreshCashierSnapshot()
+      setSignatureModal(false)
+      setPendingSignatureTx(null)
+      setHasSignature(false)
+      setForm({ userId: '', amount: '', chips: '', note: '' })
+      setTransactionType('BUYIN')
+      setSuccess('Assinatura coletada! Transação registrada.')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao registrar'))
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -1260,6 +1323,129 @@ export default function CashierPage() {
                 {cashoutLoading ? 'Registrando...' : 'Confirmar cashout'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* === MODAL ASSINATURA PÓS-PAGO === */}
+      {signatureModal && pendingSignatureTx && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', flexDirection: 'column', background: '#050D15' }}>
+          {/* Cabeçalho */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,200,224,0.12)', padding: '12px 16px' }}>
+            <div>
+              <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#4A7A90', margin: '0 0 2px' }}>Autorização de compra</p>
+              <p style={{ fontWeight: 800, fontSize: '16px', color: '#fff', margin: '0 0 2px' }}>
+                {members.find((m) => m.id === pendingSignatureTx.userId)?.name || 'Jogador'}
+              </p>
+              <p style={{ fontWeight: 700, fontSize: '14px', color: '#00C8E0', margin: 0 }}>
+                {formatChips(pendingSignatureTx.chips)} fichas · {formatCurrency(pendingSignatureTx.amount)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setSignatureModal(false); setPendingSignatureTx(null) }}
+              style={{ background: 'transparent', border: '1px solid rgba(0,200,224,0.2)', borderRadius: '8px', color: '#94a3b8', fontWeight: 700, fontSize: '13px', padding: '6px 14px', cursor: 'pointer' }}
+            >
+              Cancelar
+            </button>
+          </div>
+
+          {/* Instrução */}
+          <div style={{ background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.2)', padding: '10px 16px', textAlign: 'center' }}>
+            <p style={{ fontWeight: 700, fontSize: '14px', color: '#fbbf24', margin: '0 0 2px' }}>Assine abaixo para autorizar a transação</p>
+            <p style={{ fontSize: '12px', color: 'rgba(251,191,36,0.65)', margin: 0 }}>
+              Pós-pago · {pendingSignatureTx.type === 'BUYIN' ? 'Buy-in' : 'Rebuy'}
+            </p>
+          </div>
+
+          {/* Canvas */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', gap: '16px' }}>
+            <div style={{ position: 'relative', width: '100%', maxWidth: '430px', height: '220px', borderRadius: '12px', border: '2px dashed rgba(0,200,224,0.25)', background: 'rgba(12,36,56,0.8)', overflow: 'hidden' }}>
+              <canvas
+                ref={signatureCanvasRef}
+                width={860}
+                height={440}
+                style={{ width: '100%', height: '100%', touchAction: 'none', cursor: 'crosshair', display: 'block' }}
+                onPointerDown={(e) => {
+                  const canvas = signatureCanvasRef.current
+                  if (!canvas) return
+                  isDrawingRef.current = true
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  lastPosRef.current = {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY,
+                  }
+                  canvas.setPointerCapture(e.pointerId)
+                }}
+                onPointerMove={(e) => {
+                  if (!isDrawingRef.current) return
+                  const canvas = signatureCanvasRef.current
+                  if (!canvas || !lastPosRef.current) return
+                  const ctx = canvas.getContext('2d')
+                  if (!ctx) return
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  const x = (e.clientX - rect.left) * scaleX
+                  const y = (e.clientY - rect.top) * scaleY
+                  ctx.beginPath()
+                  ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y)
+                  ctx.lineTo(x, y)
+                  ctx.strokeStyle = '#00C8E0'
+                  ctx.lineWidth = 3
+                  ctx.lineCap = 'round'
+                  ctx.lineJoin = 'round'
+                  ctx.stroke()
+                  lastPosRef.current = { x, y }
+                  setHasSignature(true)
+                }}
+                onPointerUp={() => { isDrawingRef.current = false; lastPosRef.current = null }}
+              />
+              {!hasSignature && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <p style={{ fontSize: '14px', color: 'rgba(74,122,144,0.5)', userSelect: 'none' }}>Assine aqui</p>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const canvas = signatureCanvasRef.current
+                if (canvas) {
+                  const ctx = canvas.getContext('2d')
+                  ctx?.clearRect(0, 0, canvas.width, canvas.height)
+                  setHasSignature(false)
+                }
+              }}
+              style={{ background: 'transparent', border: 'none', color: '#4A7A90', fontSize: '12px', textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              Limpar assinatura
+            </button>
+          </div>
+
+          {/* Confirmar */}
+          <div style={{ borderTop: '1px solid rgba(0,200,224,0.12)', padding: '16px' }}>
+            <button
+              type="button"
+              disabled={!hasSignature || loading}
+              onClick={() => {
+                const canvas = signatureCanvasRef.current
+                if (!canvas) return
+                const signatureData = canvas.toDataURL('image/png')
+                submitTransactionWithSignature(signatureData)
+              }}
+              style={{
+                width: '100%', borderRadius: '12px', padding: '16px',
+                background: !hasSignature || loading ? 'rgba(0,200,224,0.15)' : '#00C8E0',
+                border: 'none', color: !hasSignature || loading ? '#4A7A90' : '#050D15',
+                fontWeight: 800, fontSize: '17px', cursor: !hasSignature || loading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {loading ? 'Registrando...' : 'Confirmar e registrar'}
+            </button>
           </div>
         </div>
       )}

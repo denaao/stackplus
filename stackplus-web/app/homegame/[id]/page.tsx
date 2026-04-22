@@ -90,11 +90,10 @@ export default function HomeGamePage() {
   const [sangeurAccesses, setSangeurAccesses] = useState<SangeurAccess[]>([])
   const [sangeurUserId, setSangeurUserId] = useState('')
   const [sangeurUsername, setSangeurUsername] = useState('')
-  const [sangeurPassword, setSangeurPassword] = useState('')
   const [sangeurLoading, setSangeurLoading] = useState(false)
   const [sangeurActionUserId, setSangeurActionUserId] = useState<string | null>(null)
   const [sangeurError, setSangeurError] = useState<string | null>(null)
-  const [issuedCredential, setIssuedCredential] = useState<{ userName: string; username: string; temporaryPassword: string } | null>(null)
+  const [issuedCredential, setIssuedCredential] = useState<{ userName: string; username: string; activationQrCode: string; activationToken: string } | null>(null)
 
   useEffect(() => {
     async function loadPage() {
@@ -141,11 +140,10 @@ export default function HomeGamePage() {
     setSangeurError(null)
     setSangeurLoading(true)
     try {
-      const payload: Record<string, string> = {
+      const payload = {
         userId: sangeurUserId,
         username: sangeurUsername.trim(),
       }
-      if (sangeurPassword.trim()) payload.password = sangeurPassword.trim()
 
       const { data } = await api.post(`/home-games/${id}/sangeurs`, payload)
       applySangeurAccess(data.access)
@@ -153,10 +151,10 @@ export default function HomeGamePage() {
       setIssuedCredential({
         userName: data.access.user.name,
         username: data.access.username,
-        temporaryPassword: data.temporaryPassword,
+        activationQrCode: data.activationQrCode,
+        activationToken: data.activationToken,
       })
-      setSangeurPassword('')
-      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada com sucesso.' })
+      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada. Mostre o QR Code para ela criar a senha.' })
     } catch (err) {
       setSangeurError(typeof err === 'string' ? err : 'Nao foi possivel habilitar a SANGEUR.')
     } finally {
@@ -187,9 +185,10 @@ export default function HomeGamePage() {
       setIssuedCredential({
         userName: data.access.user.name,
         username: data.access.username,
-        temporaryPassword: data.temporaryPassword,
+        activationQrCode: data.activationQrCode,
+        activationToken: data.activationToken,
       })
-      setPageFeedback({ tone: 'success', message: 'Senha temporaria da SANGEUR redefinida.' })
+      setPageFeedback({ tone: 'success', message: 'Novo QR Code gerado. A SANGEUR deve escaneá-lo para criar a senha.' })
     } catch (err) {
       setSangeurError(typeof err === 'string' ? err : 'Nao foi possivel redefinir a senha da SANGEUR.')
     } finally {
@@ -501,26 +500,14 @@ export default function HomeGamePage() {
                         </select>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
-                          <input
-                            type="text"
-                            value={sangeurUsername}
-                            onChange={(e) => setSangeurUsername(e.target.value)}
-                            className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs uppercase tracking-wide text-sx-muted">Senha (opcional)</label>
-                          <input
-                            type="text"
-                            value={sangeurPassword}
-                            onChange={(e) => setSangeurPassword(e.target.value)}
-                            placeholder="Gerada se vazio"
-                            className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                          />
-                        </div>
+                      <div className="space-y-1">
+                        <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
+                        <input
+                          type="text"
+                          value={sangeurUsername}
+                          onChange={(e) => setSangeurUsername(e.target.value)}
+                          className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
+                        />
                       </div>
 
                       {sangeurError && (
@@ -543,8 +530,24 @@ export default function HomeGamePage() {
                       </button>
 
                       {issuedCredential && (
-                        <div className="rounded-lg border border-sx-cyan/30 bg-sx-cyan/10 px-3 py-2 text-xs text-sx-cyan">
-                          {issuedCredential.userName}: <span className="font-mono">{issuedCredential.username}</span> / <span className="font-mono">{issuedCredential.temporaryPassword}</span>
+                        <div className="rounded-lg border border-sx-cyan/30 bg-sx-cyan/5 px-3 py-3 space-y-2">
+                          <p className="text-[11px] font-bold text-sx-cyan uppercase tracking-widest">
+                            QR Code de ativação — {issuedCredential.userName}
+                          </p>
+                          <p className="text-[11px] text-sx-muted">
+                            Mostre este QR Code para a SANGEUR escanear com o celular. Ela irá criar a própria senha. Válido por 30 minutos.
+                          </p>
+                          <div className="flex justify-center py-2">
+                            <img
+                              src={issuedCredential.activationQrCode}
+                              alt="QR Code de ativação SANGEUR"
+                              className="rounded-lg"
+                              style={{ width: 180, height: 180 }}
+                            />
+                          </div>
+                          <p className="text-center text-[10px] text-sx-muted font-mono">
+                            Usuário POS: <span className="text-sx-cyan">{issuedCredential.username}</span>
+                          </p>
                         </div>
                       )}
 

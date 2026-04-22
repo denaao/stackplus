@@ -315,6 +315,8 @@ model HomeGameSangeurAccess {
   passwordHash   String
   isActive       Boolean  @default(true)
   mustChangePassword Boolean @default(true)
+  activationToken          String?   @unique
+  activationTokenExpiresAt DateTime?
   lastLoginAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -436,6 +438,7 @@ model SangeurSale {
   voucherCode      String?
   playerName       String?
   note             String?
+  signatureData    String?
   settledAt        DateTime?
   createdByUserId  String
   createdAt        DateTime            @default(now())
@@ -525,7 +528,8 @@ model Transaction {
   type         TransactionType
   amount       Decimal         @db.Decimal(10, 2)
   chips        Decimal         @db.Decimal(10, 2)
-  note         String?
+  note          String?
+  signatureData String?
   registeredBy String
   // 'C' (cashier) | 'S' (sangeur). DATA-001 Deploy B: NOT NULL + check constraint.
   origin       String
@@ -795,7 +799,4 @@ model TournamentPlayer {
   comandaItems ComandaItem[]
 
   @@unique([tournamentId, playerId])
-  @@index([tournamentId])
-  @@index([playerId])
-  @@index([status])
-}
+  @@index([tournamen

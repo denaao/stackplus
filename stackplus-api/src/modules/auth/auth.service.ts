@@ -175,7 +175,13 @@ export async function loginSangeur(homeGameId: string, username: string, passwor
     },
   })
 
-  if (!access || !access.isActive) throw new Error('Credenciais inválidas')
+  if (!access) throw new Error('Credenciais inválidas')
+
+  if (access.activationToken) {
+    throw new Error('Conta ainda não ativada. Escaneie o QR Code recebido do admin para criar sua senha.')
+  }
+
+  if (!access.isActive) throw new Error('Credenciais inválidas')
 
   const valid = await comparePassword(password, access.passwordHash)
   if (!valid) throw new Error('Credenciais inválidas')
@@ -262,15 +268,4 @@ export async function changeSangeurPassword(input: {
   await prisma.homeGameSangeurAccess.update({
     where: {
       homeGameId_userId: {
-        homeGameId: input.homeGameId,
-        userId: input.userId,
-      },
-    },
-    data: {
-      passwordHash: newPasswordHash,
-      mustChangePassword: false,
-    },
-  })
-
-  return { success: true }
-}
+        homeGame

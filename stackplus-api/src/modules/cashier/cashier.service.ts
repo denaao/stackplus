@@ -11,6 +11,7 @@ interface TransactionInput {
   amount: number
   chips: number
   note?: string
+  signatureData?: string
   registeredBy: string
 }
 
@@ -132,6 +133,7 @@ export async function registerTransaction(input: TransactionInput) {
         amount,
         chips: isJackpot ? 0 : chips,
         note: input.note,
+        ...(input.signatureData ? { signatureData: input.signatureData } : {}),
         registeredBy: input.registeredBy,
         origin: 'C',
       },
@@ -309,10 +311,4 @@ export async function deleteTransaction(transactionId: string) {
       },
     })
 
-    return {
-      deleted: true,
-      sessionId: target.sessionId,
-      userId: target.userId,
-    }
-  })
-}
+    return 

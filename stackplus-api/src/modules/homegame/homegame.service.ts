@@ -4,9 +4,21 @@ import { hashPassword } from '../../utils/hash'
 import { FinancialModule, MemberPaymentMode } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import { isHomeGameHost, assertHomeGameHost, assertHomeGameOwner } from '../../lib/homegame-auth'
+import QRCode from 'qrcode'
 
 function generateTempPassword() {
   return randomBytes(6).toString('base64url')
+}
+
+function generateActivationToken() {
+  return randomBytes(32).toString('hex')
+}
+
+async function buildActivationQrCode(token: string): Promise<string> {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+  const url = `${frontendUrl}/sangeur/ativar?token=${token}`
+  const qrBase64 = await QRCode.toDataURL(url, { width: 300, margin: 2 })
+  return qrBase64
 }
 
 export async function createHomeGame(hostId: string, data: {
@@ -339,10 +351,12 @@ export async function enableSangeurAccess(input: {
   const normalizedUsername = input.username.trim().toLowerCase()
   if (!normalizedUsername) throw new Error('Username é obrigatório')
 
-  const plainPassword = (input.password?.trim() || generateTempPassword())
-  if (plainPassword.length < 6) throw new Error('Senha deve ter no mínimo 6 caracteres')
+  // Gera token de ativação — a SANGEUR define a própria senha via QR Code
+  const activationToken = generateActivationToken()
+  const activationTokenExpiresAt = new Date(Date.now() + 30 * 60 * 1000) // 30 minutos
 
-  const passwordHash = await hashPassword(plainPassword)
+  // Placeholder de hash — a conta só será acessível após a SANGEUR criar sua senha
+  const placeholderHash = await hashPassword(randomBytes(32).toString('hex'))
 
   const access = await prisma.homeGameSangeurAccess.upsert({
     where: {
@@ -353,18 +367,22 @@ export async function enableSangeurAccess(input: {
     },
     update: {
       username: normalizedUsername,
-      passwordHash,
-      isActive: true,
+      passwordHash: placeholderHash,
+      isActive: false,
       mustChangePassword: true,
+      activationToken,
+      activationTokenExpiresAt,
       lastLoginAt: null,
     },
     create: {
       homeGameId: input.homeGameId,
       userId: input.memberUserId,
       username: normalizedUsername,
-      passwordHash,
-      isActive: true,
+      passwordHash: placeholderHash,
+      isActive: false,
       mustChangePassword: true,
+      activationToken,
+      activationTokenExpiresAt,
     },
     select: {
       id: true,
@@ -380,9 +398,12 @@ export async function enableSangeurAccess(input: {
     },
   })
 
+  const activationQrCode = await buildActivationQrCode(activationToken)
+
   return {
     access,
-    temporaryPassword: plainPassword,
+    activationToken,
+    activationQrCode,
   }
 }
 
@@ -424,39 +445,5 @@ export async function resetSangeurPassword(input: {
 }) {
   await ensureHostAndMember(input.homeGameId, input.hostId, input.memberUserId)
 
-  const plainPassword = (input.password?.trim() || generateTempPassword())
-  if (plainPassword.length < 6) throw new Error('Senha deve ter no mínimo 6 caracteres')
-  const passwordHash = await hashPassword(plainPassword)
-
-  const access = await prisma.homeGameSangeurAccess.update({
-    where: {
-      homeGameId_userId: {
-        homeGameId: input.homeGameId,
-        userId: input.memberUserId,
-      },
-    },
-    data: {
-      passwordHash,
-      mustChangePassword: true,
-      isActive: true,
-      lastLoginAt: null,
-    },
-    select: {
-      id: true,
-      homeGameId: true,
-      userId: true,
-      username: true,
-      isActive: true,
-      mustChangePassword: true,
-      lastLoginAt: true,
-      createdAt: true,
-      updatedAt: true,
-      user: { select: { id: true, name: true, email: true } },
-    },
-  })
-
-  return {
-    access,
-    temporaryPassword: plainPassword,
-  }
-}
+  // Reset via QR Code — novo token de ativação para a SANGEUR redefinir sua senha
+  const activationToken 

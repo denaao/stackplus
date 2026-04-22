@@ -15,12 +15,14 @@ const txSchema = z.object({
   amount: z.number().min(0),
   chips: z.number().min(0),
   note: z.string().optional(),
+  signatureData: z.string().max(500000).optional(),
 })
 
 router.post('/transaction', authenticate, async (req: AuthRequest, res: Response) => {
   const data = txSchema.parse(req.body)
   const result = await CashierService.registerTransaction({
     ...data,
+    signatureData: data.signatureData,
     registeredBy: req.user!.userId,
   })
 
@@ -73,10 +75,4 @@ router.delete('/transaction/:transactionId', authenticate, destructiveLimiter, a
     const ranking = await getRanking(result.sessionId)
     emitSessionRankingUpdated(result.sessionId, ranking)
   } catch (error) {
-    req.log?.warn({ err: error }, '[cashier] realtime broadcast failed after delete')
-  }
-
-  res.json(result)
-})
-
-export default router
+    req.log?.warn({ err: error }, '[cashier] 
