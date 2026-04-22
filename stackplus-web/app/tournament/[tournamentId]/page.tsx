@@ -1304,8 +1304,11 @@ function PlayerRow({ player, tournament, rowIndex, actionLoading, onRebuy, onAdd
   const addonNextIsBreak = addonLevel != null && parsedBreaksForAddon.some((b) => b.afterLevel === addonLevel)
   const atAddonLevel = !tournament.isOnBreak && tournament.currentLevel === addonLevel && addonNextIsBreak
   const duringAddonBreak = tournament.isOnBreak && tournament.currentLevel === addonLevel
+  // Quando não há break configurado após addonAfterLevel, o addon aparece no nível seguinte
+  const atAddonLevelNoBreak = addonLevel != null && !addonNextIsBreak &&
+    !tournament.isOnBreak && tournament.currentLevel === addonLevel + 1
   const canAddon = isActive && !!tournament.addonAmount && !player.hasAddon &&
-    (addonLevel === null || atAddonLevel || duringAddonBreak)
+    (addonLevel === null || atAddonLevel || duringAddonBreak || atAddonLevelNoBreak)
   const canEliminate = isActive && tournament.status !== 'REGISTRATION' && player.status !== 'WINNER'
   const canPrize = isActive && tournament.status === 'RUNNING'
   const canCancelRegistration = tournament.status === 'REGISTRATION' && player.status === 'REGISTERED'
