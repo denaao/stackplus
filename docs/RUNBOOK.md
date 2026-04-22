@@ -184,25 +184,47 @@ Cria lançamentos retroativos pra PIX confirmados antes da tabela `HomeGameBankT
 
 ### Cleanup de refresh tokens expirados
 
-Tabela `RefreshToken` cresce sem parar. Cron recomendado: semanal.
+Tabela `RefreshToken` cresce sem parar. Apaga tokens expirados ou revogados
+há mais de 7 dias (grace period mantém tokens recentes pra forense caso
+precise detectar reuso de token revogado).
 
-**Manual (emergência ou ad-hoc):**
+**Agendado: GitHub Actions semanal**
 
+Workflow: `.github/workflows/cleanup-refresh-tokens.yml`
+Schedule: domingos 07:00 UTC / 04:00 BRT
+Secret usado: `RAILWAY_DATABASE_URL` (URL pública via proxy
+`hopper.proxy.rlwy.net`, não a interna `postgres.railway.internal`).
+
+Substituiu o CronSchedule do Railway (removido após incidente 21/04 — ver
+Histórico de incidentes). Por que GitHub Actions:
+- Isolamento total: falha do workflow não afeta o serviço web
+- Logs persistentes no histórico do Actions (>30 dias vs 7d do Railway)
+- Sem risco de `railway.toml` compartilhado disparar server em vez do job
+
+**Execução manual (emergência, grace_days customizado, ou teste):**
+
+Via GitHub UI: Actions → **Cleanup Refresh Tokens** → **Run workflow** →
+opcional: ajusta `grace_days` → Run.
+
+Via gh CLI:
+```powershell
+gh workflow run cleanup-refresh-tokens.yml --repo denaao/stackplus
+# Com grace_days customizado:
+gh workflow run cleanup-refresh-tokens.yml --repo denaao/stackplus -f grace_days=14
+```
+
+Via local (ad-hoc, usa `.env` local):
 ```powershell
 cd C:\dev\StackPlus\stackplus-api
 npm run job:cleanup-refresh-tokens
 ```
 
-Apaga tokens expirados ou revogados há mais de 7 dias (grace period mantém
-tokens recentes pra forense caso precise detectar reuso).
+**Monitorar execuções**: https://github.com/denaao/stackplus/actions/workflows/cleanup-refresh-tokens.yml
 
-**Agendado no Railway:**
-
-1. Railway → projeto → **+ New** → **Empty Service**
-2. Conecta no mesmo repo (ou serviço separado duplicando o `stackplus-api`)
-3. Settings → **Service Type: Cron**
-4. Schedule: `0 3 * * 0` (domingo 3h UTC)
-5. Start Command: `npm run job:cleanup-refresh-tokens`
+Se 2 execuções consecutivas falharem, investigar:
+1. Secret `RAILWAY_DATABASE_URL` válido? (testar connection manual)
+2. Proxy do Railway Postgres respondendo? (outros serviços OK?)
+3. Prisma schema out of sync após migration? (rodar `npm run db:generate` local)
 
 ### Backup do Postgres
 
@@ -416,7 +438,7 @@ Criar issue no GitHub com label `incident` ou nota em `docs/INCIDENTS.md` se com
 - [x] Configurar Custom Domain permanente `api.stackplus.com.br` — CNAME `api` → `kmse1wns.up.railway.app` + TXT `_railway-verify.api` gerenciado pelo Vercel DNS (nameservers `ns1/2.vercel-dns.com`). SSL Let's Encrypt auto-renovável. (21/04 noite)
 - [x] Reconfigurar URL de webhook na ANNAPAY — `POST /api/banking/annapay/webhook/sync` com token ADMIN aponta pra `https://api.stackplus.com.br/api/banking/annapay/webhooks/cob`. (21/04 noite)
 - [x] Pausar/remover o Cron Service falho — **CronSchedule deletado do Railway**. (21/04 noite)
-- [x] Cleanup de refresh tokens vira execução manual semanal (documentada acima) até ter solução definitiva
+- [x] Cleanup de refresh tokens automatizado via GitHub Actions (domingos 04h BRT). Workflow: `.github/workflows/cleanup-refresh-tokens.yml`. Secret `RAILWAY_DATABASE_URL` configurado no repo.
 - [ ] Revisar periodicamente Railway → stackplus-api → Source pra confirmar que continua apontando pro repo correto
 
 ### 2026-04-21 (continuação) — Env vars sujas sobreviveram à troca de Source
