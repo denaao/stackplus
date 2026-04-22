@@ -799,4 +799,7 @@ model TournamentPlayer {
   comandaItems ComandaItem[]
 
   @@unique([tournamentId, playerId])
-  @@index([tournamen
+  @@index([tournamentId])
+  @@index([playerId])
+  @@index([status])
+}
