@@ -86,60 +86,18 @@ function withCaixinhaDistribution<T extends {
   staffAssignments?: Array<{ userId: string; caixinhaAmount?: unknown; user?: { id: string; name: string; pixType?: string | null; pixKey?: string | null } }>
   rakebackAssignments?: Array<{ userId: string; percent?: unknown; user?: { id: string; name: string; pixType?: string | null; pixKey?: string | null } }>
 }>(session: T) {
-  const staffAssignments = Array.isArray(session.staffAssignments) ? session.staffAssignments : []
   const rakebackAssignments = Array.isArray(session.rakebackAssignments) ? session.rakebackAssignments : []
-  // caixinha, caixinhaMode, and rake were moved to CashTable — use safe defaults
-  const caixinhaMode: string = 'SPLIT'
-  const totalCaixinha = 0
+  // caixinha e rake foram movidos para CashTable — retorna distribuição vazia
   const rakebackDistribution = buildRakebackDistribution({
     totalRake: 0,
     rakebackAssignments,
   })
 
-  if (staffAssignments.length === 0 || (caixinhaMode === 'SPLIT' && totalCaixinha <= 0)) {
-    return {
-      ...session,
-      caixinhaMode,
-      caixinhaPerStaff: 0,
-      caixinhaDistribution: [] as Array<{ userId: string; name: string; amount: number; pixType?: string | null; pixKey?: string | null }>,
-      totalRakeback: rakebackDistribution.totalRakeback,
-      rakebackDistribution: rakebackDistribution.items,
-    }
-  }
-
-  if (caixinhaMode === 'INDIVIDUAL') {
-    const distribution = staffAssignments.map((assignment) => ({
-      userId: assignment.userId,
-      name: assignment.user?.name || 'Staff',
-      amount: Number(assignment.caixinhaAmount || 0),
-      pixType: assignment.user?.pixType || null,
-      pixKey: assignment.user?.pixKey || null,
-    }))
-    return {
-      ...session,
-      caixinhaMode,
-      caixinhaPerStaff: 0,
-      caixinhaDistribution: distribution,
-      totalRakeback: rakebackDistribution.totalRakeback,
-      rakebackDistribution: rakebackDistribution.items,
-    }
-  }
-
-  const totalCents = Math.round(totalCaixinha * 100)
-  const perStaffCents = Math.floor(totalCents / staffAssignments.length)
-  const perStaffAmount = Number((perStaffCents / 100).toFixed(2))
-
   return {
     ...session,
-    caixinhaMode,
-    caixinhaPerStaff: perStaffAmount,
-    caixinhaDistribution: staffAssignments.map((assignment) => ({
-      userId: assignment.userId,
-      name: assignment.user?.name || 'Staff',
-      amount: perStaffAmount,
-      pixType: assignment.user?.pixType || null,
-      pixKey: assignment.user?.pixKey || null,
-    })),
+    caixinhaMode: 'SPLIT',
+    caixinhaPerStaff: 0,
+    caixinhaDistribution: [] as Array<{ userId: string; name: string; amount: number; pixType?: string | null; pixKey?: string | null }>,
     totalRakeback: rakebackDistribution.totalRakeback,
     rakebackDistribution: rakebackDistribution.items,
   }

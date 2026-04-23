@@ -1671,23 +1671,9 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     rakebackAssignments: session.rakebackAssignments,
   })
 
-  const totalCaixinha = 0
+  // caixinha movida para CashTable — distribuição por mesa; mapa vazio aqui
   const staffUserIds = session.staffAssignments.map((s) => s.userId)
-  const caixinhaMode: string = 'SPLIT'
   const caixinhaByUser = new Map<string, number>()
-  if (staffUserIds.length > 0) {
-    if (caixinhaMode === 'INDIVIDUAL') {
-      for (const staff of session.staffAssignments) {
-        const amount = Number((staff as unknown as { caixinhaAmount?: unknown }).caixinhaAmount || 0)
-        caixinhaByUser.set(staff.userId, amountToFixed(amount))
-      }
-    } else if (totalCaixinha > 0) {
-      const perStaff = amountToFixed(Math.floor(Math.round(totalCaixinha * 100) / staffUserIds.length) / 100)
-      for (const userId of staffUserIds) {
-        caixinhaByUser.set(userId, perStaff)
-      }
-    }
-  }
   const caixinhaRecipientsProcessed = new Set<string>()
 
   const charges: Array<{ userId: string; name: string; amount: number; mode: ResolvedPlayerMode; charge?: unknown; skippedReason?: string }> = []
