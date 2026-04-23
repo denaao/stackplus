@@ -1382,7 +1382,7 @@ export default function CashierPage() {
                             ) : (
                               <>
                                 <p style={{ fontSize: '11px', color: '#4A7A90', margin: '0 0 2px' }}>Stack</p>
-                                <p style={{ fontWeight: 700, fontSize: '16px', margin: 0, color: '#00C8E0' }}>{formatChips(p.currentStack)}</p>
+                                <p style={{ fontWeight: 700, fontSize: '16px', margin: 0, color: '#00C8E0' }}>{formatChips(Number(tables.flatMap((t) => t.seats).find((s) => s.userId === p.userId && !s.hasCashedOut)?.currentStack || 0))}</p>
                               </>
                             )}
                           </div>
@@ -1494,7 +1494,7 @@ export default function CashierPage() {
               </button>
             </div>
             <p style={{ fontSize: '13px', color: '#4A7A90', margin: '0 0 16px' }}>
-              {cashoutPlayer.user?.name || 'Jogador'} — stack atual <span style={{ color: '#00C8E0', fontWeight: 700 }}>{formatChips(cashoutPlayer.currentStack)}</span> fichas
+              {cashoutPlayer.user?.name || 'Jogador'} — stack atual <span style={{ color: '#00C8E0', fontWeight: 700 }}>{formatChips(Number(tables.flatMap((t) => t.seats).find((s) => s.userId === cashoutPlayer.userId && !s.hasCashedOut)?.currentStack || 0))}</span> fichas
             </p>
 
             <form onSubmit={handleCashoutSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
