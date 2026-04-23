@@ -83,18 +83,16 @@ function buildRakebackDistribution(params: {
 }
 
 function withCaixinhaDistribution<T extends {
-  caixinha: unknown
-  caixinhaMode?: unknown
-  rake?: unknown
   staffAssignments?: Array<{ userId: string; caixinhaAmount?: unknown; user?: { id: string; name: string; pixType?: string | null; pixKey?: string | null } }>
   rakebackAssignments?: Array<{ userId: string; percent?: unknown; user?: { id: string; name: string; pixType?: string | null; pixKey?: string | null } }>
 }>(session: T) {
   const staffAssignments = Array.isArray(session.staffAssignments) ? session.staffAssignments : []
   const rakebackAssignments = Array.isArray(session.rakebackAssignments) ? session.rakebackAssignments : []
-  const caixinhaMode = session.caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
-  const totalCaixinha = Number(session.caixinha || 0)
+  // caixinha, caixinhaMode, and rake were moved to CashTable — use safe defaults
+  const caixinhaMode = 'SPLIT' as const
+  const totalCaixinha = 0
   const rakebackDistribution = buildRakebackDistribution({
-    totalRake: Number(session.rake || 0),
+    totalRake: 0,
     rakebackAssignments,
   })
 
@@ -491,8 +489,6 @@ export async function finishSession(
       data: {
         status: 'FINISHED',
         finishedAt: new Date(),
-        rake: options?.rake ? Number(options.rake) : null,
-        caixinha: caixinha > 0 ? caixinha : null,
       },
       include: sessionInclude,
     })
@@ -637,12 +633,7 @@ export async function updateSessionStaff(
       })
     }
 
-    if (caixinhaMode) {
-      await tx.session.update({
-        where: { id: sessionId },
-        data: { caixinhaMode },
-      })
-    }
+    // caixinhaMode was moved to CashTable — no longer stored on Session
   })
 
   return getSessionById(sessionId)

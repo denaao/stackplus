@@ -1667,13 +1667,13 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
   const virtualAccount = resolveVirtualAccount()
   const financialModule = await getSessionFinancialModule(session.id)
   const rakebackByUserId = buildRakebackByUserId({
-    totalRake: Number(session.rake || 0),
+    totalRake: 0,
     rakebackAssignments: session.rakebackAssignments,
   })
 
-  const totalCaixinha = Number(session.caixinha || 0)
+  const totalCaixinha = 0
   const staffUserIds = session.staffAssignments.map((s) => s.userId)
-  const caixinhaMode = (session as unknown as { caixinhaMode?: string }).caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
+  const caixinhaMode = 'SPLIT'
   const caixinhaByUser = new Map<string, number>()
   if (staffUserIds.length > 0) {
     if (caixinhaMode === 'INDIVIDUAL') {

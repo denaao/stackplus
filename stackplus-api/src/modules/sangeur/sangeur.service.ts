@@ -218,7 +218,6 @@ export async function listSessionParticipants(input: {
         userId: true,
         chipsIn: true,
         chipsOut: true,
-        currentStack: true,
         result: true,
         hasCashedOut: true,
         user: { select: { id: true, name: true, avatarUrl: true } },
@@ -288,7 +287,7 @@ export async function listSessionParticipants(input: {
       paymentMode: user.paymentMode,
       chipsIn: state ? toNumber(state.chipsIn) : 0,
       chipsOut: state ? toNumber(state.chipsOut) : 0,
-      currentStack: state ? toNumber(state.currentStack) : 0,
+      currentStack: 0,
       result: state ? toNumber(state.result) : 0,
       hasCashedOut: Boolean(state?.hasCashedOut),
       inSession: Boolean(state),
@@ -551,18 +550,16 @@ export async function registerSale(input: {
           sessionId: shift.sessionId,
           userId: sessionUserId,
           chipsIn: amount,
-          currentStack: chips,
         },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
     } else {
       const chipsIn = Number(currentState.chipsIn) + amount
       const chipsOut = Number(currentState.chipsOut)
-      const currentStack = Number(currentState.currentStack) + chips
       const result = chipsOut - chipsIn
       nextState = await tx.playerSessionState.update({
         where: { sessionId_userId: { sessionId: shift.sessionId, userId: sessionUserId } },
-        data: { chipsIn, chipsOut, currentStack, result },
+        data: { chipsIn, chipsOut, result },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
     }

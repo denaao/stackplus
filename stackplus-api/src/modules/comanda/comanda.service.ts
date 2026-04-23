@@ -962,11 +962,8 @@ export async function closeCashbox({
   }
 
   // Rake total agregado direto das sessões finalizadas
-  const finishedSessions = await db.session.findMany({
-    where: { homeGameId, status: 'FINISHED' },
-    select: { rake: true },
-  })
-  totals.totalRake = finishedSessions.reduce((sum, s) => sum + Number(s.rake || 0), 0)
+  // rake was moved to CashTable — set to 0 until the aggregation is refactored
+  totals.totalRake = 0
 
   // Round money
   for (const k of Object.keys(totals) as Array<keyof typeof totals>) {
