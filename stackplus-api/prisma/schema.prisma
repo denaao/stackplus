@@ -121,6 +121,11 @@ enum SangeurShiftStatus {
   CLOSED
 }
 
+enum CashTableStatus {
+  OPEN
+  CLOSED
+}
+
 enum SangeurMovementType {
   INITIAL_LOAD
   RELOAD
@@ -165,6 +170,8 @@ model User {
   sessionParticipantAssignments SessionParticipant[]
   sangeurAccesses HomeGameSangeurAccess[]
   sangeurShifts SangeurShift[] @relation("SangeurOperatorShifts")
+  cashTableSeats CashTableSeat[]
+  cashTableSangriasCreated CashTableSangria[] @relation("CashTableSangriaCreator")
   sangeurShiftMovementsCreated SangeurShiftMovement[] @relation("SangeurMovementCreator")
   sangeurSalesCreated SangeurSale[] @relation("SangeurSaleCreator")
   sangeurSalesAsPlayer SangeurSale[] @relation("SangeurSalePlayer")
@@ -351,9 +358,6 @@ model Session {
   blindsMinutesAfterBreak  Int?
   levelsUntilBreak         Int?
   cashierId   String?
-  rake        Decimal?      @db.Decimal(10, 2)
-  caixinha    Decimal?      @db.Decimal(10, 2)
-  caixinhaMode String       @default("SPLIT")
   status      SessionStatus @default(WAITING)
   startedAt   DateTime?
   finishedAt  DateTime?
@@ -372,6 +376,7 @@ model Session {
   sessionFinancialPayoutPendings SessionFinancialPayoutPending[]
   sangeurShifts SangeurShift[]
   comandaItems  ComandaItem[]
+  tables        CashTable[]
 
   @@index([homeGameId])
   @@index([status])
@@ -506,7 +511,6 @@ model PlayerSessionState {
   userId       String
   chipsIn      Decimal  @default(0) @db.Decimal(10, 2)
   chipsOut     Decimal  @default(0) @db.Decimal(10, 2)
-  currentStack Decimal  @default(0) @db.Decimal(10, 2)
   result       Decimal  @default(0) @db.Decimal(10, 2)
   hasCashedOut Boolean  @default(false)
   updatedAt    DateTime @updatedAt
@@ -524,6 +528,7 @@ model PlayerSessionState {
 model Transaction {
   id           String          @id @default(uuid())
   sessionId    String
+  tableId      String?
   userId       String
   type         TransactionType
   amount       Decimal         @db.Decimal(10, 2)
@@ -535,12 +540,14 @@ model Transaction {
   origin       String
   createdAt    DateTime        @default(now())
 
-  session          Session @relation(fields: [sessionId], references: [id])
-  user             User    @relation(fields: [userId], references: [id])
-  registeredByUser User    @relation("RegisteredTransactions", fields: [registeredBy], references: [id])
-  sangeurSale SangeurSale? @relation("SangeurSaleTransaction")
+  session          Session    @relation(fields: [sessionId], references: [id])
+  table            CashTable? @relation(fields: [tableId], references: [id])
+  user             User       @relation(fields: [userId], references: [id])
+  registeredByUser User       @relation("RegisteredTransactions", fields: [registeredBy], references: [id])
+  sangeurSale      SangeurSale? @relation("SangeurSaleTransaction")
 
   @@index([sessionId, userId])
+  @@index([tableId])
   @@index([sessionId, type])
   @@index([createdAt])
   @@index([sessionId, createdAt])
@@ -802,4 +809,77 @@ model TournamentPlayer {
   @@index([tournamentId])
   @@index([playerId])
   @@index([status])
+}
+
+// ─── CASH TABLES ────────────────────────────────────────────────────────────
+
+// Mesa individual dentro de uma Session de cash game.
+// Uma Session pode ter várias mesas abertas simultaneamente.
+// Rake e caixinha são acumulados e retirados via CashTableSangria.
+model CashTable {
+  id           String          @id @default(uuid())
+  sessionId    String
+  name         String          @default("Mesa 1")
+  status       CashTableStatus @default(OPEN)
+  caixinhaMode String          @default("SPLIT")
+  rake         Decimal         @default(0) @db.Decimal(10, 2)
+  caixinha     Decimal         @default(0) @db.Decimal(10, 2)
+  openedAt     DateTime        @default(now())
+  closedAt     DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  session      Session            @relation(fields: [sessionId], references: [id])
+  seats        CashTableSeat[]
+  sangrias     CashTableSangria[]
+  transactions Transaction[]
+
+  @@index([sessionId])
+  @@index([status])
+  @@index([sessionId, status])
+}
+
+// Jogador numa mesa específica. Rastreia stack atual por mesa.
+// Um jogador pode ter seats em mesas diferentes (ao longo do tempo),
+// mas normalmente está ativo em apenas uma por vez.
+model CashTableSeat {
+  id           String    @id @default(uuid())
+  tableId      String
+  userId       String
+  currentStack Decimal   @default(0) @db.Decimal(10, 2)
+  hasCashedOut Boolean   @default(false)
+  seatedAt     DateTime  @default(now())
+  cashedOutAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  table CashTable @relation(fields: [tableId], references: [id])
+  user  User      @relation(fields: [userId], references: [id])
+
+  @@unique([tableId, userId])
+  @@index([tableId])
+  @@index([userId])
+  @@index([tableId, hasCashedOut])
+}
+
+// Retirada de rake e/ou caixinha de uma mesa.
+// Pode ocorrer múltiplas vezes durante o jogo (sangria parcial).
+// Quando isFinal = true e todos os seats têm hasCashedOut = true,
+// a mesa é fechada automaticamente.
+model CashTableSangria {
+  id              String    @id @default(uuid())
+  tableId         String
+  rake            Decimal   @default(0) @db.Decimal(10, 2)
+  caixinha        Decimal   @default(0) @db.Decimal(10, 2)
+  isFinal         Boolean   @default(false)
+  note            String?
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+
+  table     CashTable @relation(fields: [tableId], references: [id])
+  createdBy User      @relation("CashTableSangriaCreator", fields: [createdByUserId], references: [id])
+
+  @@index([tableId])
+  @@index([tableId, isFinal])
+  @@index([createdAt])
 }
