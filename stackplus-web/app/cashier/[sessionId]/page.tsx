@@ -671,7 +671,7 @@ export default function CashierPage() {
       await refreshCashierSnapshot()
 
       setSuccess('Compra registrada com sucesso após confirmação do pagamento.')
-      setForm({ userId: '', amount: '', chips: '', note: '' })
+      setForm({ userId: '', amount: '', chips: '', note: '', tableId: '' })
       setTransactionType('BUYIN')
       setShowPrepaidModal(false)
       setPendingPrepaidTransaction(null)
@@ -793,7 +793,7 @@ export default function CashierPage() {
       setSignatureModal(false)
       setPendingSignatureTx(null)
       setHasSignature(false)
-      setForm({ userId: '', amount: '', chips: '', note: '' })
+      setForm({ userId: '', amount: '', chips: '', note: '', tableId: '' })
       setTransactionType('BUYIN')
       setSuccess('Assinatura coletada! Transação registrada.')
       setTimeout(() => setSuccess(''), 3000)
