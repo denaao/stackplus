@@ -11,6 +11,7 @@ import sangeurRoutes from '../modules/sangeur/sangeur.routes'
 import comandaRoutes from '../modules/comanda/comanda.routes'
 import tournamentRoutes from '../modules/tournament/tournament.routes'
 import tournamentClockRoutes from '../modules/tournament/tournament-clock.routes'
+import cashTableRoutes from '../modules/cash-table/cash-table.routes'
 
 const router = Router()
 
@@ -26,5 +27,6 @@ router.use('/sangeur', sangeurRoutes)
 router.use('/comanda', comandaRoutes)
 router.use('/tournaments', tournamentRoutes)
 router.use('/tournament-clock', tournamentClockRoutes)
+router.use('/cash-tables', cashTableRoutes)
 
 export default router

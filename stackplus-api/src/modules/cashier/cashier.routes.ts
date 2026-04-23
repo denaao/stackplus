@@ -10,6 +10,7 @@ const router = Router()
 
 const txSchema = z.object({
   sessionId: z.string().uuid(),
+  tableId: z.string().uuid().optional(),
   userId: z.string().uuid(),
   type: z.enum(['BUYIN', 'REBUY', 'ADDON', 'CASHOUT', 'JACKPOT']),
   amount: z.number().min(0),

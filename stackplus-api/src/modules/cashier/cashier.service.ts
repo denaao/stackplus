@@ -1,11 +1,13 @@
 import { prisma } from '../../lib/prisma'
 import { TransactionType, ComandaItemType, Prisma } from '@prisma/client'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
+import { updateSeatStack } from '../cash-table/cash-table.service'
 
 type CashierTransactionType = TransactionType | 'JACKPOT'
 
 interface TransactionInput {
   sessionId: string
+  tableId?: string
   userId: string
   type: CashierTransactionType
   amount: number
@@ -128,6 +130,7 @@ export async function registerTransaction(input: TransactionInput) {
     const newTx = await tx.transaction.create({
       data: {
         sessionId: input.sessionId,
+        ...(input.tableId ? { tableId: input.tableId } : {}),
         userId: input.userId,
         type: input.type as TransactionType,
         amount,
@@ -145,27 +148,22 @@ export async function registerTransaction(input: TransactionInput) {
           sessionId: input.sessionId,
           userId: input.userId,
           chipsIn: amount,
-          currentStack: chips,
         },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
     } else {
       let chipsIn = Number(state.chipsIn)
       let chipsOut = Number(state.chipsOut)
-      let currentStack = Number(state.currentStack)
       let hasCashedOut = state.hasCashedOut
 
-      if (input.type === TransactionType.BUYIN || input.type === TransactionType.REBUY || input.type === TransactionType.ADDON) {
+      if (
+        input.type === TransactionType.BUYIN ||
+        input.type === TransactionType.REBUY ||
+        input.type === TransactionType.ADDON
+      ) {
         chipsIn += amount
-        currentStack += chips
-      } else if (isJackpot) {
-        currentStack += chips
       } else if (input.type === TransactionType.CASHOUT) {
-        // Cashout = jogador saiu da partida. O valor de fichas informado é o
-        // stack final com que ele saiu (pode ser menor, igual ou maior que o
-        // que ele comprou). Zera o stack e marca hasCashedOut.
         chipsOut += amount
-        currentStack = 0
         hasCashedOut = true
       }
 
@@ -173,14 +171,12 @@ export async function registerTransaction(input: TransactionInput) {
 
       state = await tx.playerSessionState.update({
         where: { sessionId_userId: { sessionId: input.sessionId, userId: input.userId } },
-        data: { chipsIn, chipsOut, currentStack, result, hasCashedOut },
+        data: { chipsIn, chipsOut, result, hasCashedOut },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
     }
 
-    // Comanda integration — BLOCKING: falha aqui desfaz a transação do caixa.
-    // Se o limite de crédito do jogador não permitir o débito, o operador
-    // precisa registrar pagamento antes OU ajustar o creditLimit da comanda.
+    // Comanda integration — BLOCKING
     if (cashType) {
       await applyTransactionToComandaTx(tx, {
         homeGameId: session.homeGameId,
@@ -197,6 +193,35 @@ export async function registerTransaction(input: TransactionInput) {
 
     return { transaction: newTx, playerState: state }
   })
+
+  // Atualizar CashTableSeat fora da transação principal (best-effort)
+  if (input.tableId) {
+    try {
+      const seat = await prisma.cashTableSeat.findUnique({
+        where: { tableId_userId: { tableId: input.tableId, userId: input.userId } },
+      })
+
+      if (seat) {
+        let newStack = Number(seat.currentStack)
+        const isCashout = input.type === TransactionType.CASHOUT
+
+        if (
+          input.type === TransactionType.BUYIN ||
+          input.type === TransactionType.REBUY ||
+          input.type === TransactionType.ADDON ||
+          input.type === 'JACKPOT'
+        ) {
+          newStack += chips
+        } else if (isCashout) {
+          newStack = 0
+        }
+
+        await updateSeatStack(input.tableId, input.userId, newStack, isCashout ? true : undefined)
+      }
+    } catch {
+      // Falha no seat update não deve reverter a transação financeira
+    }
+  }
 
   return transaction
 }
@@ -215,9 +240,7 @@ export async function deleteTransaction(transactionId: string) {
       where: { id: transactionId },
       include: {
         session: {
-          include: {
-            homeGame: true,
-          },
+          include: { homeGame: true },
         },
       },
     })
@@ -256,12 +279,10 @@ export async function deleteTransaction(transactionId: string) {
 
     let chipsInAmount = 0
     let chipsOutAmount = 0
-    let currentStackChips = 0
     let hasCashedOut = false
 
     for (const transaction of remaining) {
       const amount = Number(transaction.amount)
-      const chips = Number(transaction.chips)
 
       if (
         transaction.type === TransactionType.BUYIN ||
@@ -269,19 +290,11 @@ export async function deleteTransaction(transactionId: string) {
         transaction.type === TransactionType.ADDON
       ) {
         chipsInAmount += amount
-        currentStackChips += chips
-        continue
-      }
-
-      if (transaction.type === TransactionType.JACKPOT) {
-        currentStackChips += chips
         continue
       }
 
       if (transaction.type === TransactionType.CASHOUT) {
         chipsOutAmount += amount
-        // Cashout = jogador saiu. Zera o stack e marca hasCashedOut.
-        currentStackChips = 0
         hasCashedOut = true
       }
     }
@@ -298,14 +311,12 @@ export async function deleteTransaction(transactionId: string) {
         userId: target.userId,
         chipsIn: chipsInAmount,
         chipsOut: chipsOutAmount,
-        currentStack: currentStackChips,
         result: chipsOutAmount - chipsInAmount,
         hasCashedOut,
       },
       update: {
         chipsIn: chipsInAmount,
         chipsOut: chipsOutAmount,
-        currentStack: currentStackChips,
         result: chipsOutAmount - chipsInAmount,
         hasCashedOut,
       },
