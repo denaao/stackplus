@@ -89,7 +89,7 @@ function withCaixinhaDistribution<T extends {
   const staffAssignments = Array.isArray(session.staffAssignments) ? session.staffAssignments : []
   const rakebackAssignments = Array.isArray(session.rakebackAssignments) ? session.rakebackAssignments : []
   // caixinha, caixinhaMode, and rake were moved to CashTable — use safe defaults
-  const caixinhaMode = 'SPLIT' as const
+  const caixinhaMode: string = 'SPLIT'
   const totalCaixinha = 0
   const rakebackDistribution = buildRakebackDistribution({
     totalRake: 0,
