@@ -13,8 +13,41 @@ import { findStringDeep, getStringByPaths, hasAnyKeyDeep } from '@/lib/payload'
 interface Member { id: string; name: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null }
 interface PlayerState {
   userId: string; chipsIn: string; chipsOut: string
-  currentStack: string; result: string; hasCashedOut: boolean
+  result: string; hasCashedOut: boolean
   user: { id: string; name: string }
+}
+
+interface CashTableSeat {
+  id: string
+  userId: string
+  currentStack: string
+  hasCashedOut: boolean
+  seatedAt: string
+  cashedOutAt: string | null
+  user: { id: string; name: string; avatarUrl?: string | null }
+}
+
+interface CashTableSangria {
+  id: string
+  rake: string
+  caixinha: string
+  isFinal: boolean
+  note: string | null
+  createdAt: string
+}
+
+interface CashTable {
+  id: string
+  sessionId: string
+  name: string
+  status: 'OPEN' | 'CLOSED'
+  caixinhaMode: 'SPLIT' | 'INDIVIDUAL'
+  rake: string
+  caixinha: string
+  openedAt: string
+  closedAt: string | null
+  seats: CashTableSeat[]
+  sangrias: CashTableSangria[]
 }
 
 interface CashierTransaction {
@@ -231,8 +264,17 @@ export default function CashierPage() {
   const [session, setSession] = useState<CashierSession | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [playerStates, setPlayerStates] = useState<PlayerState[]>([])
+  const [tables, setTables] = useState<CashTable[]>([])
   const [transactions, setTransactions] = useState<CashierTransaction[]>([])
-  const [form, setForm] = useState({ userId: '', amount: '', chips: '', note: '' })
+  const [form, setForm] = useState({ userId: '', amount: '', chips: '', note: '', tableId: '' })
+  // Mesa / Sangria
+  const [showOpenTableModal, setShowOpenTableModal] = useState(false)
+  const [openTableForm, setOpenTableForm] = useState({ name: 'Mesa 1', caixinhaMode: 'SPLIT' as 'SPLIT' | 'INDIVIDUAL' })
+  const [openTableLoading, setOpenTableLoading] = useState(false)
+  const [sangriaTableId, setSangriaTableId] = useState<string | null>(null)
+  const [sangriaForm, setSangriaForm] = useState({ rake: '', caixinha: '', isFinal: false, note: '' })
+  const [sangriaLoading, setSangriaLoading] = useState(false)
+  const [sangriaError, setSangriaError] = useState<string | null>(null)
   const [transactionType, setTransactionType] = useState<'BUYIN' | 'REBUY' | 'CASHOUT' | 'JACKPOT'>('BUYIN')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -265,6 +307,11 @@ export default function CashierPage() {
   const lastPosRef = useRef<{ x: number; y: number } | null>(null)
   const [hasSignature, setHasSignature] = useState(false)
 
+  async function refreshTables() {
+    const { data } = await api.get('/cash-tables', { params: { sessionId } })
+    setTables(data)
+  }
+
   async function refreshCashierSnapshot() {
     const [sessionResponse, transactionsResponse] = await Promise.all([
       api.get(`/sessions/${sessionId}`),
@@ -274,6 +321,7 @@ export default function CashierPage() {
     setSession(sessionResponse.data)
     setPlayerStates(sessionResponse.data.playerStates || [])
     setTransactions(transactionsResponse.data || [])
+    await refreshTables()
   }
 
   useEffect(() => {
@@ -331,6 +379,7 @@ export default function CashierPage() {
         : allMembers
       setMembers(filteredMembers)
       setTransactions(transactionsResponse.data)
+      refreshTables()
     })
 
     joinSession(sessionId)
@@ -477,6 +526,7 @@ export default function CashierPage() {
 
       const { data } = await api.post('/cashier/transaction', {
         sessionId,
+        tableId: form.tableId || undefined,
         userId: form.userId,
         type: transactionType,
         amount,
@@ -486,7 +536,7 @@ export default function CashierPage() {
       applyRegisterResult(data as CashierRegisterResponse)
       await refreshCashierSnapshot()
       setSuccess('Transação registrada!')
-      setForm({ userId: '', amount: '', chips: '', note: '' })
+      setForm({ userId: '', amount: '', chips: '', note: '', tableId: form.tableId })
       setTransactionType('BUYIN')
       setTimeout(() => setSuccess(''), 2000)
     } catch (err) {
@@ -508,8 +558,13 @@ export default function CashierPage() {
     setCashoutLoading(true)
     setCashoutError(null)
     try {
+      // Encontra a mesa ativa do jogador para enviar tableId
+      const activeSeat = tables.flatMap((t) => t.seats).find(
+        (s) => s.userId === cashoutPlayer.userId && !s.hasCashedOut
+      )
       const { data } = await api.post('/cashier/transaction', {
         sessionId,
+        tableId: activeSeat?.id ? tables.find((t) => t.seats.some((s) => s.id === activeSeat.id))?.id : undefined,
         userId: cashoutPlayer.userId,
         type: 'CASHOUT',
         amount,
@@ -540,6 +595,56 @@ export default function CashierPage() {
       if (prev.some((item) => item.id === result.transaction.id)) return prev
       return [result.transaction, ...prev]
     })
+  }
+
+  async function handleOpenTable(e: React.FormEvent) {
+    e.preventDefault()
+    setOpenTableLoading(true)
+    try {
+      await api.post('/cash-tables', {
+        sessionId,
+        name: openTableForm.name,
+        caixinhaMode: openTableForm.caixinhaMode,
+      })
+      await refreshTables()
+      setShowOpenTableModal(false)
+      setOpenTableForm({ name: `Mesa ${tables.length + 2}`, caixinhaMode: 'SPLIT' })
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao abrir mesa'))
+    } finally {
+      setOpenTableLoading(false)
+    }
+  }
+
+  async function handleSangria(e: React.FormEvent) {
+    e.preventDefault()
+    if (!sangriaTableId) return
+    setSangriaLoading(true)
+    setSangriaError(null)
+    try {
+      await api.post(`/cash-tables/${sangriaTableId}/sangria`, {
+        rake: parseFloat(sangriaForm.rake || '0') || 0,
+        caixinha: parseFloat(sangriaForm.caixinha || '0') || 0,
+        isFinal: sangriaForm.isFinal,
+        note: sangriaForm.note || undefined,
+      })
+      await refreshTables()
+      setSangriaTableId(null)
+      setSangriaForm({ rake: '', caixinha: '', isFinal: false, note: '' })
+    } catch (err) {
+      setSangriaError(getErrorMessage(err, 'Erro ao registrar sangria'))
+    } finally {
+      setSangriaLoading(false)
+    }
+  }
+
+  async function handleSeatPlayer(tableId: string, userId: string) {
+    try {
+      await api.post(`/cash-tables/${tableId}/seats`, { userId })
+      await refreshTables()
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao sentar jogador'))
+    }
   }
 
   async function registerPendingPrepaidTransaction(options?: { closeModalOnStart?: boolean; automatic?: boolean }) {
@@ -775,15 +880,25 @@ export default function CashierPage() {
   const chipValue = session ? parseFloat(session.chipValue || session.homeGame.chipValue) : 1
   const isJackpotEnabled = session?.jackpotEnabled !== false
   const selectedPlayerState = playerStates.find((p) => p.userId === form.userId)
-  const selectedPlayerCurrentStack = Number(selectedPlayerState?.currentStack || 0)
+  // Stack do jogador selecionado vem do CashTableSeat
+  const selectedPlayerActiveSeat = tables.flatMap((t) => t.seats).find(
+    (s) => s.userId === form.userId && !s.hasCashedOut
+  )
+  const selectedPlayerCurrentStack = Number(selectedPlayerActiveSeat?.currentStack || 0)
   const hasExistingBuyIn = Boolean(selectedPlayerState)
   // Todos os membros são selecionáveis — quem fez cashout pode re-entrar com novo buy-in
   const selectableMembers = members
-  const totalChipsInPlay = playerStates.reduce((sum, p) => sum + Number(p.currentStack || 0), 0)
+  // Total de fichas em jogo = soma dos stacks de todos os seats ativos
+  const totalChipsInPlay = tables.flatMap((t) => t.seats).filter((s) => !s.hasCashedOut).reduce((sum, s) => sum + Number(s.currentStack || 0), 0)
+  // Totais de rake e caixinha de todas as mesas (para pré-popular o endForm)
+  const totalTablesRake = tables.reduce((sum, t) => sum + Number(t.rake || 0), 0)
+  const totalTablesCaixinha = tables.reduce((sum, t) => sum + Number(t.caixinha || 0), 0)
   const currentType = transactionType
 
   const allPlayersHaveCashedOut = playerStates.length > 0 && playerStates.every((p) => p.hasCashedOut)
   const activePlayers = playerStates.filter((p) => !p.hasCashedOut)
+  // Seats ativos em todas as mesas abertas
+  const activeSeats = tables.filter((t) => t.status === 'OPEN').flatMap((t) => t.seats).filter((s) => !s.hasCashedOut)
   const pendingChipsByPlayer = (() => {
     const map = new Map<string, { in: number; out: number; userId: string; name: string }>()
     for (const t of transactions) {
@@ -976,6 +1091,86 @@ export default function CashierPage() {
           <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '10px', padding: '10px 14px', fontSize: '13px' }}>{error}</div>
         )}
 
+        {/* === MESAS === */}
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <p style={{ fontWeight: 700, fontSize: '14px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+              Mesas ({tables.filter((t) => t.status === 'OPEN').length} abertas)
+            </p>
+            {session?.status === 'ACTIVE' && (
+              <button
+                type="button"
+                onClick={() => setShowOpenTableModal(true)}
+                style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.25)', borderRadius: '8px', color: '#00C8E0', fontSize: '12px', fontWeight: 700, padding: '4px 12px', cursor: 'pointer' }}
+              >
+                + Mesa
+              </button>
+            )}
+          </div>
+
+          {tables.length === 0 ? (
+            <p style={{ fontSize: '13px', color: '#4A7A90', textAlign: 'center', padding: '16px 0' }}>
+              Nenhuma mesa aberta. Clique em &quot;+ Mesa&quot; para começar.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {tables.map((table) => (
+                <div key={table.id} style={{ border: `1px solid ${table.status === 'OPEN' ? 'rgba(0,200,224,0.2)' : 'rgba(255,255,255,0.06)'}`, borderRadius: '12px', overflow: 'hidden' }}>
+                  {/* Header da mesa */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: table.status === 'OPEN' ? 'rgba(0,200,224,0.06)' : 'rgba(255,255,255,0.02)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontWeight: 700, fontSize: '14px', color: table.status === 'OPEN' ? '#fff' : '#4A7A90' }}>{table.name}</span>
+                      <span style={{ fontSize: '11px', borderRadius: '20px', padding: '2px 8px', background: table.status === 'OPEN' ? 'rgba(0,200,224,0.12)' : 'rgba(255,255,255,0.05)', color: table.status === 'OPEN' ? '#00C8E0' : '#4A7A90', fontWeight: 700 }}>
+                        {table.status === 'OPEN' ? 'ABERTA' : 'FECHADA'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#4A7A90' }}>
+                        Rake <span style={{ color: '#e2e8f0', fontWeight: 700 }}>R$ {Number(table.rake).toFixed(2)}</span>
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#4A7A90' }}>
+                        Caixinha <span style={{ color: '#e2e8f0', fontWeight: 700 }}>R$ {Number(table.caixinha).toFixed(2)}</span>
+                      </span>
+                      {table.status === 'OPEN' && (
+                        <button
+                          type="button"
+                          onClick={() => { setSangriaTableId(table.id); setSangriaForm({ rake: '', caixinha: '', isFinal: false, note: '' }) }}
+                          style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '6px', color: '#fbbf24', fontSize: '11px', fontWeight: 700, padding: '3px 10px', cursor: 'pointer' }}
+                        >
+                          Sangria
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Jogadores na mesa */}
+                  {table.seats.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: '#4A7A90', textAlign: 'center', padding: '10px' }}>Sem jogadores</p>
+                  ) : (
+                    <div>
+                      {table.seats.map((seat) => (
+                        <div key={seat.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                          <span style={{ fontSize: '13px', color: seat.hasCashedOut ? '#4A7A90' : '#e2e8f0', textDecoration: seat.hasCashedOut ? 'line-through' : 'none' }}>{seat.user.name}</span>
+                          {seat.hasCashedOut ? (
+                            <span style={{ fontSize: '11px', color: '#4A7A90' }}>cashout</span>
+                          ) : (
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#00C8E0' }}>{formatChips(seat.currentStack)} fichas</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* === FORMULÁRIO DE SELEÇÃO DE MESA (inline no form principal) === */}
+        {tables.filter((t) => t.status === 'OPEN').length > 0 && (
+          <div style={{ display: 'none' }} id="table-selector-placeholder" />
+        )}
+
         {/* === ENCERRAMENTO (todos cashearam) === */}
         {allPlayersHaveCashedOut ? (
           <div style={cardStyle}>
@@ -995,7 +1190,14 @@ export default function CashierPage() {
             )}
             <button
               type="button"
-              onClick={() => setShowEndModal(true)}
+              onClick={() => {
+                setShowEndModal(true)
+                setEndForm((p) => ({
+                  ...p,
+                  rake: totalTablesRake > 0 ? String(totalTablesRake) : p.rake,
+                  caixinha: totalTablesCaixinha > 0 ? String(totalTablesCaixinha) : p.caixinha,
+                }))
+              }}
               style={{ width: '100%', background: 'linear-gradient(135deg,#005A73,#002A3A)', border: '1px solid rgba(0,200,224,0.35)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '14px', cursor: 'pointer' }}
             >
               Encerrar Partida
@@ -1007,6 +1209,23 @@ export default function CashierPage() {
             <p style={{ fontWeight: 700, fontSize: '14px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>Registrar transação</p>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Mesa */}
+              {tables.filter((t) => t.status === 'OPEN').length > 0 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Mesa</label>
+                  <select
+                    value={form.tableId}
+                    onChange={(e) => setForm((prev) => ({ ...prev, tableId: e.target.value }))}
+                    style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
+                  >
+                    <option value="">Sem mesa selecionada</option>
+                    {tables.filter((t) => t.status === 'OPEN').map((t) => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.seats.filter((s) => !s.hasCashedOut).length} jogadores)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Jogador */}
               <div>
                 <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Jogador</label>
@@ -1173,7 +1392,7 @@ export default function CashierPage() {
                         {!p.hasCashedOut && (
                           <button
                             type="button"
-                            onClick={() => { setCashoutPlayer(p); setCashoutChips(String(p.currentStack || 0)); setCashoutError(null) }}
+                            onClick={() => { setCashoutPlayer(p); setCashoutChips(''); setCashoutError(null) }}
                             style={{
                               width: '100%',
                               marginBottom: '10px',
@@ -1577,6 +1796,107 @@ export default function CashierPage() {
                 <button type="submit" disabled={loading || hasInvalidCaixinhaSplit}
                   style={{ flex: 1, background: (loading || hasInvalidCaixinhaSplit) ? 'rgba(0,90,115,0.4)' : 'linear-gradient(135deg,#005A73,#002A3A)', border: '1px solid rgba(0,200,224,0.35)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '13px', cursor: (loading || hasInvalidCaixinhaSplit) ? 'not-allowed' : 'pointer', opacity: (loading || hasInvalidCaixinhaSplit) ? 0.6 : 1 }}>
                   {loading ? 'Encerrando...' : 'Confirmar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* === MODAL ABRIR MESA === */}
+      {showOpenTableModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px' }}>
+          <div style={{ background: 'linear-gradient(135deg,#0C2438,#071828)', border: '1px solid rgba(0,200,224,0.18)', borderRadius: '20px', width: '100%', maxWidth: '400px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontWeight: 700, fontSize: '16px', margin: 0 }}>Abrir Mesa</h3>
+              <button type="button" onClick={() => setShowOpenTableModal(false)} style={{ background: 'none', border: 'none', color: '#4A7A90', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+            </div>
+            <form onSubmit={handleOpenTable} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Nome da mesa</label>
+                <input
+                  type="text"
+                  value={openTableForm.name}
+                  onChange={(e) => setOpenTableForm((p) => ({ ...p, name: e.target.value }))}
+                  style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Modo caixinha</label>
+                <select
+                  value={openTableForm.caixinhaMode}
+                  onChange={(e) => setOpenTableForm((p) => ({ ...p, caixinhaMode: e.target.value as 'SPLIT' | 'INDIVIDUAL' }))}
+                  style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
+                >
+                  <option value="SPLIT">Dividir igualmente</option>
+                  <option value="INDIVIDUAL">Individual por staff</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
+                <button type="button" onClick={() => setShowOpenTableModal(false)} style={{ flex: 1, background: 'rgba(10,31,48,0.8)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', color: '#94a3b8', fontWeight: 700, padding: '12px', cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={openTableLoading} style={{ flex: 1, background: 'linear-gradient(135deg,#005A73,#002A3A)', border: '1px solid rgba(0,200,224,0.35)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, padding: '12px', cursor: openTableLoading ? 'not-allowed' : 'pointer', opacity: openTableLoading ? 0.6 : 1 }}>
+                  {openTableLoading ? 'Abrindo...' : 'Abrir Mesa'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* === MODAL SANGRIA === */}
+      {sangriaTableId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px' }}>
+          <div style={{ background: 'linear-gradient(135deg,#0C2438,#071828)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '20px', width: '100%', maxWidth: '400px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontWeight: 700, fontSize: '16px', margin: 0 }}>
+                Sangria — {tables.find((t) => t.id === sangriaTableId)?.name}
+              </h3>
+              <button type="button" onClick={() => setSangriaTableId(null)} style={{ background: 'none', border: 'none', color: '#4A7A90', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+            </div>
+            {sangriaError && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', marginBottom: '14px' }}>{sangriaError}</div>
+            )}
+            <form onSubmit={handleSangria} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Rake (R$)</label>
+                  <input type="number" step="0.01" min="0" value={sangriaForm.rake} onChange={(e) => setSangriaForm((p) => ({ ...p, rake: e.target.value }))} placeholder="0.00" autoFocus
+                    style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Caixinha (R$)</label>
+                  <input type="number" step="0.01" min="0" value={sangriaForm.caixinha} onChange={(e) => setSangriaForm((p) => ({ ...p, caixinha: e.target.value }))} placeholder="0.00"
+                    style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Observação (opcional)</label>
+                <input type="text" value={sangriaForm.note} onChange={(e) => setSangriaForm((p) => ({ ...p, note: e.target.value }))} placeholder="Ex: sangria das 22h"
+                  style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={sangriaForm.isFinal}
+                  onChange={(e) => setSangriaForm((p) => ({ ...p, isFinal: e.target.checked }))}
+                  style={{ width: '16px', height: '16px', accentColor: '#fbbf24' }}
+                />
+                <span style={{ fontSize: '13px', color: '#e2e8f0' }}>Sangria final — fecha a mesa após confirmar</span>
+              </label>
+              {sangriaForm.isFinal && (
+                <p style={{ fontSize: '12px', color: '#fbbf24', margin: '-6px 0 0', paddingLeft: '26px' }}>
+                  Todos os jogadores devem ter feito cashout antes da sangria final.
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
+                <button type="button" onClick={() => setSangriaTableId(null)} style={{ flex: 1, background: 'rgba(10,31,48,0.8)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', color: '#94a3b8', fontWeight: 700, padding: '12px', cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={sangriaLoading} style={{ flex: 1, background: sangriaLoading ? 'rgba(120,80,0,0.4)' : 'linear-gradient(135deg,#7c4f00,#3d2600)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '10px', color: '#fbbf24', fontWeight: 700, padding: '12px', cursor: sangriaLoading ? 'not-allowed' : 'pointer', opacity: sangriaLoading ? 0.6 : 1 }}>
+                  {sangriaLoading ? 'Registrando...' : 'Confirmar Sangria'}
                 </button>
               </div>
             </form>
