@@ -1673,7 +1673,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
   const totalCaixinha = 0
   const staffUserIds = session.staffAssignments.map((s) => s.userId)
-  const caixinhaMode = 'SPLIT'
+  const caixinhaMode: string = 'SPLIT'
   const caixinhaByUser = new Map<string, number>()
   if (staffUserIds.length > 0) {
     if (caixinhaMode === 'INDIVIDUAL') {
