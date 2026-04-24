@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import { joinSession, leaveSession, getSocket } from '@/services/socket'
 import { useAuthStore } from '@/store/useStore'
@@ -259,6 +259,7 @@ const cardStyle2: React.CSSProperties = {
 export default function CashierPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const { user, logout } = useAuthStore()
   const sessionId = params.sessionId as string
   const [session, setSession] = useState<CashierSession | null>(null)
@@ -307,9 +308,15 @@ export default function CashierPage() {
   const lastPosRef = useRef<{ x: number; y: number } | null>(null)
   const [hasSignature, setHasSignature] = useState(false)
 
-  async function refreshTables() {
+  async function refreshTables(autoCreateName?: string) {
     const { data } = await api.get('/cash-tables', { params: { sessionId } })
-    setTables(data)
+    if (data.length === 0 && autoCreateName) {
+      await api.post('/cash-tables', { sessionId, name: autoCreateName, caixinhaMode: 'SPLIT' })
+      const { data: fresh } = await api.get('/cash-tables', { params: { sessionId } })
+      setTables(fresh)
+    } else {
+      setTables(data)
+    }
   }
 
   async function refreshCashierSnapshot() {
@@ -379,7 +386,8 @@ export default function CashierPage() {
         : allMembers
       setMembers(filteredMembers)
       setTransactions(transactionsResponse.data)
-      refreshTables()
+      const mesaParam = searchParams?.get('mesa') || undefined
+      refreshTables(mesaParam)
     })
 
     joinSession(sessionId)

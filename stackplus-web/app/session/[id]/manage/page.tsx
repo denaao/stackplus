@@ -296,6 +296,7 @@ export default function SessionManagePage() {
   const [sangeurCopied, setSangeurCopied] = useState<string | null>(null)
   const [sangeurQrCodes, setSangeurQrCodes] = useState<Record<string, string>>({}) // userId → qrCode base64
   const [showHabilitarForm, setShowHabilitarForm] = useState(false)
+  const [firstTableName, setFirstTableName] = useState('Mesa 1')
 
   async function copySangeur(key: string, value: string) {
     try {
@@ -1098,9 +1099,22 @@ export default function SessionManagePage() {
         )}
 
         {gameType === 'CASH_GAME' && session.status === 'ACTIVE' && (
-          <div>
+          <div className="flex flex-col gap-3">
+            {hasSavedParticipants && (
+              <div>
+                <label className="block text-xs uppercase tracking-widest text-sx-cyan mb-1">Nome da mesa principal</label>
+                <input
+                  type="text"
+                  value={firstTableName}
+                  onChange={(e) => setFirstTableName(e.target.value)}
+                  placeholder="Ex: Mesa holdem, Mesa 1..."
+                  className="w-full rounded-xl px-4 py-2 text-sm text-white outline-none"
+                  style={{ background: '#0A1F30', border: '1px solid rgba(0,200,224,0.2)' }}
+                />
+              </div>
+            )}
             <button
-              onClick={() => router.push(`/cashier/${sessionId}`)}
+              onClick={() => router.push(`/cashier/${sessionId}?mesa=${encodeURIComponent(firstTableName.trim() || 'Mesa 1')}`)}
               disabled={!hasSavedParticipants}
               className="w-full bg-sx-cyan hover:bg-sx-cyan-dim text-sx-bg font-bold px-4 py-3 rounded-xl text-base transition-colors disabled:opacity-50"
             >
