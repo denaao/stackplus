@@ -608,7 +608,9 @@ export default function CashierPage() {
       })
       await refreshTables()
       setShowOpenTableModal(false)
-      setOpenTableForm({ name: `Mesa ${tables.length + 2}`, caixinhaMode: 'SPLIT' })
+      // Herda caixinhaMode da primeira mesa existente ao pré-popular o próximo form
+      const firstTableMode = tables[0]?.caixinhaMode ?? 'SPLIT'
+      setOpenTableForm({ name: `Mesa ${tables.length + 2}`, caixinhaMode: firstTableMode })
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao abrir mesa'))
     } finally {
@@ -1100,7 +1102,11 @@ export default function CashierPage() {
             {session?.status === 'ACTIVE' && (
               <button
                 type="button"
-                onClick={() => setShowOpenTableModal(true)}
+                onClick={() => {
+                  const firstTableMode = tables[0]?.caixinhaMode ?? 'SPLIT'
+                  setOpenTableForm({ name: `Mesa ${tables.length + 1}`, caixinhaMode: firstTableMode })
+                  setShowOpenTableModal(true)
+                }}
                 style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.25)', borderRadius: '8px', color: '#00C8E0', fontSize: '12px', fontWeight: 700, padding: '4px 12px', cursor: 'pointer' }}
               >
                 + Mesa
@@ -1166,10 +1172,7 @@ export default function CashierPage() {
           )}
         </div>
 
-        {/* === FORMULÁRIO DE SELEÇÃO DE MESA (inline no form principal) === */}
-        {tables.filter((t) => t.status === 'OPEN').length > 0 && (
-          <div style={{ display: 'none' }} id="table-selector-placeholder" />
-        )}
+
 
         {/* === ENCERRAMENTO (todos cashearam) === */}
         {allPlayersHaveCashedOut ? (
@@ -1209,22 +1212,6 @@ export default function CashierPage() {
             <p style={{ fontWeight: 700, fontSize: '14px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>Registrar transação</p>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* Mesa */}
-              {tables.filter((t) => t.status === 'OPEN').length > 0 && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Mesa</label>
-                  <select
-                    value={form.tableId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, tableId: e.target.value }))}
-                    style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
-                  >
-                    <option value="">Sem mesa selecionada</option>
-                    {tables.filter((t) => t.status === 'OPEN').map((t) => (
-                      <option key={t.id} value={t.id}>{t.name} ({t.seats.filter((s) => !s.hasCashedOut).length} jogadores)</option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
               {/* Jogador */}
               <div>
