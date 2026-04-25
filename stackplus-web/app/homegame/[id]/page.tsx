@@ -74,6 +74,7 @@ export default function HomeGamePage() {
   const [pokerVariant, setPokerVariant] = useState<'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'>('HOLDEN')
   const [wizardStep, setWizardStep] = useState<1 | 2>(1)
   const [sessionHasSangeur, setSessionHasSangeur] = useState<boolean>(false)
+  const [cashSessionName, setCashSessionName] = useState('')
   const [cashChipValue, setCashChipValue] = useState('1')
   const [cashSmallBlind, setCashSmallBlind] = useState('1')
   const [cashBigBlind, setCashBigBlind] = useState('2')
@@ -243,6 +244,7 @@ export default function HomeGamePage() {
 
       const payload: Record<string, string | number | boolean> = {
         homeGameId: id,
+        ...(cashSessionName.trim() ? { name: cashSessionName.trim() } : {}),
         pokerVariant,
         gameType: 'CASH_GAME',
         financialModule: newSessionFinancialModule,
@@ -668,6 +670,17 @@ export default function HomeGamePage() {
 
             {wizardStep === 2 && (
               <div className="mt-4 grid grid-cols-1 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-sx-muted uppercase tracking-wide">Nome da mesa</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Mesa 1 — Quinta Nobre"
+                    maxLength={80}
+                    value={cashSessionName}
+                    onChange={(e) => setCashSessionName(e.target.value)}
+                    className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
+                  />
+                </div>
                 <div className="space-y-1">
                   <label className="text-xs text-sx-muted uppercase tracking-wide">Modalidade</label>
                   <select

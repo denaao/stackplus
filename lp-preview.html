@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StackPlus — Preview da Landing Page</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          sx: {
+            bg: '#050D15', card: '#071828', card2: '#0C2238',
+            input: '#0A1F30', border: '#132A40', border2: '#1A3550',
+            cyan: '#00C8E0', 'cyan-dim': '#009CB0', 'cyan-deep': '#005A73',
+            teal: '#0A3A50', muted: '#4A7A90',
+          },
+        },
+        boxShadow: {
+          'sx-glow': '0 0 24px rgba(0,200,224,0.35)',
+          'sx-glow-sm': '0 0 12px rgba(0,200,224,0.2)',
+          'sx-glow-lg': '0 4px 40px rgba(0,200,224,0.55)',
+          'sx-glow-btn': '0 4px 22px rgba(0,200,224,0.45)',
+        },
+      },
+    },
+  }
+</script>
+<style>
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+</style>
+</head>
+<body class="bg-sx-bg text-zinc-100">
+
+<!-- ============== SEÇÃO 1 — HERO ============== -->
+<section class="relative overflow-hidden">
+  <div aria-hidden class="pointer-events-none absolute inset-0" style="background: radial-gradient(900px 420px at 85% -10%, rgba(0,200,224,0.18), transparent 60%), radial-gradient(800px 360px at -10% 10%, rgba(0,200,224,0.10), transparent 55%);"></div>
+  <div class="relative mx-auto max-w-6xl px-6 pt-10 pb-16 sm:pt-14 sm:pb-24">
+    <nav class="flex items-center justify-between">
+      <div class="flex flex-col items-start leading-none gap-1">
+        <span class="text-3xl sm:text-4xl font-black tracking-tight text-sx-cyan" style="text-shadow: 0 0 20px rgba(0,200,224,0.75);">STACK+</span>
+        <img src="./stackplus-web/public/sx-poker-logo.png" alt="SX Poker" style="height:16px; width:auto; opacity:.75; object-fit:contain;" />
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="#" class="hidden text-sm text-zinc-300 hover:text-white sm:inline">Entrar</a>
+        <a href="#" class="rounded-lg bg-sx-cyan px-4 py-2 text-sm font-semibold text-sx-bg shadow-sx-glow-btn">Criar home game</a>
+      </div>
+    </nav>
+
+    <div class="mt-14 grid items-center gap-12 sm:mt-20 lg:grid-cols-2">
+      <div>
+        <h1 class="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+          Organize seu home game como um <span class="text-sx-cyan">profissional</span> — sem planilha, sem confusão.
+        </h1>
+        <p class="mt-5 max-w-xl text-lg text-zinc-300">O StackPlus controla fichas, caixa e jogadores enquanto você só joga.</p>
+        <div class="mt-8">
+          <a href="#" class="inline-flex items-center justify-center rounded-lg bg-sx-cyan px-7 py-4 text-lg font-semibold text-sx-bg shadow-sx-glow-btn">Criar meu home game grátis</a>
+        </div>
+        <ul class="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-zinc-300">
+          <li class="flex items-center gap-2"><span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sx-cyan/15 text-xs text-sx-cyan">✓</span> 1 minuto</li>
+          <li class="flex items-center gap-2"><span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sx-cyan/15 text-xs text-sx-cyan">✓</span> Sem cartão</li>
+          <li class="flex items-center gap-2"><span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sx-cyan/15 text-xs text-sx-cyan">✓</span> Funciona no celular</li>
+        </ul>
+      </div>
+
+      <!-- Snapshot mobile: tela de comandas -->
+      <div class="relative mx-auto w-full max-w-xs sm:max-w-sm">
+        <div class="relative overflow-hidden rounded-[2rem] border-[8px] border-zinc-900 bg-sx-card shadow-sx-glow-lg">
+          <img src="./stackplus-web/public/comandas.jpg" alt="StackPlus no celular — comandas" class="h-auto w-full" />
+        </div>
+        <div aria-hidden class="pointer-events-none absolute -inset-8 -z-10 rounded-3xl bg-sx-cyan/15 blur-3xl"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== SEÇÃO 2 — PAIN ============== -->
+<section class="relative border-y border-sx-border2 bg-sx-card/30">
+  <div class="mx-auto max-w-5xl px-6 py-20">
+    <div class="max-w-3xl">
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Se você já organizou um poker entre amigos, isso aqui já aconteceu:</h2>
+    </div>
+    <ul class="mt-10 grid gap-3 sm:grid-cols-2">
+      <li class="flex items-start gap-3 rounded-lg border border-sx-border bg-sx-card px-5 py-4 text-zinc-200"><span class="mt-0.5 inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-sx-cyan/10 text-sm text-sx-cyan">✓</span><span class="text-base">Conta não bate no final</span></li>
+      <li class="flex items-start gap-3 rounded-lg border border-sx-border bg-sx-card px-5 py-4 text-zinc-200"><span class="mt-0.5 inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-sx-cyan/10 text-sm text-sx-cyan">✓</span><span class="text-base">Jogador pergunta saldo o tempo todo</span></li>
+      <li class="flex items-start gap-3 rounded-lg border border-sx-border bg-sx-card px-5 py-4 text-zinc-200"><span class="mt-0.5 inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-sx-cyan/10 text-sm text-sx-cyan">✓</span><span class="text-base">Você vira o caixa da mesa</span></li>
+      <li class="flex items-start gap-3 rounded-lg border border-sx-border bg-sx-card px-5 py-4 text-zinc-200"><span class="mt-0.5 inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-sx-cyan/10 text-sm text-sx-cyan">✓</span><span class="text-base">Planilha confusa que só você entende</span></li>
+      <li class="flex items-start gap-3 rounded-lg border border-sx-border bg-sx-card px-5 py-4 text-zinc-200 sm:col-span-2"><span class="mt-0.5 inline-flex h-6 w-6 flex-none items-center justify-center rounded-full bg-sx-cyan/10 text-sm text-sx-cyan">✓</span><span class="text-base">Dinheiro, pix e ficha tudo misturado</span></li>
+    </ul>
+    <p class="mt-10 text-center text-2xl font-bold text-white sm:text-3xl">Seu home game vira <span class="text-sx-cyan">trabalho</span>.</p>
+    <div class="mt-8 text-center">
+      <a href="#" class="inline-flex items-center justify-center rounded-lg bg-sx-cyan px-6 py-3 text-base font-semibold text-sx-bg shadow-sx-glow-btn">Nunca mais passar por isso</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== SEÇÃO 3 — BEFORE / AFTER ============== -->
+<section class="relative">
+  <div class="mx-auto max-w-5xl px-6 py-24">
+    <div class="max-w-2xl">
+      <span class="text-xs font-semibold uppercase tracking-widest text-sx-cyan">A transformação</span>
+      <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">O mesmo jogo, com o seu papel de volta.</h2>
+    </div>
+    <div class="mt-12 overflow-hidden rounded-2xl border border-sx-border2">
+      <div class="grid grid-cols-2 text-sm font-semibold uppercase tracking-widest">
+        <div class="bg-sx-card/60 px-6 py-4 text-zinc-400">Antes</div>
+        <div class="border-l border-sx-border2 bg-sx-cyan/10 px-6 py-4 text-sx-cyan">Depois com o StackPlus</div>
+      </div>
+      <div class="grid grid-cols-2 border-t border-sx-border2">
+        <div class="flex items-center gap-3 bg-sx-card/30 px-6 py-5 text-base text-zinc-400"><span class="text-zinc-600">✕</span><span class="line-through decoration-zinc-700">Bagunça</span></div>
+        <div class="flex items-center gap-3 border-l border-sx-border2 bg-sx-card/20 px-6 py-5 text-base text-zinc-100"><span class="inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-sx-cyan/20 text-xs text-sx-cyan">✓</span><span>Organização</span></div>
+      </div>
+      <div class="grid grid-cols-2 border-t border-sx-border2">
+        <div class="flex items-center gap-3 bg-sx-card/30 px-6 py-5 text-base text-zinc-400"><span class="text-zinc-600">✕</span><span class="line-through decoration-zinc-700">Conta errada</span></div>
+        <div class="flex items-center gap-3 border-l border-sx-border2 bg-sx-card/20 px-6 py-5 text-base text-zinc-100"><span class="inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-sx-cyan/20 text-xs text-sx-cyan">✓</span><span>Fechamento automático</span></div>
+      </div>
+      <div class="grid grid-cols-2 border-t border-sx-border2">
+        <div class="flex items-center gap-3 bg-sx-card/30 px-6 py-5 text-base text-zinc-400"><span class="text-zinc-600">✕</span><span class="line-through decoration-zinc-700">Você não joga</span></div>
+        <div class="flex items-center gap-3 border-l border-sx-border2 bg-sx-card/20 px-6 py-5 text-base text-zinc-100"><span class="inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-sx-cyan/20 text-xs text-sx-cyan">✓</span><span>Você só joga</span></div>
+      </div>
+      <div class="grid grid-cols-2 border-t border-sx-border2">
+        <div class="flex items-center gap-3 bg-sx-card/30 px-6 py-5 text-base text-zinc-400"><span class="text-zinc-600">✕</span><span class="line-through decoration-zinc-700">Discussão de valores</span></div>
+        <div class="flex items-center gap-3 border-l border-sx-border2 bg-sx-card/20 px-6 py-5 text-base text-zinc-100"><span class="inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-sx-cyan/20 text-xs text-sx-cyan">✓</span><span>Tudo registrado</span></div>
+      </div>
+    </div>
+    <div class="mt-10 text-center">
+      <a href="#" class="inline-flex items-center justify-center rounded-lg bg-sx-cyan px-6 py-3 text-base font-semibold text-sx-bg shadow-sx-glow-btn">Quero meu jogo assim</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== SEÇÃO 4 — HOW IT WORKS ============== -->
+<section class="relative">
+  <div class="mx-auto max-w-6xl px-6 py-24">
+    <div class="max-w-2xl">
+      <span class="text-xs font-semibold uppercase tracking-widest text-sx-cyan">Como funciona</span>
+      <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Em menos de 2 minutos seu jogo está rodando.</h2>
+    </div>
+    <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div><div class="flex items-center gap-3"><div class="flex h-11 w-11 items-center justify-center rounded-lg border border-sx-cyan/40 bg-sx-card font-mono text-lg font-bold text-sx-cyan shadow-sx-glow-sm">1</div><div aria-hidden class="hidden h-px flex-1 bg-gradient-to-r from-sx-cyan/40 to-transparent lg:block"></div></div><h3 class="mt-4 text-lg font-semibold text-white">Criar jogo</h3><p class="mt-1 text-sm text-zinc-400">Nome da mesa, buy-in, blinds. Pronto.</p></div>
+      <div><div class="flex items-center gap-3"><div class="flex h-11 w-11 items-center justify-center rounded-lg border border-sx-cyan/40 bg-sx-card font-mono text-lg font-bold text-sx-cyan shadow-sx-glow-sm">2</div><div aria-hidden class="hidden h-px flex-1 bg-gradient-to-r from-sx-cyan/40 to-transparent lg:block"></div></div><h3 class="mt-4 text-lg font-semibold text-white">Abrir mesa</h3><p class="mt-1 text-sm text-zinc-400">Jogadores entram pelo link. Sem cadastro chato.</p></div>
+      <div><div class="flex items-center gap-3"><div class="flex h-11 w-11 items-center justify-center rounded-lg border border-sx-cyan/40 bg-sx-card font-mono text-lg font-bold text-sx-cyan shadow-sx-glow-sm">3</div><div aria-hidden class="hidden h-px flex-1 bg-gradient-to-r from-sx-cyan/40 to-transparent lg:block"></div></div><h3 class="mt-4 text-lg font-semibold text-white">Vender fichas</h3><p class="mt-1 text-sm text-zinc-400">Registra buy-in, rebuy, add-on em segundos.</p></div>
+      <div><div class="flex items-center gap-3"><div class="flex h-11 w-11 items-center justify-center rounded-lg border border-sx-cyan/40 bg-sx-card font-mono text-lg font-bold text-sx-cyan shadow-sx-glow-sm">4</div></div><h3 class="mt-4 text-lg font-semibold text-white">Fechar</h3><p class="mt-1 text-sm text-zinc-400">Sistema mostra exatamente quem paga quem.</p></div>
+    </div>
+
+    <!-- Print real: tela de criação de partida -->
+    <div class="mt-14 grid items-center gap-10 lg:grid-cols-2">
+      <div class="order-2 lg:order-1">
+        <span class="text-xs font-semibold uppercase tracking-widest text-sx-cyan">Passo 1 na prática</span>
+        <h3 class="mt-3 text-2xl font-bold text-white sm:text-3xl">Configurar o jogo em 3 escolhas.</h3>
+        <p class="mt-4 text-base text-zinc-400">Módulo financeiro, sangeur e jackpot em uma única tela. Sem formulário infinito, sem menu escondido. O que você precisa pra abrir a mesa, num clique cada.</p>
+        <ul class="mt-6 space-y-2 text-sm text-zinc-300">
+          <li class="flex items-start gap-2"><span class="mt-0.5 text-sx-cyan">▸</span><span><strong class="text-white">Pós-pago, pré-pago ou híbrido</strong> — combina com qualquer galera.</span></li>
+          <li class="flex items-start gap-2"><span class="mt-0.5 text-sx-cyan">▸</span><span><strong class="text-white">Sangeur opcional</strong> — ative só quando tiver caixa móvel.</span></li>
+          <li class="flex items-start gap-2"><span class="mt-0.5 text-sx-cyan">▸</span><span><strong class="text-white">Jackpot integrado</strong> — pra quando a mesa quer apimentar.</span></li>
+        </ul>
+      </div>
+      <div class="order-1 mx-auto w-full max-w-md lg:order-2">
+        <div class="relative overflow-hidden rounded-2xl border border-sx-border2 bg-sx-card shadow-sx-glow-lg">
+          <img src="./stackplus-web/public/screen-new-match.png" alt="Tela de nova partida StackPlus" class="h-auto w-full" />
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-12 text-center">
+      <a href="#" class="inline-flex items-center justify-center rounded-lg bg-sx-cyan px-6 py-3 text-base font-semibold text-sx-bg shadow-sx-glow-btn">Testar no meu próximo jogo</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== SEÇÃO 5 — HOST EGO ============== -->
+<section class="relative overflow-hidden border-y border-sx-border2 bg-sx-card/30">
+  <div aria-hidden class="pointer-events-none absolute inset-0" style="background: radial-gradient(700px 300px at 100% 50%, rgba(0,200,224,0.14), transparent 60%);"></div>
+  <div class="relative mx-auto grid max-w-6xl items-center gap-12 px-6 py-24 lg:grid-cols-2">
+    <div>
+      <span class="text-xs font-semibold uppercase tracking-widest text-sx-cyan">Para o anfitrião</span>
+      <h2 class="mt-3 text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">Vire o anfitrião que faz o <span class="text-sx-cyan">melhor poker da turma</span>.</h2>
+      <p class="mt-5 max-w-xl text-lg text-zinc-300">Ligue uma TV, um notebook ou até um tablet e coloque o modo TV do StackPlus na mesa. Timer gigante, premiação ao vivo, quem tá dentro — seus amigos entram em casa e já sabem que a noite vai ser diferente.</p>
+      <div class="mt-8 grid gap-3 sm:grid-cols-3">
+        <div class="rounded-xl border border-sx-border bg-sx-card p-4"><div class="text-2xl">🏆</div><div class="mt-2 text-sm font-semibold text-white">Reputação</div><div class="mt-1 text-xs text-zinc-400">A turma sabe que o seu poker é bem feito</div></div>
+        <div class="rounded-xl border border-sx-border bg-sx-card p-4"><div class="text-2xl">⚡</div><div class="mt-2 text-sm font-semibold text-white">Fluidez</div><div class="mt-1 text-xs text-zinc-400">Menos tempo anotando, mais tempo jogando</div></div>
+        <div class="rounded-xl border border-sx-border bg-sx-card p-4"><div class="text-2xl">🤝</div><div class="mt-2 text-sm font-semibold text-white">Confiança</div><div class="mt-1 text-xs text-zinc-400">Ninguém sai da mesa desconfiando da conta</div></div>
+      </div>
+    </div>
+    <div class="relative">
+      <div class="relative overflow-hidden rounded-2xl border border-sx-border2 bg-sx-card shadow-sx-glow-lg">
+        <img src="./stackplus-web/public/screen-tv-clock.png" alt="Modo TV do StackPlus" class="h-auto w-full" />
+      </div>
+      <div aria-hidden class="pointer-events-none absolute -inset-6 -z-10 rounded-3xl bg-sx-cyan/10 blur-3xl"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== SEÇÃO 6 — MADE FOR REAL ============== -->
+<section class="relative">
+  <div class="mx-auto max-w-5xl px-6 py-24">
+    <div class="max-w-2xl">
+      <span class="text-xs font-semibold uppercase tracking-widest text-sx-cyan">Feito pra realidade</span>
+      <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Criado para a rotina real do seu jogo.</h2>
+      <p class="mt-4 text-lg text-zinc-400">Nada de caso perfeito. O StackPlus foi pensado pra lidar com o que realmente acontece na sua mesa.</p>
+    </div>
+    <ul class="mt-12 grid gap-3 sm:grid-cols-2">
+      <li class="flex items-center gap-4 rounded-xl border border-sx-border bg-sx-card px-5 py-4"><span class="text-2xl">🎲</span><span class="text-base text-zinc-100">Rebuy e add-on ilimitados</span></li>
+      <li class="flex items-center gap-4 rounded-xl border border-sx-border bg-sx-card px-5 py-4"><span class="text-2xl">🕐</span><span class="text-base text-zinc-100">Jogador chegando atrasado</span></li>
+      <li class="flex items-center gap-4 rounded-xl border border-sx-border bg-sx-card px-5 py-4"><span class="text-2xl">💸</span><span class="text-base text-zinc-100">Pagamento em dinheiro, pix ou depois</span></li>
+      <li class="flex items-center gap-4 rounded-xl border border-sx-border bg-sx-card px-5 py-4"><span class="text-2xl">🃏</span><span class="text-base text-zinc-100">Sangria de fichas</span></li>
+      <li class="flex items-center gap-4 rounded-xl border border-sx-border bg-sx-card px-5 py-4 sm:col-span-2"><span class="text-2xl">✅</span><span class="text-base text-zinc-100">Fechamento automático no final</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============== SEÇÃO 7 — OBJECTIONS ============== -->
+<section class="relative border-y border-sx-border2 bg-sx-card/30">
+  <div class="mx-auto max-w-4xl px-6 py-24">
+    <div class="max-w-2xl">
+      <span class="text-xs font-semibold uppercase tracking-widest text-sx-cyan">Antes que você pense</span>
+      <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">"Ah, mas...".</h2>
+    </div>
+    <div class="mt-12 space-y-4">
+      <div class="rounded-xl border border-sx-border bg-sx-card p-6"><div class="flex items-start gap-4"><span class="mt-1 text-2xl">💬</span><div><p class="text-lg font-semibold text-white">"Meu jogo é simples"</p><p class="mt-2 flex items-start gap-2 text-base text-zinc-300"><span class="flex-none font-bold text-sx-cyan">→</span><span>É aí que a conta se perde. Quanto menos estrutura, mais espaço pra esquecer um rebuy, uma ficha, um pix pendente. StackPlus organiza inclusive o jogo mais informal.</span></p></div></div></div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-6"><div class="flex items-start gap-4"><span class="mt-1 text-2xl">💬</span><div><p class="text-lg font-semibold text-white">"Eu já uso planilha"</p><p class="mt-2 flex items-start gap-2 text-base text-zinc-300"><span class="flex-none font-bold text-sx-cyan">→</span><span>Isso substitui 100% e melhor — sem fórmula quebrada, sem coluna errada, sem ter que lembrar de salvar. Todo mundo vê o mesmo dado em tempo real.</span></p></div></div></div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-6"><div class="flex items-start gap-4"><span class="mt-1 text-2xl">💬</span><div><p class="text-lg font-semibold text-white">"Vai dar trabalho usar?"</p><p class="mt-2 flex items-start gap-2 text-base text-zinc-300"><span class="flex-none font-bold text-sx-cyan">→</span><span>Leva menos de 2 minutos pra criar a primeira mesa. Interface desenhada pra você usar no celular durante o jogo — zero curva de aprendizado.</span></p></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== SEÇÃO 8 — SCREEN IN USE ============== -->
+<section class="relative overflow-hidden">
+  <div aria-hidden class="pointer-events-none absolute inset-0" style="background: radial-gradient(800px 360px at 50% 50%, rgba(0,200,224,0.12), transparent 60%);"></div>
+  <div class="relative mx-auto max-w-5xl px-6 py-24">
+    <div class="mx-auto max-w-2xl text-center">
+      <span class="text-xs font-semibold uppercase tracking-widest text-sx-cyan">Na mão, durante o jogo</span>
+      <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">É isso que você usa na hora.</h2>
+    </div>
+    <div class="mt-14 flex justify-center">
+      <div class="relative w-full max-w-md">
+        <div class="relative mx-auto rounded-[2.2rem] border-[10px] border-zinc-900 bg-sx-bg" style="box-shadow: 0 30px 80px rgba(0,200,224,0.25);">
+          <div class="relative overflow-hidden rounded-[1.4rem] border border-sx-border bg-sx-card">
+            <div class="flex items-center justify-between px-5 py-2 text-[10px] text-zinc-400"><span>22:47</span><span class="font-mono">●●●● 4G</span></div>
+            <div class="space-y-4 p-5">
+              <div class="flex items-center justify-between">
+                <div class="flex flex-col leading-none">
+                  <span class="text-xl font-black tracking-tight text-sx-cyan" style="text-shadow: 0 0 12px rgba(0,200,224,0.6);">STACK+</span>
+                  <span class="mt-1 text-[9px] uppercase tracking-widest text-sx-muted">Torneio da galera</span>
+                </div>
+                <span class="rounded bg-sx-cyan/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-sx-cyan">ao vivo</span>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="rounded-lg border border-sx-border bg-sx-card2/70 p-3"><div class="text-[9px] uppercase tracking-widest text-sx-muted">Caixa</div><div class="mt-1 text-lg font-bold text-sx-cyan">R$ 1.800</div></div>
+                <div class="rounded-lg border border-sx-border bg-sx-card2/70 p-3 shadow-sx-glow-sm"><div class="text-[9px] uppercase tracking-widest text-sx-muted">Na mesa</div><div class="mt-1 text-lg font-bold">9 jogadores</div></div>
+              </div>
+              <button class="w-full rounded-lg bg-sx-cyan py-3 text-sm font-semibold text-sx-bg shadow-sx-glow-btn">+ Vender fichas</button>
+              <div class="rounded-lg border border-sx-border bg-sx-card2/70 p-3">
+                <div class="mb-2 flex items-center justify-between text-[10px] uppercase tracking-widest text-sx-muted"><span>Últimos</span><span>Hoje</span></div>
+                <div class="flex items-center justify-between border-b border-sx-border/60 py-1.5 text-xs"><span>Ana</span><span class="text-sx-muted">Rebuy</span><span class="font-mono text-zinc-300">R$ 100</span></div>
+                <div class="flex items-center justify-between border-b border-sx-border/60 py-1.5 text-xs"><span>Bruno</span><span class="text-sx-muted">Buy-in</span><span class="font-mono text-zinc-300">R$ 200</span></div>
+                <div class="flex items-center justify-between py-1.5 text-xs"><span>Diego</span><span class="text-sx-muted">Rebuy</span><span class="font-mono text-zinc-300">R$ 100</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div aria-hidden class="pointer-events-none absolute -bottom-16 left-1/2 h-20 w-[120%] -translate-x-1/2 rounded-full bg-emerald-950/60 blur-2xl"></div>
+      </div>
+    </div>
+    <p class="mt-16 text-center text-sm text-sx-muted">Substituir por foto real do celular em cima da mesa de poker</p>
+  </div>
+</section>
+
+<!-- ============== SEÇÃO 9 — CTA FINAL ============== -->
+<section class="relative overflow-hidden bg-black">
+  <div aria-hidden class="pointer-events-none absolute inset-0" style="background: radial-gradient(900px 400px at 50% 0%, rgba(0,200,224,0.22), transparent 60%);"></div>
+  <div class="relative mx-auto max-w-4xl px-6 py-28 text-center">
+    <h2 class="text-3xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">No próximo home game, <span class="text-sx-cyan">jogue poker</span>.<br>Não seja o contador da mesa.</h2>
+    <div class="mt-10"><a href="#" class="inline-flex items-center justify-center rounded-lg bg-sx-cyan px-10 py-5 text-xl font-semibold text-sx-bg shadow-sx-glow-btn">Criar meu home game grátis</a></div>
+    <p class="mt-5 text-sm text-sx-muted">Sem cartão • 1 minuto • Comece agora</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="border-t border-sx-border2 bg-sx-bg">
+  <div class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 px-6 py-12 sm:flex-row sm:items-center">
+    <div class="flex flex-col items-start leading-none gap-1">
+      <span class="text-2xl font-black tracking-tight text-sx-cyan" style="text-shadow: 0 0 18px rgba(0,200,224,0.65);">STACK+</span>
+      <img src="./stackplus-web/public/sx-poker-logo.png" alt="SX Poker" style="height:14px; width:auto; opacity:.75; object-fit:contain;" />
+    </div>
+    <div class="text-xs text-sx-muted sm:text-right">© 2026 StackPlus. Feito pra quem leva<br class="hidden sm:inline" /> o home game a sério.</div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -272,7 +272,7 @@ export default function CashierPage() {
   const [openTableForm, setOpenTableForm] = useState({ name: 'Mesa 1', caixinhaMode: 'SPLIT' as 'SPLIT' | 'INDIVIDUAL' })
   const [openTableLoading, setOpenTableLoading] = useState(false)
   const [sangriaTableId, setSangriaTableId] = useState<string | null>(null)
-  const [sangriaForm, setSangriaForm] = useState({ rake: '', caixinha: '', isFinal: false, note: '' })
+  const [sangriaForm, setSangriaForm] = useState({ rake: '', caixinha: '', jackpot: '', isFinal: false, note: '' })
   const [sangriaLoading, setSangriaLoading] = useState(false)
   const [sangriaError, setSangriaError] = useState<string | null>(null)
   const [transactionType, setTransactionType] = useState<'BUYIN' | 'REBUY' | 'CASHOUT' | 'JACKPOT'>('BUYIN')
@@ -633,12 +633,13 @@ export default function CashierPage() {
       await api.post(`/cash-tables/${sangriaTableId}/sangria`, {
         rake: parseFloat(sangriaForm.rake || '0') || 0,
         caixinha: parseFloat(sangriaForm.caixinha || '0') || 0,
+        jackpot: parseFloat(sangriaForm.jackpot || '0') || 0,
         isFinal: sangriaForm.isFinal,
         note: sangriaForm.note || undefined,
       })
       await refreshTables()
       setSangriaTableId(null)
-      setSangriaForm({ rake: '', caixinha: '', isFinal: false, note: '' })
+      setSangriaForm({ rake: '', caixinha: '', jackpot: '', isFinal: false, note: '' })
     } catch (err) {
       setSangriaError(getErrorMessage(err, 'Erro ao registrar sangria'))
     } finally {
@@ -1148,7 +1149,7 @@ export default function CashierPage() {
                       {table.status === 'OPEN' && (
                         <button
                           type="button"
-                          onClick={() => { setSangriaTableId(table.id); setSangriaForm({ rake: '', caixinha: '', isFinal: false, note: '' }) }}
+                          onClick={() => { setSangriaTableId(table.id); setSangriaForm({ rake: '', caixinha: '', jackpot: '', isFinal: false, note: '' }) }}
                           style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '6px', color: '#fbbf24', fontSize: '11px', fontWeight: 700, padding: '3px 10px', cursor: 'pointer' }}
                         >
                           Sangria
@@ -1158,9 +1159,7 @@ export default function CashierPage() {
                   </div>
 
                   {/* Jogadores na mesa */}
-                  {table.seats.length === 0 ? (
-                    <p style={{ fontSize: '12px', color: '#4A7A90', textAlign: 'center', padding: '10px' }}>Sem jogadores</p>
-                  ) : (
+                  {table.seats.length > 0 && (
                     <div>
                       {table.seats.map((seat) => (
                         <div key={seat.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
@@ -1246,58 +1245,30 @@ export default function CashierPage() {
                 </select>
               </div>
 
-              {/* Tipo — grid 2×2 */}
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Tipo</label>
-                <div style={{ display: 'grid', gridTemplateColumns: isJackpotEnabled ? '1fr 1fr' : '1fr 1fr 1fr', gap: '8px' }}>
-                  {typeButtons.map((t) => {
-                    const isDisabled =
-                      (t === 'BUYIN' && hasExistingBuyIn && !selectedPlayerState?.hasCashedOut) ||
-                      (t === 'REBUY' && (!hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut))) ||
-                      (t === 'JACKPOT' && (!isJackpotEnabled || !hasExistingBuyIn || Boolean(selectedPlayerState?.hasCashedOut)))
-                    const cfg = typeConfig[t]
-                    const isActive = currentType === t
-
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        disabled={isDisabled}
-                        onClick={() => !isDisabled && setTransactionType(t)}
-                        style={{
-                          padding: '10px 8px',
-                          borderRadius: '10px',
-                          fontWeight: 700,
-                          fontSize: '13px',
-                          cursor: isDisabled ? 'not-allowed' : 'pointer',
-                          transition: 'all 0.15s',
-                          background: isDisabled
-                            ? 'rgba(10,31,48,0.5)'
-                            : isActive
-                              ? cfg.activeGrad
-                              : cfg.idleColor,
-                          border: isDisabled
-                            ? '1px solid rgba(255,255,255,0.05)'
-                            : isActive
-                              ? `1px solid ${cfg.activeBorder}`
-                              : '1px solid transparent',
-                          color: isDisabled
-                            ? '#4A7A90'
-                            : isActive
-                              ? '#fff'
-                              : '#94a3b8',
-                          opacity: isDisabled ? 0.5 : 1,
-                        }}
-                      >
-                        {cfg.label}
-                      </button>
-                    )
-                  })}
+              {/* Jackpot toggle — só aparece se jackpot habilitado e jogador ativo */}
+              {isJackpotEnabled && hasExistingBuyIn && !selectedPlayerState?.hasCashedOut && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setTransactionType(currentType === 'JACKPOT' ? 'REBUY' : 'JACKPOT')}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '10px',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      background: currentType === 'JACKPOT' ? 'linear-gradient(135deg,#005A73,#002A3A)' : 'rgba(0,200,224,0.08)',
+                      border: currentType === 'JACKPOT' ? '1px solid #00C8E0' : '1px solid rgba(0,200,224,0.15)',
+                      color: currentType === 'JACKPOT' ? '#00C8E0' : '#4A7A90',
+                    }}
+                  >
+                    🎯 Jackpot
+                  </button>
                 </div>
-                {selectedPlayerState?.hasCashedOut && (
-                  <p style={{ fontSize: '12px', color: '#4A7A90', marginTop: '6px' }}>Jogador já realizou cashout nesta sessão.</p>
-                )}
-              </div>
+              )}
+              {selectedPlayerState?.hasCashedOut && (
+                <p style={{ fontSize: '12px', color: '#4A7A90' }}>Jogador já realizou cashout nesta sessão.</p>
+              )}
 
               {/* Fichas */}
               <div>
@@ -1325,7 +1296,7 @@ export default function CashierPage() {
                 disabled={loading}
                 style={{ width: '100%', background: loading ? 'rgba(0,200,224,0.3)' : 'linear-gradient(135deg,#006070,#003848)', border: '1px solid rgba(0,200,224,0.4)', borderRadius: '10px', color: loading ? '#4A7A90' : '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '13px', cursor: loading ? 'not-allowed' : 'pointer' }}
               >
-                {loading ? 'Registrando...' : 'Registrar'}
+                {loading ? 'Registrando...' : currentType === 'BUYIN' ? 'Registrar Buy-in' : currentType === 'REBUY' ? 'Registrar Rebuy' : currentType === 'JACKPOT' ? 'Registrar Jackpot' : 'Registrar'}
               </button>
 
               {success && (
@@ -1851,7 +1822,7 @@ export default function CashierPage() {
               <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', marginBottom: '14px' }}>{sangriaError}</div>
             )}
             <form onSubmit={handleSangria} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isJackpotEnabled ? '1fr 1fr 1fr' : '1fr 1fr', gap: '10px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Rake (R$)</label>
                   <input type="number" step="0.01" min="0" value={sangriaForm.rake} onChange={(e) => setSangriaForm((p) => ({ ...p, rake: e.target.value }))} placeholder="0.00" autoFocus
@@ -1862,6 +1833,13 @@ export default function CashierPage() {
                   <input type="number" step="0.01" min="0" value={sangriaForm.caixinha} onChange={(e) => setSangriaForm((p) => ({ ...p, caixinha: e.target.value }))} placeholder="0.00"
                     style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
                 </div>
+                {isJackpotEnabled && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#00C8E0', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Jackpot (R$)</label>
+                    <input type="number" step="0.01" min="0" value={sangriaForm.jackpot} onChange={(e) => setSangriaForm((p) => ({ ...p, jackpot: e.target.value }))} placeholder="0.00"
+                      style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.25)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                )}
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Observação (opcional)</label>

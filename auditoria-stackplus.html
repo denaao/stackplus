@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Auditoria StackPlus — Relatório do Orquestrador</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          sx: {
+            bg: '#050D15', card: '#071828', card2: '#0C2238',
+            border: '#132A40', border2: '#1A3550',
+            cyan: '#00C8E0', 'cyan-dim': '#009CB0',
+            muted: '#4A7A90',
+          },
+          sev: {
+            high: '#ff6a63', med: '#f5b73a', low: '#21c07a',
+          },
+        },
+        boxShadow: {
+          'sx-glow': '0 0 24px rgba(0,200,224,0.35)',
+          'sx-glow-sm': '0 0 12px rgba(0,200,224,0.2)',
+          'sx-glow-lg': '0 4px 40px rgba(0,200,224,0.55)',
+        },
+      },
+    },
+  }
+</script>
+<style>
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  details summary::-webkit-details-marker { display: none; }
+  details[open] summary .chev { transform: rotate(45deg); }
+  @media print {
+    body { background: white !important; color: black !important; }
+    details[open] summary .chev { transform: rotate(45deg); }
+    details { break-inside: avoid; }
+  }
+</style>
+</head>
+<body class="bg-sx-bg text-zinc-100">
+
+<!-- HEADER -->
+<header class="border-b border-sx-border2 bg-gradient-to-b from-sx-card to-sx-bg">
+  <div class="mx-auto max-w-6xl px-6 py-12">
+    <div class="flex items-center justify-between">
+      <div>
+        <span class="text-xs font-semibold uppercase tracking-[0.3em] text-sx-cyan">Relatório do orquestrador</span>
+        <h1 class="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
+          Auditoria <span class="text-sx-cyan">StackPlus</span>
+        </h1>
+        <p class="mt-3 text-zinc-400">Varredura geral — segurança, data layer e qualidade de engenharia</p>
+      </div>
+      <div class="flex flex-col items-start leading-none gap-1">
+        <span class="text-3xl font-black tracking-tight text-sx-cyan" style="text-shadow: 0 0 18px rgba(0,200,224,0.65);">STACK+</span>
+        <span class="text-[10px] uppercase tracking-[0.3em] text-sx-muted">Orquestrador v1</span>
+      </div>
+    </div>
+
+    <dl class="mt-10 grid gap-4 sm:grid-cols-4">
+      <div class="rounded-xl border border-sx-border bg-sx-card p-4">
+        <dt class="text-[10px] uppercase tracking-widest text-sx-muted">Data</dt>
+        <dd class="mt-1 text-base font-semibold text-white">20 abr 2026</dd>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-4">
+        <dt class="text-[10px] uppercase tracking-widest text-sx-muted">Escopo</dt>
+        <dd class="mt-1 text-base font-semibold text-white">API + Web + Data</dd>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-4">
+        <dt class="text-[10px] uppercase tracking-widest text-sx-muted">Agentes</dt>
+        <dd class="mt-1 text-base font-semibold text-white">3 (paralelo)</dd>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-4">
+        <dt class="text-[10px] uppercase tracking-widest text-sx-muted">Findings</dt>
+        <dd class="mt-1 text-base font-semibold text-white">21</dd>
+      </div>
+    </dl>
+  </div>
+</header>
+
+<!-- STATS DASHBOARD -->
+<section class="border-b border-sx-border2">
+  <div class="mx-auto max-w-6xl px-6 py-12">
+    <h2 class="text-2xl font-bold tracking-tight">Visão geral</h2>
+    <div class="mt-6 grid gap-4 sm:grid-cols-3">
+      <div class="rounded-xl border border-sev-high/40 bg-sev-high/5 p-6" style="box-shadow: inset 0 0 40px rgba(255,106,99,0.08);">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-sev-high">Alto</div>
+            <div class="mt-2 text-5xl font-black text-sev-high">5</div>
+            <div class="mt-2 text-sm text-zinc-300">Bloqueadores de produção madura</div>
+          </div>
+          <div class="rounded-lg border border-sev-high/40 bg-sev-high/10 px-2 py-1 text-[10px] font-bold text-sev-high">HIGH</div>
+        </div>
+      </div>
+      <div class="rounded-xl border border-sev-med/40 bg-sev-med/5 p-6" style="box-shadow: inset 0 0 40px rgba(245,183,58,0.08);">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-sev-med">Médio</div>
+            <div class="mt-2 text-5xl font-black text-sev-med">12</div>
+            <div class="mt-2 text-sm text-zinc-300">Dívida técnica em acumulação</div>
+          </div>
+          <div class="rounded-lg border border-sev-med/40 bg-sev-med/10 px-2 py-1 text-[10px] font-bold text-sev-med">MED</div>
+        </div>
+      </div>
+      <div class="rounded-xl border border-sev-low/40 bg-sev-low/5 p-6" style="box-shadow: inset 0 0 40px rgba(33,192,122,0.08);">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-xs uppercase tracking-widest text-sev-low">Baixo</div>
+            <div class="mt-2 text-5xl font-black text-sev-low">4</div>
+            <div class="mt-2 text-sm text-zinc-300">Enxugar quando houver folga</div>
+          </div>
+          <div class="rounded-lg border border-sev-low/40 bg-sev-low/10 px-2 py-1 text-[10px] font-bold text-sev-low">LOW</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Breakdown por categoria -->
+    <div class="mt-8 grid gap-4 sm:grid-cols-3">
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold uppercase tracking-widest text-sx-cyan">🛡️ Segurança</span>
+          <span class="text-xs text-sx-muted">10 findings</span>
+        </div>
+        <div class="mt-4 flex items-end gap-3">
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[20%] bg-sev-high"></div>
+          </div>
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[50%] bg-sev-med"></div>
+          </div>
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[30%] bg-sev-low"></div>
+          </div>
+          <div class="ml-auto text-xs text-sx-muted">
+            <div><span class="text-sev-high font-bold">2</span> H</div>
+            <div><span class="text-sev-med font-bold">5</span> M</div>
+            <div><span class="text-sev-low font-bold">3</span> L</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold uppercase tracking-widest text-sx-cyan">💾 Data layer</span>
+          <span class="text-xs text-sx-muted">6 findings</span>
+        </div>
+        <div class="mt-4 flex items-end gap-3">
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[20%] bg-sev-high"></div>
+          </div>
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[80%] bg-sev-med"></div>
+          </div>
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[20%] bg-sev-low"></div>
+          </div>
+          <div class="ml-auto text-xs text-sx-muted">
+            <div><span class="text-sev-high font-bold">1</span> H</div>
+            <div><span class="text-sev-med font-bold">4</span> M</div>
+            <div><span class="text-sev-low font-bold">1</span> L</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold uppercase tracking-widest text-sx-cyan">⚙️ Qualidade</span>
+          <span class="text-xs text-sx-muted">7 findings</span>
+        </div>
+        <div class="mt-4 flex items-end gap-3">
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[45%] bg-sev-high"></div>
+          </div>
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[70%] bg-sev-med"></div>
+          </div>
+          <div class="flex h-16 w-8 flex-col justify-end gap-0.5">
+            <div class="h-[20%] bg-sev-low"></div>
+          </div>
+          <div class="ml-auto text-xs text-sx-muted">
+            <div><span class="text-sev-high font-bold">2</span> H</div>
+            <div><span class="text-sev-med font-bold">4</span> M</div>
+            <div><span class="text-sev-low font-bold">1</span> L</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT MODEL -->
+<section class="border-b border-sx-border2 bg-sx-card/30">
+  <div class="mx-auto max-w-6xl px-6 py-12">
+    <h2 class="text-2xl font-bold tracking-tight">Modelo do projeto</h2>
+    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-sx-cyan">Tipo</div>
+        <div class="mt-2 text-base font-semibold text-white">Fullstack SaaS</div>
+        <div class="mt-1 text-xs text-zinc-400">Next + Express + Postgres</div>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-sx-cyan">Arquitetura</div>
+        <div class="mt-2 text-base font-semibold text-white">Monolito modular</div>
+        <div class="mt-1 text-xs text-zinc-400">api + web separados</div>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-sx-cyan">Sensibilidade</div>
+        <div class="mt-2 text-base font-semibold text-sev-med">Média-alta</div>
+        <div class="mt-1 text-xs text-zinc-400">Auth + PIX + Multi-tenant</div>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="text-[10px] uppercase tracking-widest text-sx-cyan">Maturidade</div>
+        <div class="mt-2 text-base font-semibold text-white">MVP em produção</div>
+        <div class="mt-1 text-xs text-zinc-400">Vercel + Railway</div>
+      </div>
+    </div>
+
+    <div class="mt-6 rounded-xl border border-sx-border bg-sx-card p-6">
+      <div class="text-[10px] uppercase tracking-widest text-sx-cyan">Módulos backend (11)</div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">auth</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">banking</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">cashier</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">comanda</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">groups</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">homegame</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">ranking</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">sangeur</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">session</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">tournament</span>
+        <span class="rounded-md border border-sx-border2 bg-sx-bg px-2.5 py-1 text-xs font-mono text-zinc-300">users</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HIGH FINDINGS -->
+<section>
+  <div class="mx-auto max-w-6xl px-6 py-12">
+    <div class="flex items-center gap-3">
+      <div class="h-3 w-3 rounded-full bg-sev-high shadow-[0_0_12px_rgba(255,106,99,0.8)]"></div>
+      <h2 class="text-2xl font-bold tracking-tight">5 findings críticos</h2>
+    </div>
+    <p class="mt-2 text-zinc-400">Bloqueadores para produção madura. Atacar primeiro.</p>
+
+    <div class="mt-8 space-y-4">
+
+      <article class="rounded-xl border border-sev-high/40 bg-sx-card overflow-hidden">
+        <div class="flex items-start gap-4 p-6">
+          <div class="flex-none">
+            <div class="rounded-lg border border-sev-high/50 bg-sev-high/10 px-3 py-1 text-xs font-bold text-sev-high">SEC-001</div>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-lg font-bold text-white">Webhook ANNAPAY sem HMAC</h3>
+            <p class="mt-2 text-sm text-zinc-300">
+              Comparação direta de string no lugar de verificação HMAC-SHA256. Qualquer um com o secret consegue forjar webhooks e injetar transações PIX falsas.
+            </p>
+            <div class="mt-3 rounded-lg bg-sx-bg/50 px-3 py-2 font-mono text-xs text-zinc-400">
+              stackplus-api/src/modules/banking/annapay.controller.ts:124-131
+            </div>
+            <div class="mt-3 rounded-lg border border-sx-cyan/30 bg-sx-cyan/5 p-3 text-sm">
+              <span class="text-sx-cyan font-semibold">▸ Fix:</span>
+              <span class="text-zinc-200"> Implementar <code class="text-sx-cyan">createHmac('sha256', secret).update(rawBody).digest('hex')</code> e comparar com <code class="text-sx-cyan">X-Signature</code> header.</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-sev-high/40 bg-sx-card overflow-hidden">
+        <div class="flex items-start gap-4 p-6">
+          <div class="flex-none">
+            <div class="rounded-lg border border-sev-high/50 bg-sev-high/10 px-3 py-1 text-xs font-bold text-sev-high">SEC-006</div>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-lg font-bold text-white">Webhook sem idempotency (race condition)</h3>
+            <p class="mt-2 text-sm text-zinc-300">
+              Check-then-update vulnerável: dois webhooks simultâneos podem registrar a mesma transação duas vezes antes do UPDATE consolidar.
+            </p>
+            <div class="mt-3 rounded-lg bg-sx-bg/50 px-3 py-2 font-mono text-xs text-zinc-400">
+              stackplus-api/src/modules/banking/annapay.service.ts:1175-1176
+            </div>
+            <div class="mt-3 rounded-lg border border-sx-cyan/30 bg-sx-cyan/5 p-3 text-sm">
+              <span class="text-sx-cyan font-semibold">▸ Fix:</span>
+              <span class="text-zinc-200"> <code class="text-sx-cyan">INSERT ... ON CONFLICT DO NOTHING</code> com unique constraint em <code class="text-sx-cyan">chargeId</code>, ou transação com lock pessimista.</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-sev-high/40 bg-sx-card overflow-hidden">
+        <div class="flex items-start gap-4 p-6">
+          <div class="flex-none">
+            <div class="rounded-lg border border-sev-high/50 bg-sev-high/10 px-3 py-1 text-xs font-bold text-sev-high">DATA-001</div>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-lg font-bold text-white">Campo de auditoria sem foreign key</h3>
+            <p class="mt-2 text-sm text-zinc-300">
+              <code class="text-sx-cyan">registeredBy</code> é String solta em Transaction e PrepaidChargePending. Sem <code class="text-sx-cyan">@relation</code>, permite referência órfã e compromete a trilha de auditoria financeira.
+            </p>
+            <div class="mt-3 rounded-lg bg-sx-bg/50 px-3 py-2 font-mono text-xs text-zinc-400">
+              stackplus-api/prisma/schema.prisma:538, :561
+            </div>
+            <div class="mt-3 rounded-lg border border-sx-cyan/30 bg-sx-cyan/5 p-3 text-sm">
+              <span class="text-sx-cyan font-semibold">▸ Fix:</span>
+              <span class="text-zinc-200"> Migration <code class="text-sx-cyan">registeredByUserId → @relation(fields: [registeredByUserId], references: [id])</code> com índice e backfill.</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-sev-high/40 bg-sx-card overflow-hidden">
+        <div class="flex items-start gap-4 p-6">
+          <div class="flex-none">
+            <div class="rounded-lg border border-sev-high/50 bg-sev-high/10 px-3 py-1 text-xs font-bold text-sev-high">QUAL-001</div>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-lg font-bold text-white">Cobertura de testes ~zero</h3>
+            <p class="mt-2 text-sm text-zinc-300">
+              Backend: 3 arquivos de teste (auth, homegame, session — todos mockados). Frontend: zero. Vitest configurado mas subutilizado.
+            </p>
+            <div class="mt-3 grid grid-cols-2 gap-2">
+              <div class="rounded-lg bg-sx-bg/50 px-3 py-2 text-xs">
+                <span class="text-sx-muted">Backend:</span> <span class="text-sev-high font-bold">3 testes</span>
+              </div>
+              <div class="rounded-lg bg-sx-bg/50 px-3 py-2 text-xs">
+                <span class="text-sx-muted">Frontend:</span> <span class="text-sev-high font-bold">0 testes</span>
+              </div>
+            </div>
+            <div class="mt-3 rounded-lg border border-sx-cyan/30 bg-sx-cyan/5 p-3 text-sm">
+              <span class="text-sx-cyan font-semibold">▸ Fix:</span>
+              <span class="text-zinc-200"> Prioridade: <code class="text-sx-cyan">annapay.service.ts</code>, cashout flow, reconciliação bancária e cálculo de acerto. Meta: 70% nas camadas críticas.</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-sev-high/40 bg-sx-card overflow-hidden">
+        <div class="flex items-start gap-4 p-6">
+          <div class="flex-none">
+            <div class="rounded-lg border border-sev-high/50 bg-sev-high/10 px-3 py-1 text-xs font-bold text-sev-high">QUAL-002</div>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-lg font-bold text-white">Zero pipeline de CI/CD</h3>
+            <p class="mt-2 text-sm text-zinc-300">
+              Nenhum <code class="text-sx-cyan">.github/workflows/</code>. Deploy manual (Vercel + Railway no push). Nada valida TS/lint/testes antes de mergar.
+            </p>
+            <div class="mt-3 rounded-lg border border-sx-cyan/30 bg-sx-cyan/5 p-3 text-sm">
+              <span class="text-sx-cyan font-semibold">▸ Fix:</span>
+              <span class="text-zinc-200"> Workflow mínimo em PR: <code class="text-sx-cyan">npm run lint &amp;&amp; tsc --noEmit &amp;&amp; npm run build</code>. Adicionar testes quando existirem.</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- MEDIUM FINDINGS -->
+<section class="border-y border-sx-border2 bg-sx-card/30">
+  <div class="mx-auto max-w-6xl px-6 py-12">
+    <div class="flex items-center gap-3">
+      <div class="h-3 w-3 rounded-full bg-sev-med shadow-[0_0_12px_rgba(245,183,58,0.8)]"></div>
+      <h2 class="text-2xl font-bold tracking-tight">12 findings médios</h2>
+    </div>
+    <p class="mt-2 text-zinc-400">Dívida técnica em acumulação. Sprints 1-3.</p>
+
+    <div class="mt-8 grid gap-3 sm:grid-cols-2">
+      <!-- SEC -->
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">SEC-004</div>
+          <span class="text-xs text-sx-muted">Segurança</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Sem refresh token</h4>
+        <p class="mt-1 text-xs text-zinc-400">Sessão de 7 dias, sem revogação. JWT roubado = acesso prolongado.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">SEC-005</div>
+          <span class="text-xs text-sx-muted">Segurança</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Sem rate limiting</h4>
+        <p class="mt-1 text-xs text-zinc-400">/auth/login sem limite. Brute force de CPF/senha livre.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">SEC-007</div>
+          <span class="text-xs text-sx-muted">Segurança</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Webhook sem checagem de tenant</h4>
+        <p class="mt-1 text-xs text-zinc-400">Não valida se virtual account do webhook bate com sessionId.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">SEC-008</div>
+          <span class="text-xs text-sx-muted">Segurança</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Sem audit log financeiro</h4>
+        <p class="mt-1 text-xs text-zinc-400">Impossível rastrear quem executou operação ou reembolso depois.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">SEC-002/003*</div>
+          <span class="text-xs text-sx-muted">Segurança</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Secrets no .env local</h4>
+        <p class="mt-1 text-xs text-zinc-400">Arquivo ignorado pelo git (não vazou), mas cuidado ao compartilhar.</p>
+      </div>
+
+      <!-- DATA -->
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">DATA-002</div>
+          <span class="text-xs text-sx-muted">Data</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">updatedAt ausente em pendings</h4>
+        <p class="mt-1 text-xs text-zinc-400">PrepaidChargePending e derivados não rastreiam mudança de estado.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">DATA-003</div>
+          <span class="text-xs text-sx-muted">Data</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Sem CHECK em valores</h4>
+        <p class="mt-1 text-xs text-zinc-400">Banco permite amount&lt;0 e balance&lt;0 sem constraint.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">DATA-004</div>
+          <span class="text-xs text-sx-muted">Data</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Tenant isolation frágil</h4>
+        <p class="mt-1 text-xs text-zinc-400">SangeurShiftMovement depende de JOIN aninhado pra segregar.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">DATA-006</div>
+          <span class="text-xs text-sx-muted">Data</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Seed não gera CPFs</h4>
+        <p class="mt-1 text-xs text-zinc-400">Migration cpf NOT NULL + seed sem cpf = falha em deploy limpo.</p>
+      </div>
+
+      <!-- QUAL -->
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">QUAL-003</div>
+          <span class="text-xs text-sx-muted">Qualidade</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">Sem ESLint/Prettier config</h4>
+        <p class="mt-1 text-xs text-zinc-400">Nada enforça padrão de código. Sem pre-commit hook.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">QUAL-004</div>
+          <span class="text-xs text-sx-muted">Qualidade</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">as any em código crítico</h4>
+        <p class="mt-1 text-xs text-zinc-400">annapay, cashier, homegame-auth — bypass de type safety.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="rounded bg-sev-med/10 px-2 py-0.5 text-[10px] font-bold text-sev-med">QUAL-005</div>
+          <span class="text-xs text-sx-muted">Qualidade</span>
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-white">console.log sem correlação</h4>
+        <p class="mt-1 text-xs text-zinc-400">37 ocorrências no backend. Sem logger estruturado nem requestId.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOW FINDINGS -->
+<section>
+  <div class="mx-auto max-w-6xl px-6 py-12">
+    <div class="flex items-center gap-3">
+      <div class="h-3 w-3 rounded-full bg-sev-low shadow-[0_0_12px_rgba(33,192,122,0.8)]"></div>
+      <h2 class="text-2xl font-bold tracking-tight">4 findings leves</h2>
+    </div>
+    <p class="mt-2 text-zinc-400">Enxugar quando houver folga.</p>
+
+    <div class="mt-6 grid gap-3 sm:grid-cols-2">
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-center gap-3">
+          <div class="rounded bg-sev-low/10 px-2 py-0.5 text-[10px] font-bold text-sev-low">SEC-009</div>
+          <span class="text-sm font-semibold text-white">CPF validado só por dígito</span>
+        </div>
+        <p class="mt-2 text-xs text-zinc-400">111.111.111-11 passa na validação matemática.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-center gap-3">
+          <div class="rounded bg-sev-low/10 px-2 py-0.5 text-[10px] font-bold text-sev-low">SEC-010</div>
+          <span class="text-sm font-semibold text-white">Senha mínima 6 chars</span>
+        </div>
+        <p class="mt-2 text-xs text-zinc-400">NIST recomenda 12+. Aumentar mínimo.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-center gap-3">
+          <div class="rounded bg-sev-low/10 px-2 py-0.5 text-[10px] font-bold text-sev-low">DATA-005</div>
+          <span class="text-sm font-semibold text-white">Tabelas WhatsApp órfãs</span>
+        </div>
+        <p class="mt-2 text-xs text-zinc-400">Schema criado, feature removida no último commit. Dropar.</p>
+      </div>
+      <div class="rounded-lg border border-sx-border bg-sx-card p-4">
+        <div class="flex items-center gap-3">
+          <div class="rounded bg-sev-low/10 px-2 py-0.5 text-[10px] font-bold text-sev-low">QUAL-007</div>
+          <span class="text-sm font-semibold text-white">Pastas vazias na raiz</span>
+        </div>
+        <p class="mt-2 text-xs text-zinc-400">/homegames/ e /torneios/ — limpar.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PLANO DE AÇÃO -->
+<section class="border-t border-sx-border2 bg-gradient-to-b from-sx-card/30 to-sx-bg">
+  <div class="mx-auto max-w-6xl px-6 py-12">
+    <h2 class="text-2xl font-bold tracking-tight">Plano de ação</h2>
+    <p class="mt-2 text-zinc-400">4 sprints sugeridos em ordem de criticidade.</p>
+
+    <div class="mt-10 space-y-6">
+
+      <!-- SPRINT 0 -->
+      <div class="relative rounded-2xl border border-sev-high/40 bg-sx-card p-6 shadow-sx-glow-sm">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="text-[10px] uppercase tracking-[0.3em] text-sev-high font-bold">Sprint 0 • Bloqueador</span>
+            <h3 class="mt-2 text-xl font-bold text-white">Travar a fundação</h3>
+          </div>
+          <span class="rounded-full border border-sev-high/40 bg-sev-high/10 px-3 py-1 text-xs font-bold text-sev-high">1-2 dias</span>
+        </div>
+        <ul class="mt-5 space-y-2 text-sm text-zinc-200">
+          <li class="flex items-start gap-3"><span class="mt-1 text-sev-high">●</span> <span><strong class="text-white">SEC-001</strong> — HMAC no webhook ANNAPAY (crítico, não tem volta se explorar)</span></li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sev-high">●</span> <span><strong class="text-white">SEC-006</strong> — Unique constraint em chargeId + INSERT ON CONFLICT</span></li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sev-high">●</span> <span><strong class="text-white">QUAL-002</strong> — CI mínimo em PR (lint + typecheck + build)</span></li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sev-high">●</span> <span><strong class="text-white">QUAL-007</strong> — Deletar pastas órfãs /homegames/ e /torneios/</span></li>
+        </ul>
+      </div>
+
+      <!-- SPRINT 1 -->
+      <div class="relative rounded-2xl border border-sx-border bg-sx-card p-6">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="text-[10px] uppercase tracking-[0.3em] text-sx-cyan font-bold">Sprint 1 • Fundação operacional</span>
+            <h3 class="mt-2 text-xl font-bold text-white">Teste e observabilidade</h3>
+          </div>
+          <span class="rounded-full border border-sx-border2 bg-sx-bg px-3 py-1 text-xs text-zinc-300">1 semana</span>
+        </div>
+        <ul class="mt-5 space-y-2 text-sm text-zinc-200">
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-cyan">▸</span> Testes de annapay.service.ts — cenários de webhook duplicado, valor errado, account trocado</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-cyan">▸</span> Testes de reconciliação bancária e cashout flow</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-cyan">▸</span> Trocar console.log por pino com requestId middleware</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-cyan">▸</span> ESLint + Prettier + Husky pre-commit</li>
+        </ul>
+      </div>
+
+      <!-- SPRINT 2 -->
+      <div class="relative rounded-2xl border border-sx-border bg-sx-card p-6">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="text-[10px] uppercase tracking-[0.3em] text-sx-cyan font-bold">Sprint 2 • Integridade</span>
+            <h3 class="mt-2 text-xl font-bold text-white">Data layer e auth</h3>
+          </div>
+          <span class="rounded-full border border-sx-border2 bg-sx-bg px-3 py-1 text-xs text-zinc-300">1 semana</span>
+        </div>
+        <ul class="mt-5 space-y-2 text-sm text-zinc-200">
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-cyan">▸</span> <strong class="text-white">DATA-001</strong> — registeredBy → FK com backfill</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-cyan">▸</span> <strong class="text-white">DATA-003</strong> — CHECK constraints em amount/balance</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-cyan">▸</span> <strong class="text-white">SEC-005</strong> — express-rate-limit em /auth/login</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-cyan">▸</span> <strong class="text-white">SEC-008</strong> — Tabela AuditLog + middleware em ops financeiras/admin</li>
+        </ul>
+      </div>
+
+      <!-- SPRINT 3 -->
+      <div class="relative rounded-2xl border border-sx-border bg-sx-card p-6">
+        <div class="flex items-start justify-between">
+          <div>
+            <span class="text-[10px] uppercase tracking-[0.3em] text-sx-muted font-bold">Sprint 3 • Refinamento</span>
+            <h3 class="mt-2 text-xl font-bold text-white">Debt contínuo</h3>
+          </div>
+          <span class="rounded-full border border-sx-border2 bg-sx-bg px-3 py-1 text-xs text-zinc-300">Contínuo</span>
+        </div>
+        <ul class="mt-5 space-y-2 text-sm text-zinc-300">
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-muted">◆</span> Refresh token pattern (SEC-004)</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-muted">◆</span> updatedAt nos pendings (DATA-002)</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-muted">◆</span> Decidir: implementar WhatsApp ou dropar modelo (DATA-005)</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-muted">◆</span> Erradicar as any com type guards / zod (QUAL-004)</li>
+          <li class="flex items-start gap-3"><span class="mt-1 text-sx-muted">◆</span> Docs: README, OpenAPI, diagrama de arquitetura (QUAL-008)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHALLENGE PHASE -->
+<section class="border-y border-sx-border2 bg-sx-card/30">
+  <div class="mx-auto max-w-6xl px-6 py-12">
+    <h2 class="text-2xl font-bold tracking-tight">Challenge phase — o que pode estar errado</h2>
+    <p class="mt-2 text-zinc-400">Auto-crítica do orquestrador antes de fechar.</p>
+
+    <div class="mt-8 grid gap-4 sm:grid-cols-2">
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="text-sm font-semibold text-sx-cyan">Cobertura da auditoria</div>
+        <p class="mt-2 text-sm text-zinc-300">3 agents varreram em paralelo — security, data, quality. Cada finding tem evidência arquivo:linha. Suficiente pra panorama, insuficiente pra compliance PCI/SOC2.</p>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="text-sm font-semibold text-sx-cyan">RLS do Postgres não testado</div>
+        <p class="mt-2 text-sm text-zinc-300">Analisei só o schema Prisma. Se tem policies no PG elas podem estar desatualizadas ou ausentes em tabelas novas.</p>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="text-sm font-semibold text-sx-cyan">Runtime não exercitado</div>
+        <p class="mt-2 text-sm text-zinc-300">Não rodei o backend local — pode ter memory leak em socket.io, race conditions em cashier/session não visíveis no código.</p>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5">
+        <div class="text-sm font-semibold text-sx-cyan">Frontend raso</div>
+        <p class="mt-2 text-sm text-zinc-300">Não analisei XSS, CSRF, armazenamento de JWT (provável localStorage — revisar). Escopo ficou backend-heavy.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- VERDICT -->
+<section>
+  <div class="mx-auto max-w-6xl px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight">Final verdict</h2>
+
+    <div class="mt-8 rounded-2xl border border-sx-cyan/40 bg-gradient-to-br from-sx-card2 to-sx-card p-8 shadow-sx-glow-lg">
+      <p class="text-lg leading-relaxed text-zinc-200">
+        O projeto tem <strong class="text-white">arquitetura sólida</strong> e entregou valor (LP no ar, app em produção, pagamentos funcionando). Mas está em
+        <strong class="text-sev-med">zona cinzenta pra escala</strong>: a integração ANNAPAY é o calcanhar de Aquiles — sem HMAC e sem idempotency, um atacante com acesso ao secret consegue injetar transações. Zero testes significa que qualquer refactor pode quebrar algo silenciosamente.
+      </p>
+      <p class="mt-4 text-lg leading-relaxed text-zinc-200">
+        <strong class="text-sx-cyan">Prioridade absoluta:</strong> os 5 HIGH do Sprint 0. Os outros 16 são melhorias graduais que podem entrar no backlog normal, atacadas em ordem de criticidade.
+      </p>
+    </div>
+
+    <div class="mt-10 grid gap-3 sm:grid-cols-3">
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5 text-center">
+        <div class="text-3xl font-black text-sev-high">5</div>
+        <div class="mt-1 text-xs uppercase tracking-widest text-sx-muted">Para hoje</div>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5 text-center">
+        <div class="text-3xl font-black text-sev-med">12</div>
+        <div class="mt-1 text-xs uppercase tracking-widest text-sx-muted">Próximas 2 semanas</div>
+      </div>
+      <div class="rounded-xl border border-sx-border bg-sx-card p-5 text-center">
+        <div class="text-3xl font-black text-sev-low">4</div>
+        <div class="mt-1 text-xs uppercase tracking-widest text-sx-muted">Backlog contínuo</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="border-t border-sx-border2">
+  <div class="mx-auto max-w-6xl px-6 py-10">
+    <div class="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+      <div class="flex flex-col items-start leading-none gap-1">
+        <span class="text-xl font-black tracking-tight text-sx-cyan" style="text-shadow: 0 0 14px rgba(0,200,224,0.6);">STACK+</span>
+        <span class="text-[10px] uppercase tracking-[0.3em] text-sx-muted">Orquestrador · Discovery Report</span>
+      </div>
+      <div class="text-xs text-sx-muted">
+        <div>Gerado em 20/04/2026 pelo Universal Production AI Agent Orchestrator</div>
+        <div class="mt-1">Agents consultados: Security Auditor · Data Engineer · Tech Lead</div>
+      </div>
+    </div>
+    <p class="mt-6 text-[10px] text-sx-muted leading-relaxed">
+      * SEC-002/SEC-003 reportados inicialmente como HIGH pelo agent de segurança foram revisados para LOW após validação: o arquivo .env não está tracked pelo git (conferir via <code>git ls-files | grep .env</code>). Secrets seguros no repo remoto, apenas presentes no disco local.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

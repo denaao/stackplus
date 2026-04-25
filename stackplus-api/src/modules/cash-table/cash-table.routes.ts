@@ -62,9 +62,10 @@ router.get('/:tableId/sangrias', authenticate, async (req: AuthRequest, res: Res
 
 // Registrar sangria (parcial ou final)
 router.post('/:tableId/sangria', authenticate, async (req: AuthRequest, res: Response) => {
-  const { rake, caixinha, isFinal, note } = z.object({
+  const { rake, caixinha, jackpot, isFinal, note } = z.object({
     rake: z.number().nonnegative().default(0),
     caixinha: z.number().nonnegative().default(0),
+    jackpot: z.number().nonnegative().default(0),
     isFinal: z.boolean().default(false),
     note: z.string().optional(),
   }).parse(req.body)
@@ -73,6 +74,7 @@ router.post('/:tableId/sangria', authenticate, async (req: AuthRequest, res: Res
     req.params.tableId,
     rake,
     caixinha,
+    jackpot,
     isFinal,
     note,
     req.user!.userId,

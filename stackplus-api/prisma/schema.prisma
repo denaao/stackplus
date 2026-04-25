@@ -341,6 +341,7 @@ model HomeGameSangeurAccess {
 model Session {
   id          String        @id @default(uuid())
   homeGameId  String
+  name        String?
   pokerVariant String?
   gameType    GameType      @default(CASH_GAME)
   financialModule FinancialModule @default(POSTPAID)
@@ -824,6 +825,7 @@ model CashTable {
   caixinhaMode String          @default("SPLIT")
   rake         Decimal         @default(0) @db.Decimal(10, 2)
   caixinha     Decimal         @default(0) @db.Decimal(10, 2)
+  jackpot      Decimal         @default(0) @db.Decimal(10, 2)
   openedAt     DateTime        @default(now())
   closedAt     DateTime?
   createdAt    DateTime        @default(now())
@@ -871,6 +873,7 @@ model CashTableSangria {
   tableId         String
   rake            Decimal   @default(0) @db.Decimal(10, 2)
   caixinha        Decimal   @default(0) @db.Decimal(10, 2)
+  jackpot         Decimal   @default(0) @db.Decimal(10, 2)
   isFinal         Boolean   @default(false)
   note            String?
   createdByUserId String

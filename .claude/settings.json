@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \":*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:supabase.com)",
+      "Bash(npx supabase:*)",
+      "Bash(find 'd:/. github/FXN-Next/FNX-Next' -path */app* -name *.tsx)",
+      "Bash(pnpm install:*)",
+      "Bash(cmd /c \"cd /d \"\"D:\\\\. github\\\\FXN-Next\\\\FNX-Next\"\" && npx supabase db query --linked \"\"SELECT column_name FROM information_schema.columns WHERE table_name = ''lancamentos'' ORDER BY ordinal_position;\"\"\")",
+      "Bash(cmd /c \"cd /d \"\"D:\\\\. github\\\\FXN-Next\\\\FNX-Next\"\" && npx supabase db push\")",
+      "Bash(cmd /c \"cd /d \"\"D:\\\\. github\\\\FXN-Next\\\\FNX-Next\"\" && echo Y | npx supabase db push 2>&1\")",
+      "Bash(bash -c 'cd \"\"/d/. github/FXN-Next/FNX-Next\"\" && echo Y | npx supabase db push 2>&1')",
+      "Bash(bash -c 'cd \"\"D:/. github/FXN-Next/FNX-Next\"\" && printf \"\"Y\\\\n\"\" | npx supabase db push 2>&1')",
+      "Bash(cmd /c \"cd /d \"\"D:\\\\. github\\\\FXN-Next\\\\FNX-Next\"\" && npx vercel --prod 2>&1\")",
+      "Read(//c/Users/Estéfani/Projects/FNX-Next/**)"
+    ]
+  }
+}

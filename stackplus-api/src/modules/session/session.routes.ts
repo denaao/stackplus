@@ -10,6 +10,7 @@ const router = Router()
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   const {
     homeGameId,
+    name,
     pokerVariant,
     gameType,
     financialModule,
@@ -28,6 +29,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     levelsUntilBreak,
   } = z.object({
     homeGameId: z.string().uuid(),
+    name: z.string().max(80).optional(),
     pokerVariant: z.enum(['HOLDEN', 'BUTTON_CHOICE', 'PINEAPPLE', 'OMAHA', 'OMAHA_FIVE', 'OMAHA_SIX']).optional(),
     gameType: z.enum(['CASH_GAME', 'TOURNAMENT']).optional(),
     financialModule: z.enum(['POSTPAID', 'PREPAID', 'HYBRID']).optional(),
@@ -47,6 +49,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   }).parse(req.body)
 
   const session = await SessionService.createSession(homeGameId, req.user!.userId, {
+    name,
     pokerVariant,
     gameType,
     financialModule,

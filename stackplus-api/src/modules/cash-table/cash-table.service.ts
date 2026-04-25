@@ -95,6 +95,7 @@ export async function createSangria(
   tableId: string,
   rake: number,
   caixinha: number,
+  jackpot: number,
   isFinal: boolean,
   note: string | undefined,
   createdByUserId: string,
@@ -115,7 +116,7 @@ export async function createSangria(
 
   return prisma.$transaction(async (tx) => {
     const sangria = await tx.cashTableSangria.create({
-      data: { tableId, rake, caixinha, isFinal, note, createdByUserId },
+      data: { tableId, rake, caixinha, jackpot, isFinal, note, createdByUserId },
     })
 
     await tx.cashTable.update({
@@ -123,6 +124,7 @@ export async function createSangria(
       data: {
         rake: { increment: rake },
         caixinha: { increment: caixinha },
+        jackpot: { increment: jackpot },
         ...(isFinal ? { status: 'CLOSED', closedAt: new Date() } : {}),
       },
     })

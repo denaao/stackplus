@@ -135,6 +135,7 @@ const publicSessionInclude = {
 type GameType = 'CASH_GAME' | 'TOURNAMENT'
 
 type CreateSessionInput = {
+  name?: string
   pokerVariant?: 'HOLDEN' | 'BUTTON_CHOICE' | 'PINEAPPLE' | 'OMAHA' | 'OMAHA_FIVE' | 'OMAHA_SIX'
   gameType?: GameType
   financialModule?: FinancialModule
@@ -190,6 +191,7 @@ export async function createSession(homeGameId: string, hostId: string, input: C
   return prisma.session.create({
     data: {
       homeGameId,
+      name: input.name ?? null,
       status: 'WAITING',
       pokerVariant: input.pokerVariant ?? null,
       gameType: finalGameType,
