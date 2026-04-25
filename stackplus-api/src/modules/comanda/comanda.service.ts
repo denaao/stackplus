@@ -1065,16 +1065,21 @@ export async function closeComanda({
     )
   }
 
-  // Verifica se o jogador ainda está em alguma sessão de cash game ativa
-  const activeCashGame = await db.playerSessionState.findFirst({
+  // Verifica se o jogador ainda tem seat ativo em mesa aberta de cash game.
+  // Usar CashTableSeat (não playerSessionState) porque um jogador pode ter
+  // hasCashedOut=false no estado da sessão mesmo com todas as mesas fechadas
+  // via sangria — o que não deve bloquear o fechamento da comanda.
+  const activeCashSeat = await db.cashTableSeat.findFirst({
     where: {
       userId: comanda.playerId,
       hasCashedOut: false,
-      session: { status: 'ACTIVE' },
+      table: {
+        status: 'OPEN',
+        session: { status: 'ACTIVE' },
+      },
     },
-    include: { session: { select: { id: true } } },
   })
-  if (activeCashGame) {
+  if (activeCashSeat) {
     throw new Error(
       'Jogador ainda está em uma sessão de Cash Game ativa. Realize o cash out antes de fechar a comanda.'
     )
