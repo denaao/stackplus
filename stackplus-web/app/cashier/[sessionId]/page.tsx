@@ -31,6 +31,7 @@ interface CashTableSangria {
   id: string
   rake: string
   caixinha: string
+  jackpot: string
   isFinal: boolean
   note: string | null
   createdAt: string
@@ -44,6 +45,7 @@ interface CashTable {
   caixinhaMode: 'SPLIT' | 'INDIVIDUAL'
   rake: string
   caixinha: string
+  jackpot: string
   openedAt: string
   closedAt: string | null
   seats: CashTableSeat[]
