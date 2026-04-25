@@ -273,6 +273,7 @@ export default function CashierPage() {
   // Mesa / Sangria
   const [showOpenTableModal, setShowOpenTableModal] = useState(false)
   const [showNewPlayerPicker, setShowNewPlayerPicker] = useState(false)
+  const [addedPlayers, setAddedPlayers] = useState<Member[]>([])
   const [openTableForm, setOpenTableForm] = useState({ name: 'Mesa 1', caixinhaMode: 'SPLIT' as 'SPLIT' | 'INDIVIDUAL' })
   const [openTableLoading, setOpenTableLoading] = useState(false)
   const [sangriaTableId, setSangriaTableId] = useState<string | null>(null)
@@ -547,6 +548,7 @@ export default function CashierPage() {
       applyRegisterResult(data as CashierRegisterResponse)
       await refreshCashierSnapshot()
       setSuccess('Transação registrada!')
+      setAddedPlayers((prev) => prev.filter((p) => p.id !== form.userId))
       setForm({ userId: '', amount: '', chips: '', note: '', tableId: form.tableId })
       setTransactionType('BUYIN')
       setTimeout(() => setSuccess(''), 2000)
@@ -907,8 +909,12 @@ export default function CashierPage() {
   )
   const selectedPlayerCurrentStack = Number(selectedPlayerActiveSeat?.currentStack || 0)
   const hasExistingBuyIn = Boolean(selectedPlayerState)
-  // Todos os membros do home game são selecionáveis no formulário de transação
-  const selectableMembers = allHomeGameMembers.length > 0 ? allHomeGameMembers : members
+  // Select mostra só quem já está na sessão + quem foi adicionado via botão "+"
+  const sessionMembers = allHomeGameMembers.filter((m) => playerStates.some((ps) => ps.userId === m.id))
+  const selectableMembers = [
+    ...sessionMembers,
+    ...addedPlayers.filter((ap) => !sessionMembers.some((sm) => sm.id === ap.id)),
+  ]
   // Jogadores do home game que ainda não entraram nesta sessão (sem playerState)
   const playersNotYetInGame = allHomeGameMembers.filter((m) => !playerStates.some((ps) => ps.userId === m.id))
   // Total de fichas em jogo = soma dos stacks de todos os seats ativos
@@ -1260,6 +1266,7 @@ export default function CashierPage() {
                           key={m.id}
                           type="button"
                           onClick={() => {
+                            setAddedPlayers((prev) => prev.some((p) => p.id === m.id) ? prev : [...prev, m])
                             setForm((prev) => ({ ...prev, userId: m.id }))
                             setTransactionType('BUYIN')
                             setShowNewPlayerPicker(false)
