@@ -117,25 +117,29 @@ export async function createSangria(
     }
   }
 
-  // Validação: sangria não pode exceder fichas disponíveis na mesa
+  // Validação: sangria não pode exceder fichas disponíveis na sessão
+  // (usa sessionId pois transações podem não ter tableId preenchido)
   const chipValue = Number(table.session.chipValue || 1)
-  const [chipsInAgg, chipsOutAgg] = await Promise.all([
+  const sessionId = table.sessionId
+  const [chipsInAgg, chipsOutAgg, allTables] = await Promise.all([
     prisma.transaction.aggregate({
-      where: { tableId, type: { in: ['BUYIN', 'REBUY', 'ADDON'] } },
+      where: { sessionId, type: { in: ['BUYIN', 'REBUY', 'ADDON'] } },
       _sum: { chips: true },
     }),
     prisma.transaction.aggregate({
-      where: { tableId, type: 'CASHOUT' },
+      where: { sessionId, type: 'CASHOUT' },
       _sum: { chips: true },
     }),
+    prisma.cashTable.findMany({ where: { sessionId } }),
   ])
   const totalChipsIn = Number(chipsInAgg._sum.chips || 0)
   const totalChipsOut = Number(chipsOutAgg._sum.chips || 0)
-  const existingSangriaChips = Math.round((Number(table.rake) + Number(table.caixinha) + Number(table.jackpot)) / chipValue)
-  const newSangriaChips = Math.round((rake + caixinha + jackpot) / chipValue)
+  const existingSangriaReais = allTables.reduce((sum, t) => sum + Number(t.rake) + Number(t.caixinha) + Number(t.jackpot), 0)
+  const existingSangriaChips = chipValue > 0 ? Math.round(existingSangriaReais / chipValue) : 0
+  const newSangriaChips = chipValue > 0 ? Math.round((rake + caixinha + jackpot) / chipValue) : 0
   const availableChips = totalChipsIn - totalChipsOut - existingSangriaChips
   if (newSangriaChips > availableChips) {
-    throw new Error(`Sangria excede fichas disponíveis na mesa. Disponível: ${availableChips} fichas (${(availableChips * chipValue).toFixed(2)} R$)`)
+    throw new Error(`Sangria excede fichas disponíveis. Disponível: ${availableChips} fichas (R$ ${(availableChips * chipValue).toFixed(2)})`)
   }
 
   return prisma.$transaction(async (tx) => {

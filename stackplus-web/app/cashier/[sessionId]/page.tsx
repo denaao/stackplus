@@ -1169,6 +1169,11 @@ export default function CashierPage() {
                       <span style={{ fontSize: '12px', color: '#4A7A90' }}>
                         Caixinha <span style={{ color: '#e2e8f0', fontWeight: 700 }}>R$ {Number(table.caixinha).toFixed(2)}</span>
                       </span>
+                      {isJackpotEnabled && Number(table.jackpot) > 0 && (
+                        <span style={{ fontSize: '12px', color: '#00C8E0' }}>
+                          Jackpot <span style={{ fontWeight: 700 }}>R$ {Number(table.jackpot).toFixed(2)}</span>
+                        </span>
+                      )}
                       {table.status === 'OPEN' && (
                         <button
                           type="button"
