@@ -263,6 +263,7 @@ export default function CashierPage() {
   const sessionId = params.sessionId as string
   const [session, setSession] = useState<CashierSession | null>(null)
   const [members, setMembers] = useState<Member[]>([])
+  const [allHomeGameMembers, setAllHomeGameMembers] = useState<Member[]>([])
   const [playerStates, setPlayerStates] = useState<PlayerState[]>([])
   const [tables, setTables] = useState<CashTable[]>([])
   const [transactions, setTransactions] = useState<CashierTransaction[]>([])
@@ -385,6 +386,7 @@ export default function CashierPage() {
         ? allMembers.filter((member) => allowedIds.has(member.id))
         : allMembers
       setMembers(filteredMembers)
+      setAllHomeGameMembers(allMembers)
       setTransactions(transactionsResponse.data)
       refreshTables(true)
     })
@@ -905,8 +907,8 @@ export default function CashierPage() {
   const hasExistingBuyIn = Boolean(selectedPlayerState)
   // Todos os membros são selecionáveis — quem fez cashout pode re-entrar com novo buy-in
   const selectableMembers = members
-  // Jogadores que nunca entraram na sessão (sem playerState)
-  const playersNotYetInGame = members.filter((m) => !playerStates.some((ps) => ps.userId === m.id))
+  // Jogadores do home game que ainda não entraram nesta sessão (sem playerState)
+  const playersNotYetInGame = allHomeGameMembers.filter((m) => !playerStates.some((ps) => ps.userId === m.id))
   // Total de fichas em jogo = soma dos stacks de todos os seats ativos
   const totalChipsInPlay = tables.flatMap((t) => t.seats).filter((s) => !s.hasCashedOut).reduce((sum, s) => sum + Number(s.currentStack || 0), 0)
   // Totais de rake e caixinha de todas as mesas (para pré-popular o endForm)
