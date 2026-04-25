@@ -82,6 +82,7 @@ interface CashierSession {
   gameType?: 'CASH_GAME' | 'TOURNAMENT'
   caixinhaMode?: 'SPLIT' | 'INDIVIDUAL'
   jackpotEnabled?: boolean
+  jackpotAccumulated?: string | number
   homeGame: {
     id: string
     hostId: string
@@ -922,6 +923,7 @@ export default function CashierPage() {
   // Totais de rake e caixinha de todas as mesas (para pré-popular o endForm)
   const totalTablesRake = tables.reduce((sum, t) => sum + Number(t.rake || 0), 0)
   const totalTablesCaixinha = tables.reduce((sum, t) => sum + Number(t.caixinha || 0), 0)
+  const totalTablesJackpot = tables.reduce((sum, t) => sum + Number(t.jackpot || 0), 0)
   const currentType = transactionType
 
   const allPlayersHaveCashedOut = playerStates.length > 0 && playerStates.every((p) => p.hasCashedOut)
@@ -963,7 +965,7 @@ export default function CashierPage() {
   const jackpotDistributed = transactions
     .filter((transaction) => transaction.type === 'JACKPOT')
     .reduce((sum, transaction) => sum + Number(transaction.amount), 0)
-  const jackpotAtual = Number(session?.homeGame?.jackpotAccumulated || 0)
+  const jackpotAtual = Number(session?.jackpotAccumulated ?? session?.homeGame?.jackpotAccumulated ?? 0)
   const staffAssignments: StaffAssignment[] = Array.isArray(session?.staffAssignments) ? session.staffAssignments : []
   const rakebackAssignments: RakebackAssignment[] = Array.isArray(session?.rakebackAssignments) ? session.rakebackAssignments : []
   const caixinhaMode: 'SPLIT' | 'INDIVIDUAL' = session?.caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
@@ -1240,6 +1242,7 @@ export default function CashierPage() {
                     ...p,
                     rake: totalTablesRake > 0 ? String(totalTablesRake) : p.rake,
                     caixinha: totalTablesCaixinha > 0 ? String(totalTablesCaixinha) : p.caixinha,
+                    jackpotArrecadado: totalTablesJackpot > 0 ? String(totalTablesJackpot) : p.jackpotArrecadado,
                   }))
                 }}
                 style={{ width: '100%', background: 'linear-gradient(135deg,#005A73,#002A3A)', border: '1px solid rgba(0,200,224,0.35)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '14px', cursor: 'pointer' }}
@@ -1737,7 +1740,16 @@ export default function CashierPage() {
               <div style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,200,224,0.12)', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px' }}>
                 <p style={{ fontSize: '12px', color: '#4A7A90', margin: '0 0 4px' }}>JACKPOT distribuído nesta partida</p>
                 <p style={{ fontWeight: 700, fontSize: '16px', color: '#00C8E0', margin: '0 0 4px' }}>{formatCurrency(jackpotDistributed)}</p>
-                <p style={{ fontSize: '12px', color: '#4A7A90', margin: 0 }}>Jackpot atual: {formatCurrency(jackpotAtual)} → projetado: <span style={{ color: '#86efac' }}>{formatCurrency(jackpotProjetado)}</span></p>
+                {transactions.filter((t) => t.type === 'JACKPOT').map((t) => {
+                  const ps = playerStates.find((p) => p.userId === t.userId)
+                  const name = ps?.user?.name ?? t.userId
+                  return (
+                    <p key={t.id} style={{ fontSize: '12px', color: '#86efac', margin: '2px 0 0' }}>
+                      ↳ {name}: {formatCurrency(t.amount)}
+                    </p>
+                  )
+                })}
+                <p style={{ fontSize: '12px', color: '#4A7A90', margin: '6px 0 0' }}>Jackpot inicial: {formatCurrency(jackpotAtual)} → projetado: <span style={{ color: '#86efac' }}>{formatCurrency(jackpotProjetado)}</span></p>
               </div>
             )}
 

@@ -346,6 +346,7 @@ model Session {
   gameType    GameType      @default(CASH_GAME)
   financialModule FinancialModule @default(POSTPAID)
   jackpotEnabled Boolean    @default(false)
+  jackpotAccumulated Decimal? @db.Decimal(10, 2)
   chipValue   Decimal?      @db.Decimal(10, 2)
   smallBlind  Decimal?      @db.Decimal(10, 2)
   bigBlind    Decimal?      @db.Decimal(10, 2)

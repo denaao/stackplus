@@ -140,6 +140,7 @@ type CreateSessionInput = {
   gameType?: GameType
   financialModule?: FinancialModule
   jackpotEnabled?: boolean
+  jackpotAccumulated?: number
   chipValue?: number
   smallBlind?: number
   bigBlind?: number
@@ -197,6 +198,9 @@ export async function createSession(homeGameId: string, hostId: string, input: C
       gameType: finalGameType,
       financialModule: finalFinancialModule,
         jackpotEnabled: input.jackpotEnabled ?? false,
+        jackpotAccumulated: input.jackpotEnabled
+          ? (input.jackpotAccumulated ?? Number(game.jackpotAccumulated))
+          : null,
       chipValue: finalGameType === 'CASH_GAME'
         ? (input.chipValue ?? Number(game.chipValue))
         : null,
@@ -310,7 +314,7 @@ export async function finishSession(
   const jackpotDistribuido = session.transactions
     .filter((transaction) => transaction.type === 'JACKPOT')
     .reduce((sum, transaction) => sum + Number(transaction.amount), 0)
-  const jackpotAtual = Number(session.homeGame.jackpotAccumulated || 0)
+  const jackpotAtual = Number((session as unknown as { jackpotAccumulated?: string | number }).jackpotAccumulated ?? session.homeGame.jackpotAccumulated ?? 0)
   const jackpotNovo = amountToFixed(Math.max(0, jackpotAtual + jackpotArrecadado - jackpotDistribuido))
 
   const rakebackPercentTotal = session.rakebackAssignments.reduce((sum, assignment) => {

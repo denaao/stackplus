@@ -249,6 +249,7 @@ export default function HomeGamePage() {
         gameType: 'CASH_GAME',
         financialModule: newSessionFinancialModule,
         jackpotEnabled: newSessionJackpotEnabled,
+        ...(newSessionJackpotEnabled ? { jackpotAccumulated: parseFloat(jackpotAccumulated) || 0 } : {}),
         chipValue,
         smallBlind,
         bigBlind,
