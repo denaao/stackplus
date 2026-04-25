@@ -102,7 +102,10 @@ export async function createSangria(
 ) {
   const table = await prisma.cashTable.findUniqueOrThrow({
     where: { id: tableId },
-    include: { seats: true },
+    include: {
+      seats: true,
+      session: { select: { chipValue: true } },
+    },
   })
 
   if (table.status === 'CLOSED') throw new Error('Mesa já está fechada')
@@ -112,6 +115,27 @@ export async function createSangria(
     if (hasActivePlayers) {
       throw new Error('Todos os jogadores devem fazer cashout antes da sangria final')
     }
+  }
+
+  // Validação: sangria não pode exceder fichas disponíveis na mesa
+  const chipValue = Number(table.session.chipValue || 1)
+  const [chipsInAgg, chipsOutAgg] = await Promise.all([
+    prisma.transaction.aggregate({
+      where: { tableId, type: { in: ['BUYIN', 'REBUY', 'ADDON'] } },
+      _sum: { chips: true },
+    }),
+    prisma.transaction.aggregate({
+      where: { tableId, type: 'CASHOUT' },
+      _sum: { chips: true },
+    }),
+  ])
+  const totalChipsIn = Number(chipsInAgg._sum.chips || 0)
+  const totalChipsOut = Number(chipsOutAgg._sum.chips || 0)
+  const existingSangriaChips = Math.round((Number(table.rake) + Number(table.caixinha) + Number(table.jackpot)) / chipValue)
+  const newSangriaChips = Math.round((rake + caixinha + jackpot) / chipValue)
+  const availableChips = totalChipsIn - totalChipsOut - existingSangriaChips
+  if (newSangriaChips > availableChips) {
+    throw new Error(`Sangria excede fichas disponíveis na mesa. Disponível: ${availableChips} fichas (${(availableChips * chipValue).toFixed(2)} R$)`)
   }
 
   return prisma.$transaction(async (tx) => {

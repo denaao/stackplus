@@ -935,7 +935,10 @@ export default function CashierPage() {
       .filter((p) => p.in > 0 || p.out > 0)
       .sort((a, b) => b.result - a.result)
   })()
-  const pendingChips = pendingChipsByPlayer.reduce((sum, p) => sum + p.remaining, 0)
+  // Fichas removidas via sangria (rake + caixinha + jackpot de todas as mesas, convertido para fichas)
+  const totalSangriaReais = tables.reduce((sum, t) => sum + Number(t.rake || 0) + Number(t.caixinha || 0) + Number(t.jackpot || 0), 0)
+  const totalSangriaChips = chipValue > 0 ? Math.round(totalSangriaReais / chipValue) : 0
+  const pendingChips = Math.max(0, pendingChipsByPlayer.reduce((sum, p) => sum + p.remaining, 0) - totalSangriaChips)
   const canEndSession = pendingChips === 0 && !hasOpenTables
   const jackpotDistributed = transactions
     .filter((transaction) => transaction.type === 'JACKPOT')
