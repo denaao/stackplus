@@ -320,12 +320,12 @@ function ComandasContent() {
 
           {homeGameId && !isHistoryMode && canManage && (
             <button
-              onClick={() => setShowCloseCashboxModal(true)}
+              onClick={() => router.push(`/comanda/caixa?homeGameId=${homeGameId}`)}
               className="ml-auto px-4 py-1.5 rounded-lg text-xs font-bold transition-all"
               style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', color: '#fbbf24' }}
-              title="Gera relatório com todas as entradas e saídas e fecha as comandas abertas"
+              title="Ver relatório de caixa do dia"
             >
-              🔒 Fechar caixa
+              📊 Caixa do dia
             </button>
           )}
         </div>
