@@ -1400,7 +1400,8 @@ export default function CashierPage() {
                           <div style={{ borderTop: '1px solid rgba(0,200,224,0.08)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <p style={{ fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>Transações</p>
                             {playerTransactions.map((tx) => {
-                              const isSangeur = typeof tx.registeredBy === 'string' && tx.registeredBy.startsWith('sangeur:')
+                              const isSangeur = (typeof tx.registeredBy === 'string' && tx.registeredBy.startsWith('sangeur:')) ||
+                                (typeof tx.note === 'string' && tx.note.startsWith('Venda SANGEUR'))
                               return (
                                 <div key={tx.id} style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,200,224,0.06)', borderRadius: '8px', padding: '8px 10px' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
@@ -1424,7 +1425,7 @@ export default function CashierPage() {
                                       <p style={{ fontSize: '11px', color: '#4A7A90', margin: 0 }}>{formatChips(tx.chips)} fichas</p>
                                     </div>
                                   </div>
-                                  {tx.note && <p style={{ fontSize: '11px', color: '#4A7A90', marginTop: '4px' }}>{tx.note}</p>}
+                                  {tx.note && !isSangeur && <p style={{ fontSize: '11px', color: '#4A7A90', marginTop: '4px' }}>{tx.note}</p>}
                                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
                                     <button
                                       type="button"
