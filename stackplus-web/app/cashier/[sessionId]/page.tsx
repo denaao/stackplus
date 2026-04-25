@@ -269,6 +269,7 @@ export default function CashierPage() {
   const [form, setForm] = useState({ userId: '', amount: '', chips: '', note: '', tableId: '' })
   // Mesa / Sangria
   const [showOpenTableModal, setShowOpenTableModal] = useState(false)
+  const [showNewPlayerPicker, setShowNewPlayerPicker] = useState(false)
   const [openTableForm, setOpenTableForm] = useState({ name: 'Mesa 1', caixinhaMode: 'SPLIT' as 'SPLIT' | 'INDIVIDUAL' })
   const [openTableLoading, setOpenTableLoading] = useState(false)
   const [sangriaTableId, setSangriaTableId] = useState<string | null>(null)
@@ -830,6 +831,13 @@ export default function CashierPage() {
   }
 
   useEffect(() => {
+    if (!showNewPlayerPicker) return
+    const handler = () => setShowNewPlayerPicker(false)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [showNewPlayerPicker])
+
+  useEffect(() => {
     if (!showPrepaidModal || !prepaidChargeResult?.charge?.id) return
 
     let stopped = false
@@ -897,6 +905,8 @@ export default function CashierPage() {
   const hasExistingBuyIn = Boolean(selectedPlayerState)
   // Todos os membros são selecionáveis — quem fez cashout pode re-entrar com novo buy-in
   const selectableMembers = members
+  // Jogadores que nunca entraram na sessão (sem playerState)
+  const playersNotYetInGame = members.filter((m) => !playerStates.some((ps) => ps.userId === m.id))
   // Total de fichas em jogo = soma dos stacks de todos os seats ativos
   const totalChipsInPlay = tables.flatMap((t) => t.seats).filter((s) => !s.hasCashedOut).reduce((sum, s) => sum + Number(s.currentStack || 0), 0)
   // Totais de rake e caixinha de todas as mesas (para pré-popular o endForm)
@@ -1226,7 +1236,42 @@ export default function CashierPage() {
         ) : (
           /* === FORMULÁRIO DE TRANSAÇÃO === */
           <div style={cardStyle}>
-            <p style={{ fontWeight: 700, fontSize: '14px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>Registrar transação</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <p style={{ fontWeight: 700, fontSize: '14px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Registrar transação</p>
+              {playersNotYetInGame.length > 0 && (
+                <div style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setShowNewPlayerPicker((v) => !v) }}
+                    title="Inserir novo jogador"
+                    style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.3)', borderRadius: '8px', color: '#00C8E0', fontWeight: 700, fontSize: '18px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+                  >
+                    +
+                  </button>
+                  {showNewPlayerPicker && (
+                    <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: '38px', background: '#0C2438', border: '1px solid rgba(0,200,224,0.2)', borderRadius: '12px', zIndex: 20, minWidth: '200px', padding: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                      <p style={{ fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px', padding: '0 4px' }}>Selecionar jogador</p>
+                      {playersNotYetInGame.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => ({ ...prev, userId: m.id }))
+                            setTransactionType('BUYIN')
+                            setShowNewPlayerPicker(false)
+                          }}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '14px', color: '#e2e8f0', cursor: 'pointer' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,200,224,0.08)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
