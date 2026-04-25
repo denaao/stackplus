@@ -904,6 +904,7 @@ export default function CashierPage() {
   const currentType = transactionType
 
   const allPlayersHaveCashedOut = playerStates.length > 0 && playerStates.every((p) => p.hasCashedOut)
+  const hasOpenTables = tables.some((t) => t.status === 'OPEN')
   const activePlayers = playerStates.filter((p) => !p.hasCashedOut)
   // Seats ativos em todas as mesas abertas
   const activeSeats = tables.filter((t) => t.status === 'OPEN').flatMap((t) => t.seats).filter((s) => !s.hasCashedOut)
@@ -934,6 +935,7 @@ export default function CashierPage() {
       .sort((a, b) => b.result - a.result)
   })()
   const pendingChips = pendingChipsByPlayer.reduce((sum, p) => sum + p.remaining, 0)
+  const canEndSession = pendingChips === 0 && !hasOpenTables
   const jackpotDistributed = transactions
     .filter((transaction) => transaction.type === 'JACKPOT')
     .reduce((sum, transaction) => sum + Number(transaction.amount), 0)
@@ -1193,24 +1195,31 @@ export default function CashierPage() {
               </p>
             )}
             {pendingChips > 0 && (
-              <p style={{ fontSize: '13px', color: '#4A7A90', marginBottom: '12px' }}>
-                Fichas em aberto: <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{formatChips(pendingChips)}</span>
+              <p style={{ fontSize: '13px', color: '#ef4444', marginBottom: '8px' }}>
+                ⚠ Fichas em aberto: <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{formatChips(pendingChips)}</span>
               </p>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                setShowEndModal(true)
-                setEndForm((p) => ({
-                  ...p,
-                  rake: totalTablesRake > 0 ? String(totalTablesRake) : p.rake,
-                  caixinha: totalTablesCaixinha > 0 ? String(totalTablesCaixinha) : p.caixinha,
-                }))
-              }}
-              style={{ width: '100%', background: 'linear-gradient(135deg,#005A73,#002A3A)', border: '1px solid rgba(0,200,224,0.35)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '14px', cursor: 'pointer' }}
-            >
-              Encerrar Partida
-            </button>
+            {hasOpenTables && (
+              <p style={{ fontSize: '13px', color: '#ef4444', marginBottom: '8px' }}>
+                ⚠ Feche as mesas abertas com sangria final antes de encerrar.
+              </p>
+            )}
+            {canEndSession && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEndModal(true)
+                  setEndForm((p) => ({
+                    ...p,
+                    rake: totalTablesRake > 0 ? String(totalTablesRake) : p.rake,
+                    caixinha: totalTablesCaixinha > 0 ? String(totalTablesCaixinha) : p.caixinha,
+                  }))
+                }}
+                style={{ width: '100%', background: 'linear-gradient(135deg,#005A73,#002A3A)', border: '1px solid rgba(0,200,224,0.35)', borderRadius: '10px', color: '#00C8E0', fontWeight: 700, fontSize: '15px', padding: '14px', cursor: 'pointer' }}
+              >
+                Encerrar Partida
+              </button>
+            )}
           </div>
         ) : (
           /* === FORMULÁRIO DE TRANSAÇÃO === */
@@ -1814,17 +1823,6 @@ export default function CashierPage() {
                   style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
                   autoFocus
                 />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>Modo caixinha</label>
-                <select
-                  value={openTableForm.caixinhaMode}
-                  onChange={(e) => setOpenTableForm((p) => ({ ...p, caixinhaMode: e.target.value as 'SPLIT' | 'INDIVIDUAL' }))}
-                  style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', padding: '10px 14px', fontSize: '14px', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
-                >
-                  <option value="SPLIT">Dividir igualmente</option>
-                  <option value="INDIVIDUAL">Individual por staff</option>
-                </select>
               </div>
               <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
                 <button type="button" onClick={() => setShowOpenTableModal(false)} style={{ flex: 1, background: 'rgba(10,31,48,0.8)', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '10px', color: '#94a3b8', fontWeight: 700, padding: '12px', cursor: 'pointer' }}>

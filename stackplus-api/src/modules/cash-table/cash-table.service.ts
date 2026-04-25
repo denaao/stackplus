@@ -118,12 +118,14 @@ export async function createSangria(
       data: { tableId, rake, caixinha, isFinal, note, createdByUserId },
     })
 
-    if (isFinal) {
-      await tx.cashTable.update({
-        where: { id: tableId },
-        data: { status: 'CLOSED', closedAt: new Date() },
-      })
-    }
+    await tx.cashTable.update({
+      where: { id: tableId },
+      data: {
+        rake: { increment: rake },
+        caixinha: { increment: caixinha },
+        ...(isFinal ? { status: 'CLOSED', closedAt: new Date() } : {}),
+      },
+    })
 
     return sangria
   })
