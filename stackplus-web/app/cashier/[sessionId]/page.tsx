@@ -907,8 +907,8 @@ export default function CashierPage() {
   )
   const selectedPlayerCurrentStack = Number(selectedPlayerActiveSeat?.currentStack || 0)
   const hasExistingBuyIn = Boolean(selectedPlayerState)
-  // Todos os membros são selecionáveis — quem fez cashout pode re-entrar com novo buy-in
-  const selectableMembers = members
+  // Todos os membros do home game são selecionáveis no formulário de transação
+  const selectableMembers = allHomeGameMembers.length > 0 ? allHomeGameMembers : members
   // Jogadores do home game que ainda não entraram nesta sessão (sem playerState)
   const playersNotYetInGame = allHomeGameMembers.filter((m) => !playerStates.some((ps) => ps.userId === m.id))
   // Total de fichas em jogo = soma dos stacks de todos os seats ativos
