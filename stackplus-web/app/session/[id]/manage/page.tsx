@@ -421,19 +421,7 @@ export default function SessionManagePage() {
       setSangeurAccesses(accesses)
       setSangeurMembers(Array.isArray(data.members) ? data.members : [])
 
-      // Gera QR individual para cada SANGEUR ativa (homeGameId + username embutidos)
-      const activeAccesses = accesses.filter((a) => a.isActive)
-      const qrResults = await Promise.all(
-        activeAccesses.map((a) =>
-          api
-            .get(`/home-games/${session.homeGame.id}/sangeur-login-qr?username=${encodeURIComponent(a.username)}`)
-            .then((r) => ({ userId: a.userId, qrCode: r.data.qrCode }))
-            .catch(() => ({ userId: a.userId, qrCode: null }))
-        )
-      )
-      const qrMap: Record<string, string> = {}
-      qrResults.forEach(({ userId, qrCode }) => { if (qrCode) qrMap[userId] = qrCode })
-      setSangeurQrCodes(qrMap)
+      setSangeurQrCodes({})
       setShowSangeurModal(true)
     } catch (err) {
       setPageFeedback({ tone: 'error', message: getErrorMessage(err, 'Nao foi possivel carregar dados do SANGEUR.') })
@@ -471,7 +459,12 @@ export default function SessionManagePage() {
       })
       setSangeurUserId('')
       setShowHabilitarForm(false)
-      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada. Mostre o QR Code para ela criar a senha.' })
+      setPageFeedback({
+        tone: 'success',
+        message: data.isLoginQr
+          ? 'SANGEUR reativada. Mostre o QR Code para ela entrar diretamente.'
+          : 'SANGEUR habilitada. Mostre o QR Code para ela criar a senha.',
+      })
     } catch (err) {
       setSangeurError(getErrorMessage(err, 'Nao foi possivel habilitar a SANGEUR.'))
     } finally {
@@ -1584,16 +1577,40 @@ export default function SessionManagePage() {
                           )}
                         </div>
                       </div>
-                      {access.isActive && sangeurQrCodes[access.userId] && (
-                        <div className="border-t border-white/8 bg-sx-cyan/5 px-3 py-3 flex flex-col items-center gap-2">
-                          <p className="text-[10px] uppercase tracking-widest text-sx-cyan/70">QR Code de acesso ao POS</p>
-                          <img
-                            src={sangeurQrCodes[access.userId]}
-                            alt={`QR Code ${access.username}`}
-                            className="rounded-lg"
-                            style={{ width: 160, height: 160 }}
-                          />
-                          <p className="text-[10px] text-sx-muted">Ela escaneia → cai no login → só digita a senha</p>
+                      {access.isActive && (
+                        <div className="border-t border-white/8 px-3 py-2">
+                          {!sangeurQrCodes[access.userId] ? (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const r = await api.get(`/home-games/${session?.homeGame?.id}/sangeur-login-qr?username=${encodeURIComponent(access.username)}`)
+                                  setSangeurQrCodes(prev => ({ ...prev, [access.userId]: r.data.qrCode }))
+                                } catch { /* ignore */ }
+                              }}
+                              className="text-[11px] font-bold text-sx-cyan underline"
+                            >
+                              Ver QR de acesso
+                            </button>
+                          ) : (
+                            <div className="flex flex-col items-center gap-2 py-1">
+                              <p className="text-[10px] uppercase tracking-widest text-sx-cyan/70">QR Code de acesso ao POS</p>
+                              <img
+                                src={sangeurQrCodes[access.userId]}
+                                alt={`QR Code ${access.username}`}
+                                className="rounded-lg"
+                                style={{ width: 160, height: 160 }}
+                              />
+                              <p className="text-[10px] text-sx-muted">Ela escaneia → cai no login → só digita a senha</p>
+                              <button
+                                type="button"
+                                onClick={() => setSangeurQrCodes(prev => { const n = { ...prev }; delete n[access.userId]; return n })}
+                                className="text-[10px] text-sx-muted underline"
+                              >
+                                Ocultar QR
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
