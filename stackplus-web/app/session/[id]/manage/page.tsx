@@ -414,7 +414,6 @@ export default function SessionManagePage() {
     setSangeurError(null)
     setSangeurIssuedCredential(null)
     setSangeurUserId('')
-    setSangeurUsername('')
     setSangeurLoading(true)
     try {
       const { data } = await api.get(`/home-games/${session.homeGame.id}`)
