@@ -294,12 +294,17 @@ export async function addComandaItemWithTx(tx: Prisma.TransactionClient, params:
     },
   })
 
-  // Atualiza saldo da comanda
-  const delta = isPayment ? amount : isDebit ? -amount : amount
-  await tx.comanda.update({
-    where: { id: comandaId },
-    data: { balance: { increment: delta } },
-  })
+  // Atualiza saldo da comanda.
+  // PIX (PAYMENT_PIX_SPOT / PAYMENT_PIX_TERM) nascem PENDING — só creditam quando PAID.
+  // PAYMENT_CASH e PAYMENT_CARD já nascem PAID, então creditam imediatamente.
+  const isPendingPix = isPayment && ['PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM'].includes(type)
+  const delta = isPendingPix ? 0 : isPayment ? amount : isDebit ? -amount : amount
+  if (delta !== 0) {
+    await tx.comanda.update({
+      where: { id: comandaId },
+      data: { balance: { increment: delta } },
+    })
+  }
 
   return created
 }
@@ -348,15 +353,22 @@ export async function settleComandaPaymentItem({
     const prevStatus = item.paymentStatus as ComandaItemPaymentStatus | null
     const amount = Number(item.amount)
 
-    const wasCrediting = prevStatus === null || prevStatus === 'PENDING' || prevStatus === 'PAID'
-    const willBeCrediting = paymentStatus === 'PENDING' || paymentStatus === 'PAID'
+    // Somente PAID significa que o balance foi (ou será) creditado.
+    // PENDING não toca mais o balance na criação — só PAID o faz.
+    // Tabela de transições relevantes:
+    //   PENDING → PAID      : delta = +amount (confirma o crédito)
+    //   PENDING → EXPIRED   : delta = 0       (nunca foi creditado)
+    //   PENDING → CANCELED  : delta = 0       (nunca foi creditado)
+    //   PAID    → CANCELED  : delta = -amount (estorna crédito confirmado)
+    //   CANCELED → PAID     : delta = +amount (re-credita)
+    //   EXPIRED  → PAID     : delta = +amount (re-credita)
+    const wasCrediting = prevStatus === 'PAID'
+    const willBeCrediting = paymentStatus === 'PAID'
 
     let delta = 0
     if (wasCrediting && !willBeCrediting) {
-      // Saiu do crédito (ex.: PENDING → EXPIRED, PAID → CANCELED) — estorna
       delta = -amount
     } else if (!wasCrediting && willBeCrediting) {
-      // Voltou pro crédito (ex.: CANCELED → PAID) — re-credita
       delta = amount
     }
 
@@ -429,8 +441,9 @@ export async function generateComandaPixCharge({
   const type: ComandaItemType = kind === 'SPOT' ? 'PAYMENT_PIX_SPOT' : 'PAYMENT_PIX_TERM'
 
   // Cria o item via addComandaItem (que ja atualiza balance como PENDING).
+  // Cria o item com status PENDING — balance só é creditado quando o pagamento for confirmado (PAID).
   const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const item = await tx.comandaItem.create({
+    return tx.comandaItem.create({
       data: {
         comandaId,
         type,
@@ -442,11 +455,6 @@ export async function generateComandaPixCharge({
         createdByUserId,
       },
     })
-    await tx.comanda.update({
-      where: { id: comandaId },
-      data: { balance: { increment: amount } },
-    })
-    return item
   })
 
   return {
