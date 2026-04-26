@@ -912,12 +912,15 @@ export default function CashierPage() {
   const hasExistingBuyIn = Boolean(selectedPlayerState)
   // Select mostra só quem já está na sessão + quem foi adicionado via botão "+"
   const sessionMembers = allHomeGameMembers.filter((m) => playerStates.some((ps) => ps.userId === m.id))
+  // Participantes selecionados mas que ainda não fizeram buy-in
+  const participantsPendingBuyin = members.filter((m) => !sessionMembers.some((sm) => sm.id === m.id) && !addedPlayers.some((ap) => ap.id === m.id))
   const selectableMembers = [
     ...sessionMembers,
-    ...addedPlayers.filter((ap) => !sessionMembers.some((sm) => sm.id === ap.id)),
+    ...participantsPendingBuyin,
+    ...addedPlayers.filter((ap) => !sessionMembers.some((sm) => sm.id === ap.id) && !participantsPendingBuyin.some((p) => p.id === ap.id)),
   ]
-  // Jogadores do home game que ainda não entraram nesta sessão (sem playerState)
-  const playersNotYetInGame = allHomeGameMembers.filter((m) => !playerStates.some((ps) => ps.userId === m.id))
+  // Jogadores do home game que ainda não entraram nesta sessão e não são participantes designados
+  const playersNotYetInGame = allHomeGameMembers.filter((m) => !playerStates.some((ps) => ps.userId === m.id) && !members.some((mem) => mem.id === m.id))
   // Total de fichas em jogo = soma dos stacks de todos os seats ativos
   const totalChipsInPlay = tables.flatMap((t) => t.seats).filter((s) => !s.hasCashedOut).reduce((sum, s) => sum + Number(s.currentStack || 0), 0)
   // Totais de rake e caixinha de todas as mesas (para pré-popular o endForm)
