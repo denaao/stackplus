@@ -301,8 +301,9 @@ export default function SangeurHomePage() {
 
         const openShiftSession = list.find((session: OperationalSession) => session.openShiftId)
         if (openShiftSession?.openShiftId) {
-          const shiftResponse = await api.get(`/sangeur/shifts/${openShiftSession.openShiftId}`)
-          setActiveShift(shiftResponse.data)
+          // Turno já aberto — vai direto pro POS
+          router.replace('/sangeur/pos')
+          return
         } else {
           setActiveShift(null)
         }
