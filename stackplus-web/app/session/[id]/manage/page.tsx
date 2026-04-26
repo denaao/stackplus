@@ -262,6 +262,8 @@ export default function SessionManagePage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [showStaffModal, setShowStaffModal] = useState(false)
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
+  const [rakebackOptions, setRakebackOptions] = useState<StaffOption[]>([])
+  const [rakebackSearch, setRakebackSearch] = useState('')
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([])
   const [selectedRakebackIds, setSelectedRakebackIds] = useState<string[]>([])
   const [selectedRakebackPercent, setSelectedRakebackPercent] = useState<Record<string, string>>({})
@@ -529,6 +531,20 @@ export default function SessionManagePage() {
       const normalized = normalizeSession(currentSession)
       setSession(normalized)
       setStaffOptions(options)
+
+      // Carrega todos os membros do HG para o rakeback (sem filtro de cargo)
+      try {
+        const { data: hgData } = await api.get(`/home-games/${normalized.homeGame.id}`)
+        const allMap = new Map<string, StaffOption>()
+        if (hgData.host) allMap.set(hgData.host.id, hgData.host)
+        for (const m of hgData.members || []) {
+          if (m.user) allMap.set(m.user.id, m.user)
+        }
+        setRakebackOptions([...allMap.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')))
+      } catch {
+        // fallback: usa os mesmos do staff
+        setRakebackOptions(options)
+      }
       setSelectedStaffIds(normalized.staffAssignments.map((assignment) => assignment.userId))
       setSelectedCaixinhaMode(normalized.caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT')
       setSelectedRakebackIds(normalized.rakebackAssignments.map((assignment) => assignment.userId))
@@ -1314,8 +1330,17 @@ export default function SessionManagePage() {
             )}
 
             <p className="mt-6 text-xs uppercase tracking-widest text-white/40">Rakeback (% do rake)</p>
-            <div className="mt-3 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-              {staffOptions.map((person) => {
+            <input
+              type="text"
+              value={rakebackSearch}
+              onChange={(e) => setRakebackSearch(e.target.value)}
+              placeholder="Buscar por nome..."
+              className="mt-2 w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
+            />
+            <div className="mt-2 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+              {rakebackOptions
+                .filter((p) => !rakebackSearch || p.name.toLowerCase().includes(rakebackSearch.toLowerCase()))
+                .map((person) => {
                 const checked = selectedRakebackIds.includes(person.id)
                 const currentPercent = Number(selectedRakebackPercent[person.id] || 0)
 
@@ -1364,7 +1389,7 @@ export default function SessionManagePage() {
                 <p className="text-sm text-sx-muted text-center">Nenhuma pessoa selecionada para rakeback.</p>
               ) : (
                 selectedRakebackIds.map((userId, index) => {
-                  const person = staffOptions.find((option) => option.id === userId)
+                  const person = rakebackOptions.find((option) => option.id === userId) ?? staffOptions.find((option) => option.id === userId)
                   if (!person) return null
 
                   const currentPercent = Number(selectedRakebackPercent[userId] || 0)
