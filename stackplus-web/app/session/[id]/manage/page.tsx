@@ -78,6 +78,7 @@ interface SangeurAccess {
 
 interface SangeurMember {
   id: string
+  role?: 'PLAYER' | 'HOST' | 'DEALER' | 'SANGEUR'
   user: { id: string; name: string; email?: string }
 }
 
@@ -335,7 +336,7 @@ export default function SessionManagePage() {
       if (homeGameId) {
         api.get(`/home-games/${homeGameId}`).then((hg) => {
           setSangeurAccesses(hg.data.sangeurAccesses || [])
-          setSangeurMembers(Array.isArray(hg.data.members) ? hg.data.members : [])
+          setSangeurMembers(Array.isArray(hg.data.members) ? hg.data.members.filter((m: SangeurMember) => m.role === 'SANGEUR') : [])
         }).catch(() => {})
       }
     }).finally(() => setLoading(false))
@@ -1502,6 +1503,19 @@ export default function SessionManagePage() {
                         <option key={m.id} value={m.user.id}>{m.user.name}</option>
                       ))}
                     </select>
+                    {sangeurMembers.length === 0 && (
+                      <p className="text-xs text-yellow-300 mt-1">
+                        Nenhum membro com cargo de Sangeur. Acesse{' '}
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/homegame/${session?.homeGame?.id}/members`)}
+                          className="underline font-semibold"
+                        >
+                          Membros
+                        </button>
+                        {' '}e promova alguém.
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1">

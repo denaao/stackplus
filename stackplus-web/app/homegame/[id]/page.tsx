@@ -21,7 +21,7 @@ interface HomeGame {
   blindsMinutesAfterBreak?: number
   levelsUntilBreak?: number
   host: { id: string; name: string }
-  members: { id: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null; role?: 'PLAYER' | 'HOST'; user: { id: string; name: string; email?: string } }[]
+  members: { id: string; paymentMode?: 'POSTPAID' | 'PREPAID' | null; role?: 'PLAYER' | 'HOST' | 'DEALER' | 'SANGEUR'; user: { id: string; name: string; email?: string } }[]
   sangeurAccesses?: SangeurAccess[]
 }
 
@@ -546,16 +546,36 @@ export default function HomeGamePage() {
                         <div className={`space-y-3 ${sangeurAccesses.length > 0 ? 'border-t border-sx-border pt-3' : ''}`}>
                           <div className="space-y-1">
                             <label className="text-xs uppercase tracking-wide text-sx-muted">Participante SANGEUR</label>
-                            <select
-                              value={sangeurUserId}
-                              onChange={(e) => setSangeurUserId(e.target.value)}
-                              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                            >
-                              <option value="">Selecione um membro…</option>
-                              {game.members.map((m) => (
-                                <option key={m.id} value={m.user.id}>{m.user.name}</option>
-                              ))}
-                            </select>
+                            {(() => {
+                              const sangeurRole = game.members.filter((m) => m.role === 'SANGEUR')
+                              if (sangeurRole.length === 0) {
+                                return (
+                                  <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-300">
+                                    Nenhum membro com cargo de Sangeur.{' '}
+                                    <button
+                                      type="button"
+                                      onClick={() => router.push(`/homegame/${id}/members`)}
+                                      className="underline font-semibold"
+                                    >
+                                      Promova alguém em Membros
+                                    </button>
+                                    .
+                                  </div>
+                                )
+                              }
+                              return (
+                                <select
+                                  value={sangeurUserId}
+                                  onChange={(e) => setSangeurUserId(e.target.value)}
+                                  className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
+                                >
+                                  <option value="">Selecione um membro…</option>
+                                  {sangeurRole.map((m) => (
+                                    <option key={m.id} value={m.user.id}>{m.user.name}</option>
+                                  ))}
+                                </select>
+                              )
+                            })()}
                           </div>
 
                           <div className="space-y-1">
