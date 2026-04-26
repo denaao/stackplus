@@ -340,11 +340,18 @@ export default function CashierPage() {
     api.get(`/sessions/${sessionId}`).then(async ({ data }) => {
       setSession(data)
       setPlayerStates(data.playerStates)
-      const [membersResponse, transactionsResponse] = await Promise.all([
+      const [membersResponse, transactionsResponse, homeGameResponse] = await Promise.all([
         api.get(`/groups/${data.homeGameId}/members`),
         api.get('/cashier/transactions', { params: { sessionId } }),
+        api.get(`/home-games/${data.homeGameId}`),
       ])
       const memberMap = new Map<string, Member>()
+
+      // Inclui o host do HG (não está em HomeGameMember)
+      const hgHost = homeGameResponse.data?.host
+      if (hgHost?.id && hgHost?.name) {
+        memberMap.set(hgHost.id, { id: hgHost.id, name: hgHost.name, paymentMode: null })
+      }
 
       for (const m of membersResponse.data || []) {
         memberMap.set(m.user.id, {
