@@ -235,11 +235,19 @@ export default function HomeGameMembersPage() {
 
         {/* Legenda */}
         {isOwner && (
-          <div className="flex flex-wrap gap-3 pt-1">
+          <div style={{
+            background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: '10px', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '6px',
+          }}>
+            <div style={{ fontSize: '10px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>
+              Papéis disponíveis
+            </div>
             {PROMOTE_OPTIONS.map(opt => (
-              <div key={opt.role} className="flex items-center gap-1.5 text-xs text-sx-muted">
+              <div key={opt.role} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <RoleBadge role={opt.role} />
-                <span>— aparece na lista de {opt.label.toLowerCase()}s</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                  aparece na lista de {opt.label.toLowerCase()}s
+                </span>
               </div>
             ))}
           </div>
