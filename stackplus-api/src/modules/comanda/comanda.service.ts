@@ -511,11 +511,35 @@ export async function checkComandaItemPixStatus(itemId: string, viewerUserId: st
   }
 
   // Expiração por tempo: SPOT = 5 min, TERM = 24h.
-  // Se o prazo já passou e o item ainda está PENDING, marca como EXPIRED sem precisar
-  // consultar o Annapay (o PIX já não pode mais ser pago de qualquer forma).
+  // Antes de marcar como EXPIRED, consulta o Annapay — protege contra race condition
+  // onde o player pagou no último segundo e o dinheiro chegou antes de expirarmos localmente.
   const expirationSeconds = item.type === 'PAYMENT_PIX_SPOT' ? 300 : 86400
   const expiresAt = new Date(item.createdAt.getTime() + expirationSeconds * 1000)
   if (new Date() > expiresAt) {
+    const paidLate = item.paymentReference
+      ? await checkPixChargeIsPaid(item.paymentReference, item.paymentVirtualAccount ?? undefined)
+          .then(r => r.paid)
+          .catch(() => false)
+      : false
+
+    if (paidLate) {
+      // Pagamento chegou no limite — confirma como PAID em vez de expirar
+      logger.info({ itemId: item.id }, '[comanda pix] pagamento confirmado no limite de expiração')
+      await settleComandaPaymentItem({ itemId: item.id, paymentStatus: 'PAID' })
+      const isPixIn = item.type === 'PAYMENT_PIX_SPOT' || item.type === 'PAYMENT_PIX_TERM'
+      if (isPixIn && item.comanda?.homeGameId) {
+        await recordBankTransaction({
+          homeGameId: item.comanda.homeGameId,
+          direction: 'IN',
+          amount: Number(item.amount),
+          description: `PIX recebido (${item.type}) — pagamento no limite`,
+          comandaItemId: item.id,
+          annapayRef: item.paymentReference ?? null,
+        })
+      }
+      return { itemId, status: 'PAID' as const, alreadyPaid: false }
+    }
+
     await settleComandaPaymentItem({ itemId: item.id, paymentStatus: 'EXPIRED' })
     return { itemId, status: 'EXPIRED' as const, alreadyPaid: false, expiredAt: expiresAt }
   }
