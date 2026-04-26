@@ -482,6 +482,21 @@ export default function SessionManagePage() {
     }
   }
 
+  async function handleEnableSangeurDirect(userId: string) {
+    if (!session) return
+    setSangeurActionUserId(userId)
+    setSangeurError(null)
+    try {
+      const { data } = await api.patch(`/home-games/${session.homeGame.id}/sangeurs/${userId}/enable`)
+      applySangeurAccess(data)
+      setPageFeedback({ tone: 'success', message: 'Acesso de SANGEUR reativado.' })
+    } catch (err) {
+      setSangeurError(getErrorMessage(err, 'Nao foi possivel ativar a SANGEUR.'))
+    } finally {
+      setSangeurActionUserId(null)
+    }
+  }
+
   async function handleResetSangeurPassword(userId: string) {
     if (!session) return
     setSangeurActionUserId(userId)
@@ -1552,6 +1567,16 @@ export default function SessionManagePage() {
                           <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${access.isActive ? 'bg-sx-cyan/15 text-sx-cyan' : 'bg-sx-border2 text-sx-muted'}`}>
                             {access.isActive ? 'Ativo' : 'Inativo'}
                           </span>
+                          {!access.isActive && (
+                            <button
+                              type="button"
+                              onClick={() => handleEnableSangeurDirect(access.userId)}
+                              disabled={sangeurActionUserId === access.userId}
+                              className="rounded border border-sx-cyan/40 px-2 py-0.5 text-[10px] font-bold text-sx-cyan hover:bg-sx-cyan/10 disabled:opacity-50"
+                            >
+                              Ativar
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleResetSangeurPassword(access.userId)}

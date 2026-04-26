@@ -90,6 +90,11 @@ router.post('/:id/sangeurs', authenticate, async (req: AuthRequest, res: Respons
   res.status(201).json(result)
 })
 
+router.patch('/:id/sangeurs/:userId/enable', authenticate, async (req: AuthRequest, res: Response) => {
+  const access = await HomeGameService.enableExistingSangeurAccess(req.params.id, req.user!.userId, req.params.userId)
+  res.json(access)
+})
+
 router.patch('/:id/sangeurs/:userId/disable', authenticate, async (req: AuthRequest, res: Response) => {
   const access = await HomeGameService.disableSangeurAccess(req.params.id, req.user!.userId, req.params.userId)
   res.json(access)

@@ -159,6 +159,20 @@ export default function HomeGamePage() {
     }
   }
 
+  async function handleEnableSangeurDirect(userId: string) {
+    setSangeurActionUserId(userId)
+    setSangeurError(null)
+    try {
+      const { data } = await api.patch(`/home-games/${id}/sangeurs/${userId}/enable`)
+      applySangeurAccess(data)
+      setPageFeedback({ tone: 'success', message: 'Acesso de SANGEUR ativado.' })
+    } catch (err) {
+      setSangeurError(typeof err === 'string' ? err : 'Não foi possível ativar a SANGEUR.')
+    } finally {
+      setSangeurActionUserId(null)
+    }
+  }
+
   async function handleDisableSangeur(userId: string) {
     setSangeurActionUserId(userId)
     setSangeurError(null)
@@ -508,6 +522,16 @@ export default function HomeGamePage() {
                                 >
                                   Reset
                                 </button>
+                                {!access.isActive && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEnableSangeurDirect(access.userId)}
+                                    disabled={sangeurActionUserId === access.userId}
+                                    className="rounded border border-sx-cyan/40 px-2 py-0.5 text-[10px] font-bold text-sx-cyan hover:bg-sx-cyan/10 disabled:opacity-50"
+                                  >
+                                    Ativar
+                                  </button>
+                                )}
                                 {access.isActive && (
                                   <button
                                     type="button"

@@ -441,6 +441,21 @@ export async function enableSangeurAccess(input: {
   }
 }
 
+export async function enableExistingSangeurAccess(homeGameId: string, hostId: string, memberUserId: string) {
+  await assertHomeGameHost(hostId, homeGameId)
+
+  return prisma.homeGameSangeurAccess.update({
+    where: { homeGameId_userId: { homeGameId, userId: memberUserId } },
+    data: { isActive: true },
+    select: {
+      id: true, homeGameId: true, userId: true, username: true,
+      isActive: true, mustChangePassword: true, lastLoginAt: true,
+      createdAt: true, updatedAt: true,
+      user: { select: { id: true, name: true, email: true } },
+    },
+  })
+}
+
 export async function disableSangeurAccess(homeGameId: string, hostId: string, memberUserId: string) {
   await ensureHostAndMember(homeGameId, hostId, memberUserId)
 
