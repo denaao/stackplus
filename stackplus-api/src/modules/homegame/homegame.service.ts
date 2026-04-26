@@ -21,6 +21,13 @@ async function buildActivationQrCode(token: string): Promise<string> {
   return qrBase64
 }
 
+async function buildLoginQrCode(homeGameId: string, username: string): Promise<string> {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+  const url = `${frontendUrl}/sangeur/login?homeGameId=${homeGameId}&username=${encodeURIComponent(username)}`
+  const qrBase64 = await QRCode.toDataURL(url, { width: 300, margin: 2 })
+  return qrBase64
+}
+
 export async function createHomeGame(hostId: string, data: {
   name: string
   gameType: 'CASH_GAME' | 'TOURNAMENT'
@@ -384,11 +391,7 @@ export async function enableSangeurAccess(input: {
 
   if (!normalizedUsername) throw new Error('Não foi possível gerar username')
 
-  // Gera token de ativação — a SANGEUR define a própria senha via QR Code
-  const activationToken = generateActivationToken()
-  const activationTokenExpiresAt = new Date(Date.now() + 30 * 60 * 1000) // 30 minutos
-
-  // Placeholder de hash — a conta só será acessível após a SANGEUR criar sua senha
+  // Placeholder de hash — não é mais usado para autenticação (sangeur usa senha StackPlus)
   const placeholderHash = await hashPassword(randomBytes(32).toString('hex'))
 
   const access = await prisma.homeGameSangeurAccess.upsert({
@@ -400,22 +403,18 @@ export async function enableSangeurAccess(input: {
     },
     update: {
       username: normalizedUsername,
-      passwordHash: placeholderHash,
-      isActive: false,
-      mustChangePassword: true,
-      activationToken,
-      activationTokenExpiresAt,
-      lastLoginAt: null,
+      isActive: true,
+      mustChangePassword: false,
+      activationToken: null,
+      activationTokenExpiresAt: null,
     },
     create: {
       homeGameId: input.homeGameId,
       userId: input.memberUserId,
       username: normalizedUsername,
       passwordHash: placeholderHash,
-      isActive: false,
-      mustChangePassword: true,
-      activationToken,
-      activationTokenExpiresAt,
+      isActive: true,
+      mustChangePassword: false,
     },
     select: {
       id: true,
@@ -431,12 +430,14 @@ export async function enableSangeurAccess(input: {
     },
   })
 
-  const activationQrCode = await buildActivationQrCode(activationToken)
+  // QR de login — sangeur escaneia e entra com CPF + senha StackPlus
+  const loginQrCode = await buildLoginQrCode(input.homeGameId, access.username)
 
   return {
     access,
-    activationToken,
-    activationQrCode,
+    activationToken: null,
+    activationQrCode: loginQrCode,
+    isLoginQr: true,
   }
 }
 

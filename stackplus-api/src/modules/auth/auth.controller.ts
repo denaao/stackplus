@@ -114,7 +114,7 @@ const loginSchema = z.object({
 
 const sangeurLoginSchema = z.object({
   homeGameId: z.string().uuid(),
-  username: z.string().trim().min(3).max(40),
+  cpf: z.string().trim().min(11),
   password: z.string().min(1),
 })
 
@@ -165,8 +165,8 @@ export async function logout(req: AuthRequest, res: Response): Promise<void> {
 }
 
 export async function loginSangeur(req: Request, res: Response): Promise<void> {
-  const { homeGameId, username, password } = sangeurLoginSchema.parse(req.body)
-  const result = await AuthService.loginSangeur(homeGameId, username, password)
+  const { homeGameId, cpf, password } = sangeurLoginSchema.parse(req.body)
+  const result = await AuthService.loginSangeur(homeGameId, cpf, password)
   res.json(result)
 }
 

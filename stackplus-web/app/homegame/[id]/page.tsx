@@ -151,7 +151,7 @@ export default function HomeGamePage() {
         activationToken: data.activationToken,
       })
       setShowHabilitarForm(false)
-      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada. Mostre o QR Code para ela criar a senha.' })
+      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada. Mostre o QR Code para ela entrar com CPF e senha.' })
     } catch (err) {
       setSangeurError(typeof err === 'string' ? err : 'Nao foi possivel habilitar a SANGEUR.')
     } finally {
@@ -611,7 +611,7 @@ export default function HomeGamePage() {
                             QR Code de ativação — {issuedCredential.userName}
                           </p>
                           <p className="text-[11px] text-sx-muted">
-                            Mostre este QR Code para a SANGEUR escanear com o celular. Ela irá criar a própria senha. Válido por 30 minutos.
+                            Mostre este QR Code para a SANGEUR escanear. Ela entra com CPF e senha do StackPlus.
                           </p>
                           <div className="flex justify-center py-2">
                             <img

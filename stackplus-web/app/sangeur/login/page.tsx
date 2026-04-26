@@ -13,7 +13,7 @@ export default function SangeurLoginPage() {
   const token = useSangeurAuthStore((s) => s.token)
   const [form, setForm] = useState({
     homeGameId: searchParams.get('homeGameId') || '',
-    username: searchParams.get('username') || '',
+    cpf: '',
     password: '',
   })
   const [error, setError] = useState('')
@@ -23,6 +23,14 @@ export default function SangeurLoginPage() {
     if (token) router.replace('/sangeur')
   }, [token, router])
 
+  function formatCpf(value: string) {
+    const digits = value.replace(/\D/g, '').slice(0, 11)
+    return digits
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
@@ -30,7 +38,7 @@ export default function SangeurLoginPage() {
     try {
       const { data } = await api.post('/auth/sangeur/login', {
         homeGameId: form.homeGameId.trim(),
-        username: form.username.trim(),
+        cpf: form.cpf.replace(/\D/g, ''),
         password: form.password,
       })
       setSangeurAuth(data.token, data.user, data.sangeur)
@@ -60,25 +68,14 @@ export default function SangeurLoginPage() {
           )}
 
           <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-sx-muted">Home Game ID</label>
+            <label className="text-xs uppercase tracking-wide text-sx-muted">CPF</label>
             <input
               type="text"
+              inputMode="numeric"
               required
-              value={form.homeGameId}
-              onChange={(e) => setForm((prev) => ({ ...prev, homeGameId: e.target.value }))}
-              placeholder="UUID do Home Game"
-              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
-            <input
-              type="text"
-              required
-              value={form.username}
-              onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
-              placeholder="usuario da SANGEUR"
+              value={form.cpf}
+              onChange={(e) => setForm((prev) => ({ ...prev, cpf: formatCpf(e.target.value) }))}
+              placeholder="000.000.000-00"
               className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
             />
           </div>

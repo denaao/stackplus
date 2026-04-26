@@ -459,12 +459,7 @@ export default function SessionManagePage() {
       })
       setSangeurUserId('')
       setShowHabilitarForm(false)
-      setPageFeedback({
-        tone: 'success',
-        message: data.isLoginQr
-          ? 'SANGEUR reativada. Mostre o QR Code para ela entrar diretamente.'
-          : 'SANGEUR habilitada. Mostre o QR Code para ela criar a senha.',
-      })
+      setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada. Mostre o QR Code para ela entrar com CPF e senha.' })
     } catch (err) {
       setSangeurError(getErrorMessage(err, 'Nao foi possivel habilitar a SANGEUR.'))
     } finally {

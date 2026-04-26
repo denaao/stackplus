@@ -154,57 +154,41 @@ export async function updateMe(userId: string, data: {
   return user
 }
 
-export async function loginSangeur(homeGameId: string, username: string, password: string) {
-  const normalizedUsername = username.trim().toLowerCase()
+export async function loginSangeur(homeGameId: string, cpf: string, password: string) {
+  const cpfDigits = cpf.replace(/\D/g, '')
 
-  const access = await prisma.homeGameSangeurAccess.findUnique({
-    where: {
-      homeGameId_username: {
-        homeGameId,
-        username: normalizedUsername,
-      },
-    },
-    include: {
-      user: true,
-      homeGame: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
+  // Autentica pela conta StackPlus do usuário (CPF + senha principal)
+  const user = await prisma.user.findFirst({
+    where: { cpf: cpfDigits },
   })
 
-  if (!access) throw new Error('Credenciais inválidas')
+  if (!user) throw new Error('Credenciais inválidas')
 
-  if (access.activationToken) {
-    throw new Error('Conta ainda não ativada. Escaneie o QR Code recebido do admin para criar sua senha.')
-  }
-
-  if (!access.isActive) throw new Error('Credenciais inválidas')
-
-  const valid = await comparePassword(password, access.passwordHash)
+  const valid = await comparePassword(password, user.passwordHash)
   if (!valid) throw new Error('Credenciais inválidas')
 
+  // Verifica se o usuário tem acesso de sangeur ativo neste home game
+  const access = await prisma.homeGameSangeurAccess.findUnique({
+    where: { homeGameId_userId: { homeGameId, userId: user.id } },
+    include: { homeGame: { select: { id: true, name: true } } },
+  })
+
+  if (!access || !access.isActive) {
+    throw new Error('Acesso de SANGEUR não encontrado ou inativo para este Home Game')
+  }
+
   await prisma.homeGameSangeurAccess.update({
-    where: {
-      homeGameId_userId: {
-        homeGameId: access.homeGameId,
-        userId: access.userId,
-      },
-    },
-    data: {
-      lastLoginAt: new Date(),
-    },
+    where: { homeGameId_userId: { homeGameId, userId: user.id } },
+    data: { lastLoginAt: new Date() },
   })
 
   const token = signToken({
-    userId: access.user.id,
-    email: access.user.email ?? '',
-    role: access.user.role,
+    userId: user.id,
+    email: user.email ?? '',
+    role: user.role,
   })
 
-  const { passwordHash, ...safeUser } = access.user
+  const { passwordHash, ...safeUser } = user
 
   return {
     token,
@@ -212,8 +196,6 @@ export async function loginSangeur(homeGameId: string, username: string, passwor
     sangeur: {
       homeGameId: access.homeGame.id,
       homeGameName: access.homeGame.name,
-      username: access.username,
-      mustChangePassword: access.mustChangePassword,
     },
   }
 }
