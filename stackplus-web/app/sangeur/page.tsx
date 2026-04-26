@@ -402,8 +402,11 @@ export default function SangeurHomePage() {
     setError('')
     setSuccess('')
 
-    if (!openShiftForm.sessionId) {
-      setError('Selecione uma sessao para abrir o turno.')
+    const eligibleSession =
+      sessions.find((s) => s.status === 'ACTIVE') ||
+      sessions.find((s) => s.status === 'WAITING')
+    if (!eligibleSession) {
+      setError('Nenhuma sessao ativa ou aguardando encontrada.')
       return
     }
 
@@ -415,19 +418,14 @@ export default function SangeurHomePage() {
 
     setLoading(true)
     try {
-      const { data } = await api.post('/sangeur/shifts/open', {
+      await api.post('/sangeur/shifts/open', {
         homeGameId: sangeur.homeGameId,
-        sessionId: openShiftForm.sessionId,
+        sessionId: eligibleSession.id,
         initialChips,
         note: openShiftForm.note || undefined,
       })
 
-      setActiveShift(data)
-      setSuccess('Turno da SANGEUR aberto com sucesso.')
-      setOpenShiftForm({ sessionId: '', initialChips: '', note: '' })
-
-      const sessionsResponse = await api.get(`/sangeur/home-games/${sangeur.homeGameId}/sessions`)
-      setSessions(Array.isArray(sessionsResponse.data) ? sessionsResponse.data : [])
+      router.push('/sangeur/pos')
     } catch (err) {
       setError(getErrorMessage(err, 'Nao foi possivel abrir o turno'))
     } finally {
@@ -877,55 +875,31 @@ export default function SangeurHomePage() {
             {!activeShift && (
               <div className="rounded-xl border border-sx-border bg-sx-card p-5">
                 <h2 className="text-lg font-bold">Abrir turno da SANGEUR</h2>
-                <p className="mt-1 text-xs text-sx-muted">Selecione a sessao ativa/aguardando e informe as fichas recebidas do caixa.</p>
+                <p className="mt-1 text-xs text-sx-muted">Informe as fichas recebidas do caixa para iniciar o turno.</p>
 
                 {loadingData ? (
-                  <p className="mt-4 text-sm text-sx-muted">Carregando sessoes...</p>
+                  <p className="mt-4 text-sm text-sx-muted">Carregando...</p>
                 ) : (
-                  <form onSubmit={handleOpenShift} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-                    <div className="space-y-1 md:col-span-2">
-                      <label className="text-xs uppercase tracking-wide text-sx-muted">Sessao</label>
-                      <select
-                        value={openShiftForm.sessionId}
-                        onChange={(e) => setOpenShiftForm((prev) => ({ ...prev, sessionId: e.target.value }))}
-                        className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                      >
-                        <option value="">Selecione...</option>
-                        {sessions.map((session) => (
-                          <option key={session.id} value={session.id}>
-                            {new Date(session.createdAt).toLocaleDateString('pt-BR')} • {session.status} • {session._count.playerStates} jogadores
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
+                  <form onSubmit={handleOpenShift} className="mt-4 space-y-3">
                     <div className="space-y-1">
                       <label className="text-xs uppercase tracking-wide text-sx-muted">Fichas iniciais</label>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="0"
                         step="0.01"
                         value={openShiftForm.initialChips}
                         onChange={(e) => setOpenShiftForm((prev) => ({ ...prev, initialChips: e.target.value }))}
-                        className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs uppercase tracking-wide text-sx-muted">Observacao</label>
-                      <input
-                        type="text"
-                        value={openShiftForm.note}
-                        onChange={(e) => setOpenShiftForm((prev) => ({ ...prev, note: e.target.value }))}
-                        className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                        placeholder="Opcional"
+                        className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-4 text-2xl font-bold focus:border-sx-cyan focus:outline-none"
+                        placeholder="0"
+                        autoFocus
                       />
                     </div>
 
                     <button
                       type="submit"
                       disabled={loading}
-                      className="md:col-span-4 rounded-lg bg-sx-cyan py-3 font-bold text-sx-bg transition-colors hover:bg-sx-cyan disabled:opacity-50"
+                      className="w-full rounded-lg bg-sx-cyan py-4 text-lg font-black text-sx-bg transition-colors hover:bg-sx-cyan disabled:opacity-50"
                     >
                       {loading ? 'Abrindo...' : 'Abrir turno'}
                     </button>

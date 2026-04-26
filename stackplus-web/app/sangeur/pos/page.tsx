@@ -295,7 +295,10 @@ export default function SangeurPosPage() {
   async function handleOpenShift(e: React.FormEvent) {
     e.preventDefault()
     if (!sangeur) return
-    if (!openShiftForm.sessionId) return setError('Selecione uma sessão')
+    const eligibleSession =
+      sessions.find((s) => s.status === 'ACTIVE') ||
+      sessions.find((s) => s.status === 'WAITING')
+    if (!eligibleSession) return setError('Nenhuma sessão ativa ou aguardando encontrada')
     const initialChips = Number(openShiftForm.initialChips || 0)
     if (initialChips < 0) return setError('Fichas iniciais inválidas')
 
@@ -303,7 +306,7 @@ export default function SangeurPosPage() {
     try {
       const { data } = await api.post('/sangeur/shifts/open', {
         homeGameId: sangeur.homeGameId,
-        sessionId: openShiftForm.sessionId,
+        sessionId: eligibleSession.id,
         initialChips,
         note: openShiftForm.note || undefined,
       })
@@ -545,24 +548,9 @@ export default function SangeurPosPage() {
         {!loadingData && !activeShift && (
           <div className="space-y-4">
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-              Nenhum turno aberto. Selecione uma sessão e informe as fichas iniciais.
+              Nenhum turno aberto. Informe as fichas iniciais para começar.
             </div>
             <form onSubmit={handleOpenShift} className="space-y-3">
-              <div>
-                <label className="text-xs uppercase tracking-wide text-sx-muted">Sessão</label>
-                <select
-                  value={openShiftForm.sessionId}
-                  onChange={(e) => setOpenShiftForm((p) => ({ ...p, sessionId: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-sx-border2 bg-sx-card px-4 py-4 text-base focus:border-sx-cyan focus:outline-none"
-                >
-                  <option value="">Selecione...</option>
-                  {sessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {new Date(s.createdAt).toLocaleDateString('pt-BR')} • {s.status} • {s._count.playerStates} jog.
-                    </option>
-                  ))}
-                </select>
-              </div>
               <div>
                 <label className="text-xs uppercase tracking-wide text-sx-muted">Fichas iniciais</label>
                 <input
