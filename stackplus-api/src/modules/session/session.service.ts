@@ -534,7 +534,10 @@ export async function getSessionStaffOptions(sessionId: string, hostId: string) 
       homeGame: {
         include: {
           host: { select: { id: true, name: true, email: true, pixType: true, pixKey: true } },
-          members: { include: { user: { select: { id: true, name: true, email: true, pixType: true, pixKey: true } } } },
+          members: {
+            where: { role: { in: ['HOST', 'DEALER', 'SANGEUR'] } },
+            include: { user: { select: { id: true, name: true, email: true, pixType: true, pixKey: true } } },
+          },
         },
       },
     },
