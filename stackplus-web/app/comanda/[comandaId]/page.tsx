@@ -453,17 +453,6 @@ export default function ComandaDetailPage() {
           <div className={`text-4xl font-black tabular-nums ${balanceColor}`}>
             {balance < 0 ? '- ' : ''}{fmtMoney(comanda.balance)}
           </div>
-          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-sx-border">
-            <div>
-              <div className="text-xs text-white/40 mb-0.5">Débitos</div>
-              <div className="text-sm font-semibold text-red-400">− {fmtMoney(totalDebits)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-white/40 mb-0.5">Créditos</div>
-              <div className="text-sm font-semibold text-green-400">+ {fmtMoney(totalCredits)}</div>
-            </div>
-          </div>
-
           {/* Botões de cobrança PIX — quando há saldo devedor (aberta ou fechada) */}
           {balance < 0 && (
             <div className="mt-4 pt-4 border-t border-sx-border grid grid-cols-1 sm:grid-cols-2 gap-2">
