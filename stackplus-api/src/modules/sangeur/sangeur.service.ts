@@ -211,7 +211,7 @@ export async function listSessionParticipants(input: {
 
   await ensureSangeurAccess(shift.homeGameId, input.userId)
 
-  const [playerStates, members, participants] = await Promise.all([
+  const [playerStates, members, participants, homeGame] = await Promise.all([
     prisma.playerSessionState.findMany({
       where: { sessionId: input.sessionId },
       select: {
@@ -237,6 +237,10 @@ export async function listSessionParticipants(input: {
         userId: true,
         user: { select: { id: true, name: true, avatarUrl: true } },
       },
+    }),
+    prisma.homeGame.findUniqueOrThrow({
+      where: { id: shift.homeGameId },
+      select: { host: { select: { id: true, name: true, avatarUrl: true } } },
     }),
   ])
 
@@ -303,6 +307,21 @@ export async function listSessionParticipants(input: {
       avatarUrl: member.user.avatarUrl || null,
       paymentMode: member.paymentMode || null,
     }))
+
+  // O host do HG não está em HomeGameMember — incluir se ainda não estiver em registeredUsers ou candidates
+  const hostAlreadyPresent =
+    registeredUsers.has(homeGame.host.id) ||
+    candidates.some((c) => c.userId === homeGame.host.id)
+
+  if (!hostAlreadyPresent) {
+    candidates.push({
+      userId: homeGame.host.id,
+      name: homeGame.host.name,
+      avatarUrl: homeGame.host.avatarUrl || null,
+      paymentMode: null,
+    })
+    candidates.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+  }
 
   return { players, candidates }
 }
