@@ -335,23 +335,25 @@ export default function ComandaDetailPage() {
     setTransferDestId('')
     setTransferReason('')
     try {
-      // Busca todos os membros do HG (+ host) excluindo o próprio jogador da comanda
-      const [membersRes, hgRes] = await Promise.all([
-        api.get(`/home-games/${comanda.homeGameId}/members`),
-        api.get(`/home-games/${comanda.homeGameId}`),
-      ])
-      const members: { userId: string; user: { id: string; name: string } }[] = membersRes.data ?? []
-      const candidates = members
-        .map(m => ({ id: m.user?.id ?? m.userId, name: m.user?.name ?? '' }))
-        .filter(m => m.id !== comanda.player.id)
+      const { data: hg } = await api.get(`/home-games/${comanda.homeGameId}`)
 
-      // Inclui o host se não estiver na lista de membros
-      const hg = hgRes.data
-      if (hg?.host && hg.host.id !== comanda.player.id && !candidates.find(c => c.id === hg.host.id)) {
-        candidates.unshift({ id: hg.host.id, name: hg.host.name })
+      const candidates: { id: string; name: string }[] = []
+
+      // Host (não está em members)
+      if (hg.host && hg.host.id !== comanda.player.id) {
+        candidates.push({ id: hg.host.id, name: hg.host.name })
       }
 
-      setTransferMembers(candidates)
+      // Membros
+      for (const m of hg.members ?? []) {
+        const id = m.user?.id ?? m.userId
+        const name = m.user?.name ?? ''
+        if (id && id !== comanda.player.id) {
+          candidates.push({ id, name })
+        }
+      }
+
+      setTransferMembers(candidates.sort((a, b) => a.name.localeCompare(b.name)))
       setShowTransfer(true)
     } catch (e) {
       setError(getErrorMessage(e, 'Erro ao carregar membros'))
