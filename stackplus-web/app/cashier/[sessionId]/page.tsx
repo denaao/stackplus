@@ -288,6 +288,7 @@ export default function CashierPage() {
   const [showEndModal, setShowEndModal] = useState(false)
   const [endForm, setEndForm] = useState({ rake: '', caixinha: '', jackpotArrecadado: '' })
   // Modal de cashout direto por card do jogador
+  const [playerSearch, setPlayerSearch] = useState('')
   const [cashoutPlayer, setCashoutPlayer] = useState<PlayerState | null>(null)
   const [cashoutChips, setCashoutChips] = useState('')
   const [cashoutLoading, setCashoutLoading] = useState(false)
@@ -1279,9 +1280,9 @@ export default function CashierPage() {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setShowNewPlayerPicker((v) => !v) }}
                     title="Inserir novo jogador"
-                    style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.3)', borderRadius: '8px', color: '#00C8E0', fontWeight: 700, fontSize: '18px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+                    style={{ background: 'rgba(0,200,224,0.1)', border: '1px solid rgba(0,200,224,0.3)', borderRadius: '8px', color: '#00C8E0', fontWeight: 700, fontSize: '13px', padding: '6px 12px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                   >
-                    +
+                    <span style={{ fontSize: '16px', lineHeight: 1 }}>+</span> Adicionar jogador
                   </button>
                   {showNewPlayerPicker && (
                     <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: '38px', background: '#0C2438', border: '1px solid rgba(0,200,224,0.2)', borderRadius: '12px', zIndex: 20, minWidth: '200px', padding: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
@@ -1395,7 +1396,7 @@ export default function CashierPage() {
         {/* === JOGADORES === */}
         {playerStates.length > 0 && (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <p style={{ fontWeight: 700, fontSize: '14px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Jogadores</p>
               {playerStates.length - activePlayers.length > 0 && (
                 <span style={{ fontSize: '12px', color: '#4A7A90', background: 'rgba(0,200,224,0.06)', border: '1px solid rgba(0,200,224,0.1)', borderRadius: '20px', padding: '2px 10px' }}>
@@ -1403,8 +1404,17 @@ export default function CashierPage() {
                 </span>
               )}
             </div>
+            <input
+              type="text"
+              placeholder="Buscar jogador..."
+              value={playerSearch}
+              onChange={(e) => setPlayerSearch(e.target.value)}
+              style={{ width: '100%', background: '#0A1F30', border: '1px solid rgba(0,200,224,0.15)', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#fff', outline: 'none', boxSizing: 'border-box', marginBottom: '10px' }}
+            />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {[...activePlayers].sort((a, b) => parseFloat(b.result) - parseFloat(a.result)).map((p) => {
+              {[...activePlayers]
+                .filter((p) => !playerSearch || p.user.name.toLowerCase().includes(playerSearch.toLowerCase()))
+                .sort((a, b) => parseFloat(b.result) - parseFloat(a.result)).map((p) => {
                 const playerTransactions = transactions
                   .filter((t) => t.userId === p.userId)
                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
