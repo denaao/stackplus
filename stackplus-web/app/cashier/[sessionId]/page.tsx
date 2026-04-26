@@ -922,7 +922,14 @@ export default function CashierPage() {
   // Jogadores do home game que ainda não entraram nesta sessão e não são participantes designados
   const playersNotYetInGame = allHomeGameMembers.filter((m) => !playerStates.some((ps) => ps.userId === m.id) && !members.some((mem) => mem.id === m.id))
   // Total de fichas em jogo = soma dos stacks de todos os seats ativos
-  const totalChipsInPlay = tables.flatMap((t) => t.seats).filter((s) => !s.hasCashedOut).reduce((sum, s) => sum + Number(s.currentStack || 0), 0)
+  // Fichas em jogo = total comprado pelos jogadores − devolvido no cashout − retirado via sangria
+  const totalChipsIn = playerStates.reduce((sum, p) => sum + Number(p.chipsIn || 0), 0)
+  const totalChipsOut = playerStates.reduce((sum, p) => sum + Number(p.chipsOut || 0), 0)
+  const totalSangriaChipsFromTables = tables.reduce((sum, t) => {
+    const chipVal = chipValue > 0 ? chipValue : 1
+    return sum + Math.round((Number(t.rake || 0) + Number(t.caixinha || 0) + Number(t.jackpot || 0)) / chipVal)
+  }, 0)
+  const totalChipsInPlay = Math.max(0, totalChipsIn - totalChipsOut - totalSangriaChipsFromTables)
   // Totais de rake e caixinha de todas as mesas (para pré-popular o endForm)
   const totalTablesRake = tables.reduce((sum, t) => sum + Number(t.rake || 0), 0)
   const totalTablesCaixinha = tables.reduce((sum, t) => sum + Number(t.caixinha || 0), 0)
