@@ -557,7 +557,32 @@ export async function getSessionStaffOptions(sessionId: string, hostId: string) 
 }
 
 export async function getSessionParticipantOptions(sessionId: string, hostId: string) {
-  return getSessionStaffOptions(sessionId, hostId)
+  // Retorna TODOS os membros do HG (sem filtro de cargo) — qualquer membro pode participar
+  const session = await prisma.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    include: {
+      homeGame: {
+        include: {
+          host: { select: { id: true, name: true, email: true, pixType: true, pixKey: true } },
+          members: {
+            include: { user: { select: { id: true, name: true, email: true, pixType: true, pixKey: true } } },
+          },
+        },
+      },
+    },
+  })
+
+  if (!(await isHomeGameHost(hostId, session.homeGameId))) {
+    throw new Error('Acesso negado')
+  }
+
+  const map = new Map<string, { id: string; name: string; email: string | null; pixType: string | null; pixKey: string | null }>()
+  map.set(session.homeGame.host.id, session.homeGame.host)
+  for (const member of session.homeGame.members) {
+    map.set(member.user.id, member.user)
+  }
+
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 }
 
 export async function updateSessionStaff(
