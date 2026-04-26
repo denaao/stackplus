@@ -74,10 +74,26 @@ const typeIsDebit = (t: string) => [
 ].includes(t)
 
 const paymentStatusLabel: Record<string, string> = {
-  PENDING: 'Pendente',
+  PENDING: 'Aguardando pagamento',
   PAID: 'Pago',
-  EXPIRED: 'Expirado',
+  EXPIRED: 'PIX não pago',
   CANCELED: 'Cancelado',
+}
+
+function pixExpiresAt(createdAt: string, type: string): Date {
+  const seconds = type === 'PAYMENT_PIX_SPOT' ? 300 : 86400
+  return new Date(new Date(createdAt).getTime() + seconds * 1000)
+}
+
+function fmtCountdown(expiresAt: Date): string {
+  const diffMs = expiresAt.getTime() - Date.now()
+  if (diffMs <= 0) return 'Expirado'
+  const totalSec = Math.floor(diffMs / 1000)
+  if (totalSec < 60) return `${totalSec}s`
+  if (totalSec < 3600) return `${Math.floor(totalSec / 60)}min`
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  return m > 0 ? `${h}h ${m}min` : `${h}h`
 }
 
 function fmtMoney(n: string | number) {
@@ -132,6 +148,13 @@ export default function ComandaDetailPage() {
   } | null>(null)
   const [pixCopied, setPixCopied] = useState(false)
   const [pixPaidConfirmed, setPixPaidConfirmed] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+
+  // Tick a cada segundo para atualizar countdowns de PIX pendente
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -591,17 +614,30 @@ export default function ComandaDetailPage() {
                                 <span>{item.description} · </span>
                               ) : null}
                               {new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                              {item.paymentStatus && (
-                                <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] font-semibold ${
-                                  item.paymentStatus === 'PAID' ? 'bg-sx-cyan/15 text-sx-cyan'
-                                  : item.paymentStatus === 'PENDING' ? 'bg-yellow-500/15 text-yellow-400'
-                                  : item.paymentStatus === 'EXPIRED' ? 'bg-white/5 text-white/40'
-                                  : item.paymentStatus === 'CANCELED' ? 'bg-red-500/10 text-red-400'
-                                  : 'text-white/40'
-                                }`}>
-                                  {paymentStatusLabel[item.paymentStatus]}
-                                </span>
-                              )}
+                              {item.paymentStatus && (() => {
+                                const isPix = item.type === 'PAYMENT_PIX_SPOT' || item.type === 'PAYMENT_PIX_TERM'
+                                const isPending = item.paymentStatus === 'PENDING'
+                                const isExpired = item.paymentStatus === 'EXPIRED'
+                                const expiresAt = isPix && isPending ? pixExpiresAt(item.createdAt, item.type) : null
+                                const expired = expiresAt ? now > expiresAt.getTime() : false
+                                const countdown = expiresAt && !expired ? fmtCountdown(expiresAt) : null
+
+                                return (
+                                  <span className={`ml-1 px-1.5 py-0.5 rounded text-[11px] font-semibold ${
+                                    item.paymentStatus === 'PAID' ? 'bg-sx-cyan/15 text-sx-cyan'
+                                    : (isPending && !expired) ? 'bg-yellow-500/15 text-yellow-400'
+                                    : (isExpired || expired) ? 'bg-red-500/10 text-red-400'
+                                    : item.paymentStatus === 'CANCELED' ? 'bg-red-500/10 text-red-400'
+                                    : 'text-white/40'
+                                  }`}>
+                                    {(isExpired || expired)
+                                      ? 'PIX não pago'
+                                      : countdown
+                                        ? `Aguardando · ${countdown}`
+                                        : paymentStatusLabel[item.paymentStatus]}
+                                  </span>
+                                )
+                              })()}
                               {isReversed && (
                                 <span className="ml-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-orange-500/10 text-orange-400">
                                   Estornado

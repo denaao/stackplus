@@ -510,8 +510,18 @@ export async function checkComandaItemPixStatus(itemId: string, viewerUserId: st
     return { itemId, status: item.paymentStatus as 'EXPIRED' | 'CANCELED', alreadyPaid: false }
   }
 
+  // Expiração por tempo: SPOT = 5 min, TERM = 24h.
+  // Se o prazo já passou e o item ainda está PENDING, marca como EXPIRED sem precisar
+  // consultar o Annapay (o PIX já não pode mais ser pago de qualquer forma).
+  const expirationSeconds = item.type === 'PAYMENT_PIX_SPOT' ? 300 : 86400
+  const expiresAt = new Date(item.createdAt.getTime() + expirationSeconds * 1000)
+  if (new Date() > expiresAt) {
+    await settleComandaPaymentItem({ itemId: item.id, paymentStatus: 'EXPIRED' })
+    return { itemId, status: 'EXPIRED' as const, alreadyPaid: false, expiredAt: expiresAt }
+  }
+
   if (!item.paymentReference) {
-    return { itemId, status: 'PENDING' as const, alreadyPaid: false }
+    return { itemId, status: 'PENDING' as const, alreadyPaid: false, expiresAt }
   }
 
   const { paid } = await checkPixChargeIsPaid(item.paymentReference, item.paymentVirtualAccount ?? undefined)
@@ -537,7 +547,7 @@ export async function checkComandaItemPixStatus(itemId: string, viewerUserId: st
     return { itemId, status: 'PAID' as const, alreadyPaid: false }
   }
 
-  return { itemId, status: 'PENDING' as const, alreadyPaid: false }
+  return { itemId, status: 'PENDING' as const, alreadyPaid: false, expiresAt }
 }
 
 /**
