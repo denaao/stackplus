@@ -467,7 +467,14 @@ export async function registerSale(input: {
         where: { sessionId_userId: { sessionId: shift.sessionId, userId: sessionUserId } },
         select: { userId: true, user: { select: { id: true, name: true, cpf: true } } },
       })
-  const playerLookup = member || participant || existingState
+  // O host do HG não está em HomeGameMember — verificar diretamente
+  const hostRecord = member || participant || existingState
+    ? null
+    : await prisma.homeGame.findFirst({
+        where: { id: shift.homeGameId, hostId: sessionUserId },
+        select: { hostId: true, host: { select: { id: true, name: true, cpf: true } } },
+      }).then((hg) => hg ? { userId: hg.hostId, user: hg.host } : null)
+  const playerLookup = member || participant || existingState || hostRecord
   if (!playerLookup) throw new Error('Jogador não pertence a este home game')
 
   const resolvedPlayerName = input.playerName?.trim() || playerLookup.user?.name || null
