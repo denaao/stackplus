@@ -1278,6 +1278,12 @@ export async function transferComandaBalance({
       throw new Error(`Saldo insuficiente (disponível: R$ ${sourceBalance.toFixed(2)})`)
     }
 
+    // Busca nome do destinatário pra incluir nas descriptions
+    const destUser = await tx.user.findUniqueOrThrow({
+      where: { id: destPlayerId },
+      select: { name: true },
+    })
+
     // Garante comanda de destino aberta (abre se necessário)
     const dest = await findOrOpenComandaWithTx(tx, {
       playerId: destPlayerId,
@@ -1285,13 +1291,21 @@ export async function transferComandaBalance({
       openedByUserId: createdByUserId,
     })
 
+    const outDesc = reason
+      ? `Para ${destUser.name} · ${reason}`
+      : `Para ${destUser.name}`
+
+    const inDesc = reason
+      ? `De ${source.player.name} · ${reason}`
+      : `De ${source.player.name}`
+
     // Cria TRANSFER_OUT na origem
     const sourceItem = await tx.comandaItem.create({
       data: {
         comandaId: sourceComandaId,
         type: 'TRANSFER_OUT',
         amount,
-        description: reason ?? null,
+        description: outDesc,
         createdByUserId,
       },
     })
@@ -1306,7 +1320,7 @@ export async function transferComandaBalance({
         comandaId: dest.id,
         type: 'TRANSFER_IN',
         amount,
-        description: reason ?? null,
+        description: inDesc,
         createdByUserId,
       },
     })
