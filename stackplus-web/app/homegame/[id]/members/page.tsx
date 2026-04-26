@@ -184,7 +184,7 @@ export default function HomeGameMembersPage() {
                             <div
                               ref={dropdownRef}
                               style={{
-                                position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 50,
+                                position: 'absolute', right: 0, bottom: 'calc(100% + 6px)', zIndex: 50,
                                 background: '#0C2438', border: '1px solid rgba(0,200,224,0.25)',
                                 borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                                 minWidth: '140px', overflow: 'hidden',
