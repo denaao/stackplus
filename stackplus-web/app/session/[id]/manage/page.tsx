@@ -1335,9 +1335,9 @@ export default function SessionManagePage() {
               value={rakebackSearch}
               onChange={(e) => setRakebackSearch(e.target.value)}
               placeholder="Buscar por nome..."
-              className="mt-2 w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
+              className="mt-2 w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-1.5 text-sm focus:border-sx-cyan focus:outline-none"
             />
-            <div className="mt-2 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+            <div className="mt-1.5 max-h-40 overflow-y-auto space-y-0.5 pr-1">
               {rakebackOptions
                 .filter((p) => !rakebackSearch || p.name.toLowerCase().includes(rakebackSearch.toLowerCase()))
                 .map((person) => {
@@ -1373,12 +1373,10 @@ export default function SessionManagePage() {
                         return next
                       })
                     }}
-                    className={`rounded-lg border-2 p-2.5 text-left transition-all ${checked ? 'border-sx-cyan bg-sx-cyan/15' : 'border-sx-border2 bg-sx-input/50 hover:border-sx-border2'}`}
+                    className={`w-full flex items-center justify-between rounded px-2.5 py-1.5 text-left transition-all ${checked ? 'bg-sx-cyan/15 text-sx-cyan' : 'text-zinc-300 hover:bg-sx-input'}`}
                   >
-                    <div className="flex items-center justify-between gap-1">
-                      <p className={`text-sm font-medium ${checked ? 'text-sx-cyan' : 'text-zinc-100'}`}>{person.name}</p>
-                      {checked && <span className="text-xs font-semibold text-sx-cyan">{currentPercent.toFixed(0)}%</span>}
-                    </div>
+                    <span className="text-sm">{person.name}</span>
+                    {checked && <span className="text-xs font-semibold text-sx-cyan ml-2 shrink-0">{currentPercent.toFixed(0)}%</span>}
                   </button>
                 )
               })}
