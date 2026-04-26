@@ -188,4 +188,13 @@ router.post('/:comandaId/close', async (req: AuthRequest, res: Response) => {
   res.json(comanda)
 })
 
+router.post('/:comandaId/items/:itemId/reverse', async (req: AuthRequest, res: Response) => {
+  const comanda = await ComandaService.reverseComandaItem({
+    comandaId: req.params.comandaId,
+    itemId: req.params.itemId,
+    reversedByUserId: req.user!.userId,
+  })
+  res.json(comanda)
+})
+
 export default router

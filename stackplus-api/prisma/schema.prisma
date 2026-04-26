@@ -670,6 +670,7 @@ model ComandaItem {
   paymentStatus         ComandaItemPaymentStatus?
   paymentVirtualAccount String?
   createdByUserId       String
+  reversalOfId          String?                   @unique
   createdAt             DateTime                  @default(now())
   updatedAt             DateTime                  @updatedAt
 
@@ -680,6 +681,8 @@ model ComandaItem {
   tournamentPlayer TournamentPlayer? @relation(fields: [tournamentPlayerId], references: [id])
   transferAsSource ComandaTransfer?  @relation("TransferSourceItem")
   transferAsDest   ComandaTransfer?  @relation("TransferDestItem")
+  reversalOf       ComandaItem?      @relation("ComandaItemReversal", fields: [reversalOfId], references: [id])
+  reversal         ComandaItem?      @relation("ComandaItemReversal")
 
   @@index([comandaId])
   @@index([type])

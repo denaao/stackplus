@@ -17,6 +17,8 @@ interface ComandaItem {
   description: string | null
   paymentStatus: string | null
   createdAt: string
+  reversalOfId: string | null
+  reversal: { id: string } | null
   tournament: { id: string; name: string } | null
   session: { id: string } | null
 }
@@ -107,6 +109,7 @@ export default function ComandaDetailPage() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDesc, setPaymentDesc] = useState('')
   const [saving, setSaving] = useState(false)
+  const [reversingItemId, setReversingItemId] = useState<string | null>(null)
   const [showSendPix, setShowSendPix] = useState(false)
   const [pixAmount, setPixAmount] = useState('')
   const [sendingPix, setSendingPix] = useState(false)
@@ -235,6 +238,25 @@ export default function ComandaDetailPage() {
     }
   }
 
+  const handleReverse = async (itemId: string) => {
+    const ok = await confirm('Deseja estornar este lançamento? A transação original ficará visível com marcação de estornada.', {
+      title: 'Estornar lançamento',
+      confirmLabel: 'Estornar',
+      danger: true,
+    })
+    if (!ok) return
+    setReversingItemId(itemId)
+    setError(null)
+    try {
+      await api.post(`/comanda/${comandaId}/items/${itemId}/reverse`)
+      load()
+    } catch (e) {
+      setError(getErrorMessage(e, 'Erro ao estornar lançamento'))
+    } finally {
+      setReversingItemId(null)
+    }
+  }
+
   const handleGeneratePixCharge = async (kind: 'SPOT' | 'TERM') => {
     if (!comanda) return
     const currentBalance = parseFloat(comanda.balance)
@@ -312,8 +334,13 @@ export default function ComandaDetailPage() {
   const balance = parseFloat(comanda.balance)
   const balanceColor = balance > 0 ? 'text-green-400' : balance < 0 ? 'text-red-400' : 'text-white'
   const grouped = groupByDate(comanda.items)
-  const totalDebits = comanda.items.filter(i => typeIsDebit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
-  const totalCredits = comanda.items.filter(i => typeIsCredit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
+  // Itens estornados (têm reversal filho) são neutralizados pelo item estorno filho,
+  // então excluímos ambos dos totais visuais para não inflar os números.
+  const reversedIds = new Set(comanda.items.filter(i => i.reversal).map(i => i.id))
+  const reversalOfIds = new Set(comanda.items.filter(i => i.reversalOfId).map(i => i.reversalOfId as string))
+  const effectiveItems = comanda.items.filter(i => !reversedIds.has(i.id) && !reversalOfIds.has(i.id))
+  const totalDebits = effectiveItems.filter(i => typeIsDebit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
+  const totalCredits = effectiveItems.filter(i => typeIsCredit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
 
   return (
     <div className="min-h-screen bg-sx-bg text-white">
@@ -443,8 +470,9 @@ export default function ComandaDetailPage() {
             <div className="space-y-3">
               {Object.entries(grouped).map(([date, items]) => {
                 const isOpen = openDates.size === 0 ? false : openDates.has(date)
-                const dayDebits = items.filter(i => typeIsDebit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
-                const dayCredits = items.filter(i => typeIsCredit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
+                const effectiveDayItems = items.filter(i => !i.reversal && !i.reversalOfId)
+                const dayDebits = effectiveDayItems.filter(i => typeIsDebit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
+                const dayCredits = effectiveDayItems.filter(i => typeIsCredit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
                 return (
                   <div key={date} className="rounded-xl overflow-hidden border border-white/5">
                     {/* Cabeçalho da data — sempre visível, clicável */}
@@ -472,13 +500,28 @@ export default function ComandaDetailPage() {
                     {isOpen && items.map((item, i) => {
                       const isCredit = typeIsCredit(item.type)
                       const isDebit = typeIsDebit(item.type)
-                      const amountColor = isCredit ? 'text-sx-cyan' : isDebit ? 'text-red-400' : 'text-zinc-300'
+                      const isReversed = !!item.reversal  // foi estornado (tem filho)
+                      const isReversal = !!item.reversalOfId  // é o estorno (tem pai)
+                      const amountColor = isReversed || isReversal
+                        ? 'text-white/30'
+                        : isCredit ? 'text-sx-cyan' : isDebit ? 'text-red-400' : 'text-zinc-300'
                       const sign = isCredit ? '+' : isDebit ? '−' : ''
                       const rowBg = i % 2 === 0 ? 'bg-white/[0.03]' : 'bg-transparent'
+
+                      // Pode estornar: aberta ou fechada, manager, item não é estorno nem já estornado,
+                      // não é CARRY_IN/CARRY_OUT, não está PENDING ou CANCELED (se pagamento)
+                      const canReverse = !isReversed
+                        && !isReversal
+                        && item.type !== 'CARRY_IN' && item.type !== 'CARRY_OUT'
+                        && !(item.paymentStatus === 'PENDING' || item.paymentStatus === 'CANCELED')
+
                       return (
-                        <div key={item.id} className={`${rowBg} px-4 py-3 flex items-center justify-between gap-3 border-t border-white/[0.04]`}>
+                        <div key={item.id} className={`${rowBg} px-4 py-3 flex items-center justify-between gap-3 border-t border-white/[0.04] ${isReversed ? 'opacity-50' : ''}`}>
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium">{typeLabel[item.type] ?? item.type}</div>
+                            <div className={`text-sm font-medium ${isReversed ? 'line-through decoration-red-400/60' : ''}`}>
+                              {isReversal && <span className="text-white/40 font-normal not-italic">↩ Estorno · </span>}
+                              {typeLabel[item.type] ?? item.type}
+                            </div>
                             <div className="text-xs text-white/40 mt-0.5 truncate">
                               {item.tournament && (
                                 <span className="text-sx-muted">{item.tournament.name} · </span>
@@ -505,10 +548,28 @@ export default function ComandaDetailPage() {
                                   {paymentStatusLabel[item.paymentStatus]}
                                 </span>
                               )}
+                              {isReversed && (
+                                <span className="ml-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-orange-500/10 text-orange-400">
+                                  Estornado
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <div className={`text-sm font-bold tabular-nums shrink-0 ${amountColor}`}>
-                            {sign} {fmtMoney(item.amount)}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className={`text-sm font-bold tabular-nums ${amountColor} ${isReversed ? 'line-through decoration-red-400/60' : ''}`}>
+                              {sign} {fmtMoney(item.amount)}
+                            </div>
+                            {canReverse && (
+                              <button
+                                type="button"
+                                onClick={() => handleReverse(item.id)}
+                                disabled={reversingItemId === item.id}
+                                title="Estornar lançamento"
+                                className="ml-1 px-2 py-1 rounded-lg text-[11px] font-semibold border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 disabled:opacity-40 transition-colors"
+                              >
+                                {reversingItemId === item.id ? '...' : '↩'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       )

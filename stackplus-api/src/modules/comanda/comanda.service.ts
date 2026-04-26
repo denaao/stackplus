@@ -172,6 +172,7 @@ export async function getComanda(comandaId: string, viewerUserId: string) {
         include: {
           session: { select: { id: true } },
           tournament: { select: { id: true, name: true } },
+          reversal: { select: { id: true } },
         },
       },
       tournamentPlayers: {
@@ -1234,6 +1235,105 @@ export async function findOrOpenComandaWithTx(tx: Prisma.TransactionClient, para
 // Versão pública: envelopa em transaction própria.
 export async function findOrOpenComanda(params: FindOrOpenParams) {
   return prisma.$transaction((tx: Prisma.TransactionClient) => findOrOpenComandaWithTx(tx, params))
+}
+
+// ─── Reverse item ─────────────────────────────────────────────────────────────
+/**
+ * Estorna um item da comanda de forma não-destrutiva:
+ * - Cria um novo item oposto (mesmo tipo, mesmo valor) com `reversalOfId` apontando pro original.
+ * - Ajusta o balance da comanda com o delta inverso do item original.
+ * - Nunca apaga o item original — ele fica visível com strikethrough no frontend.
+ *
+ * Regras de bloqueio:
+ * - Item já estornado (já tem um reversal filho).
+ * - Item que é ele mesmo um estorno (reversalOfId != null) — não estorna estorno.
+ * - Item do tipo CARRY_IN/CARRY_OUT — são lançamentos de abertura, não revertíveis aqui.
+ * - Item de pagamento com status PENDING — PIX pendente deve ser cancelado/expirado, não estornado.
+ * - Item de pagamento com status CANCELED — já sem efeito no balance, estorno seria duplo.
+ */
+export async function reverseComandaItem({
+  comandaId,
+  itemId,
+  reversedByUserId,
+}: {
+  comandaId: string
+  itemId: string
+  reversedByUserId: string
+}) {
+  await assertComandaAccess(reversedByUserId, { comandaId }, { managerOnly: true })
+
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const item = await tx.comandaItem.findUniqueOrThrow({
+      where: { id: itemId },
+      include: { reversal: { select: { id: true } } },
+    })
+
+    if (item.comandaId !== comandaId) {
+      throw new Error('Item não pertence a esta comanda')
+    }
+    if (item.reversalOfId) {
+      throw new Error('Este item já é um estorno — não é possível estornar um estorno')
+    }
+    if (item.reversal) {
+      throw new Error('Este item já foi estornado')
+    }
+    const type = item.type as ComandaItemType
+    if (type === 'CARRY_IN' || type === 'CARRY_OUT') {
+      throw new Error('Lançamentos de saldo transportado não podem ser estornados')
+    }
+    if (isPaymentType(type) && (item.paymentStatus === 'PENDING' || item.paymentStatus === 'CANCELED')) {
+      throw new Error('Pagamento pendente ou cancelado não pode ser estornado por aqui')
+    }
+
+    const amount = Number(item.amount)
+
+    // Computa o delta que o item original causou no balance (mesmo cálculo de addComandaItemWithTx):
+    //   payment → +amount | debit → -amount | outros créditos → +amount
+    // O reverso é exatamente o oposto.
+    const originalDelta = isPaymentType(type) ? amount : isDebitType(type) ? -amount : amount
+    const reversalDelta = -originalDelta
+
+    // Cria o item de estorno
+    await tx.comandaItem.create({
+      data: {
+        comandaId,
+        type,
+        amount,
+        description: `Estorno: ${item.description ?? type}`,
+        sessionId: item.sessionId ?? null,
+        tournamentId: item.tournamentId ?? null,
+        tournamentPlayerId: item.tournamentPlayerId ?? null,
+        // Pagamentos estornados entram como PAID (já quitado/revertido manualmente)
+        paymentStatus: isPaymentType(type) ? 'PAID' : null,
+        reversalOfId: itemId,
+        createdByUserId: reversedByUserId,
+      },
+    })
+
+    // Ajusta balance
+    await tx.comanda.update({
+      where: { id: comandaId },
+      data: { balance: { increment: reversalDelta } },
+    })
+
+    // Retorna a comanda atualizada com todos os itens (incluindo o novo estorno)
+    return tx.comanda.findUniqueOrThrow({
+      where: { id: comandaId },
+      include: {
+        player: { select: { id: true, name: true, cpf: true } },
+        openedBy: { select: { id: true, name: true } },
+        closedBy: { select: { id: true, name: true } },
+        items: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            session: { select: { id: true } },
+            tournament: { select: { id: true, name: true } },
+            reversal: { select: { id: true } },
+          },
+        },
+      },
+    })
+  })
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
