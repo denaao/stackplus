@@ -832,6 +832,11 @@ export async function closeCashbox({
   const isManager = await isHomeGameHost(viewerUserId, homeGameId)
   if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode fechar o caixa')
 
+  const homeGame = await db.homeGame.findUniqueOrThrow({
+    where: { id: homeGameId },
+    select: { bankBalance: true },
+  })
+
   const itemWhere: Prisma.ComandaItemWhereInput = { comanda: { homeGameId } }
   if (from || to) {
     const createdAt: Prisma.DateTimeFilter = {}
@@ -846,11 +851,36 @@ export async function closeCashbox({
       type: true,
       amount: true,
       paymentStatus: true,
+      sessionId: true,
       comanda: {
         select: {
           player: { select: { id: true, name: true } },
         },
       },
+      session: {
+        select: { id: true, name: true, startedAt: true },
+      },
+    },
+  })
+
+  // ── Rake: vem diretamente das CashTables fechadas no período ────────────────
+  const tableWhere: Record<string, unknown> = {
+    status: 'CLOSED',
+    session: { homeGameId },
+  }
+  if (from || to) {
+    const closedAt: Record<string, Date> = {}
+    if (from) closedAt.gte = from
+    if (to) closedAt.lte = to
+    tableWhere.closedAt = closedAt
+  }
+  const closedTables = await db.cashTable.findMany({
+    where: tableWhere,
+    select: {
+      id: true,
+      name: true,
+      rake: true,
+      session: { select: { id: true, name: true, startedAt: true } },
     },
   })
 
@@ -896,6 +926,11 @@ export async function closeCashbox({
   const pixInByPlayer = new Map<string, { playerId: string; name: string; amount: number }>()
   // Quem recebeu PIX do home game (TRANSFER_OUT)
   const pixOutByPlayer = new Map<string, { playerId: string; name: string; amount: number }>()
+
+  // Caixinha por sessão + por destinatário
+  const caixinhaBySession = new Map<string, { sessionId: string; sessionName: string; amount: number; recipients: Map<string, { name: string; amount: number }> }>()
+  // Rakeback por sessão + por destinatário
+  const rakebackBySession = new Map<string, { sessionId: string; sessionName: string; amount: number; recipients: Map<string, { name: string; amount: number }> }>()
 
   function bumpByPlayer(
     map: Map<string, { playerId: string; name: string; amount: number }>,
@@ -953,17 +988,40 @@ export async function closeCashbox({
     if (type === 'PAYMENT_CARD' && effective && playerId) {
       bumpByPlayer(cardByPlayer, playerId, playerName, amt)
     }
-    if (type === 'STAFF_CAIXINHA') totals.totalCaixinha += amt
-    if (type === 'STAFF_RAKEBACK') totals.totalRakeback += amt
+    if (type === 'STAFF_CAIXINHA') {
+      totals.totalCaixinha += amt
+      const sid = it.sessionId ?? '__no_session__'
+      const sName = it.session?.name ?? (it.session?.startedAt ? new Date(it.session.startedAt).toLocaleDateString('pt-BR') : 'Partida')
+      const entry = caixinhaBySession.get(sid) ?? { sessionId: sid, sessionName: sName, amount: 0, recipients: new Map() }
+      entry.amount += amt
+      if (playerId) {
+        const rec = entry.recipients.get(playerId) ?? { name: playerName, amount: 0 }
+        rec.amount += amt
+        entry.recipients.set(playerId, rec)
+      }
+      caixinhaBySession.set(sid, entry)
+    }
+    if (type === 'STAFF_RAKEBACK') {
+      totals.totalRakeback += amt
+      const sid = it.sessionId ?? '__no_session__'
+      const sName = it.session?.name ?? (it.session?.startedAt ? new Date(it.session.startedAt).toLocaleDateString('pt-BR') : 'Partida')
+      const entry = rakebackBySession.get(sid) ?? { sessionId: sid, sessionName: sName, amount: 0, recipients: new Map() }
+      entry.amount += amt
+      if (playerId) {
+        const rec = entry.recipients.get(playerId) ?? { name: playerName, amount: 0 }
+        rec.amount += amt
+        entry.recipients.set(playerId, rec)
+      }
+      rakebackBySession.set(sid, entry)
+    }
     if (effective && (type === 'PAYMENT_CASH' || type === 'PAYMENT_CARD' ||
         type === 'PAYMENT_PIX_SPOT' || type === 'PAYMENT_PIX_TERM')) {
       paymentsByType[type] = (paymentsByType[type] ?? 0) + amt
     }
   }
 
-  // Rake total agregado direto das sessões finalizadas
-  // rake was moved to CashTable — set to 0 until the aggregation is refactored
-  totals.totalRake = 0
+  // Rake: soma das CashTables fechadas no período
+  totals.totalRake = closedTables.reduce((s, t) => s + Number(t.rake), 0)
 
   // Round money
   for (const k of Object.keys(totals) as Array<keyof typeof totals>) {
@@ -1011,6 +1069,30 @@ export async function closeCashbox({
     debitsByPlayer: Array.from(debitsByPlayer.values())
       .map((e) => ({ ...e, amount: round(e.amount) }))
       .sort((a, b) => b.amount - a.amount),
+    // Rake por mesa (tabela fechada no período)
+    rakeByTable: closedTables
+      .filter(t => Number(t.rake) > 0)
+      .map(t => ({
+        tableId: t.id,
+        tableName: t.name,
+        sessionName: t.session.name ?? (t.session.startedAt ? new Date(t.session.startedAt).toLocaleDateString('pt-BR') : 'Partida'),
+        amount: round(Number(t.rake)),
+      }))
+      .sort((a, b) => b.amount - a.amount),
+    // Caixinha por sessão com destinatários
+    caixinhaBySession: Array.from(caixinhaBySession.values()).map(e => ({
+      sessionId: e.sessionId,
+      sessionName: e.sessionName,
+      amount: round(e.amount),
+      recipients: Array.from(e.recipients.entries()).map(([id, r]) => ({ playerId: id, name: r.name, amount: round(r.amount) })),
+    })).sort((a, b) => b.amount - a.amount),
+    // Rakeback por sessão com destinatários
+    rakebackBySession: Array.from(rakebackBySession.values()).map(e => ({
+      sessionId: e.sessionId,
+      sessionName: e.sessionName,
+      amount: round(e.amount),
+      recipients: Array.from(e.recipients.entries()).map(([id, r]) => ({ playerId: id, name: r.name, amount: round(r.amount) })),
+    })).sort((a, b) => b.amount - a.amount),
     openComandas: open.map((c) => ({
       id: c.id,
       playerId: c.player.id,
@@ -1024,6 +1106,7 @@ export async function closeCashbox({
       balance: Number(c.balance),
       status: c.status,
     })),
+    bankBalance: Number(homeGame.bankBalance),
   }
 }
 

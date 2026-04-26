@@ -13,10 +13,25 @@ import { getErrorMessage } from '@/lib/errors'
 
 interface PlayerAmount { playerId: string; name: string; amount: number }
 
+interface RakeTableEntry {
+  tableId: string
+  tableName: string
+  sessionName: string
+  amount: number
+}
+
+interface SessionBreakdown {
+  sessionId: string
+  sessionName: string
+  amount: number
+  recipients: PlayerAmount[]
+}
+
 interface CashboxReport {
   generatedAt: string
   periodStart: string | null
   periodEnd: string | null
+  bankBalance: number
   totals: {
     totalDebits: number
     totalCredits: number
@@ -42,6 +57,9 @@ interface CashboxReport {
   pixOutByPlayer: PlayerAmount[]
   creditsByPlayer: PlayerAmount[]
   debitsByPlayer: PlayerAmount[]
+  rakeByTable: RakeTableEntry[]
+  caixinhaBySession: SessionBreakdown[]
+  rakebackBySession: SessionBreakdown[]
   openComandas: Array<{ id: string; playerId: string; playerName: string; balance: number; openedAt: string }>
 }
 
@@ -211,10 +229,30 @@ function CaixaContent() {
 
   const t = report?.totals
 
-  // Monta lista de rakeback e rake sem detalhamento por jogador (API não retorna)
-  const rakeLines: PlayerAmount[] = []
-  const caixinhaLines: PlayerAmount[] = []
-  const rakebackLines: PlayerAmount[] = []
+  // Rake: uma linha por mesa (tableName — sessionName)
+  const rakeLines: PlayerAmount[] = report?.rakeByTable?.map(t => ({
+    playerId: t.tableId,
+    name: `${t.tableName} — ${t.sessionName}`,
+    amount: t.amount,
+  })) ?? []
+
+  // Caixinha: uma linha por destinatário dentro de cada sessão
+  const caixinhaLines: PlayerAmount[] = (report?.caixinhaBySession ?? []).flatMap(s =>
+    s.recipients.map(r => ({
+      playerId: `${s.sessionId}_${r.playerId}`,
+      name: `${r.name} (${s.sessionName})`,
+      amount: r.amount,
+    }))
+  )
+
+  // Rakeback: uma linha por destinatário dentro de cada sessão
+  const rakebackLines: PlayerAmount[] = (report?.rakebackBySession ?? []).flatMap(s =>
+    s.recipients.map(r => ({
+      playerId: `${s.sessionId}_${r.playerId}`,
+      name: `${r.name} (${s.sessionName})`,
+      amount: r.amount,
+    }))
+  )
 
   return (
     <div className="min-h-screen bg-sx-bg text-white">
@@ -324,6 +362,24 @@ function CaixaContent() {
               {' · '}Gerado {new Date(report.generatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
             </p>
 
+            {/* Saldo bancário — destaque */}
+            <div style={{
+              background: 'linear-gradient(135deg,#0a1f12 0%,#071828 100%)',
+              border: `2px solid ${report.bankBalance >= 0 ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.4)'}`,
+              borderRadius: '14px', padding: '16px 20px', marginBottom: '16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{ fontSize: '11px', color: '#4A7A90', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px' }}>
+                  🏦 Saldo bancário do Home Game
+                </div>
+                <div style={{ fontSize: '26px', fontWeight: 800, color: report.bankBalance >= 0 ? '#4ade80' : '#f87171', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmt(report.bankBalance)}
+                </div>
+              </div>
+              <div style={{ fontSize: '28px', opacity: 0.5 }}>{report.bankBalance >= 0 ? '✅' : '⚠️'}</div>
+            </div>
+
             {/* Cartões de resumo */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '24px' }}>
               {[
@@ -416,9 +472,10 @@ function CaixaContent() {
                 value={t.totalRake}
                 valueColor="#fbbf24"
                 lines={rakeLines}
+                linesLabel="por mesa / sessão"
                 open={!!open['rake']}
                 onToggle={() => toggle('rake')}
-                emptyMsg="Detalhamento por partida não disponível neste relatório."
+                emptyMsg="Nenhuma mesa fechada no período."
               />
 
               <AccordionRow
@@ -426,9 +483,10 @@ function CaixaContent() {
                 value={t.totalCaixinha}
                 valueColor="#fbbf24"
                 lines={caixinhaLines}
+                linesLabel="por destinatário / sessão"
                 open={!!open['caixinha']}
                 onToggle={() => toggle('caixinha')}
-                emptyMsg="Detalhamento por partida não disponível neste relatório."
+                emptyMsg="Nenhuma caixinha distribuída no período."
               />
 
               {t.totalRakeback > 0 && (
@@ -437,9 +495,10 @@ function CaixaContent() {
                   value={t.totalRakeback}
                   valueColor="#f87171"
                   lines={rakebackLines}
+                  linesLabel="por destinatário / sessão"
                   open={!!open['rakeback']}
                   onToggle={() => toggle('rakeback')}
-                  emptyMsg="Detalhamento por partida não disponível neste relatório."
+                  emptyMsg="Nenhum rakeback distribuído no período."
                 />
               )}
 
