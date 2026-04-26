@@ -47,6 +47,8 @@ enum MemberPaymentMode {
 enum MemberRole {
   PLAYER
   HOST
+  DEALER
+  SANGEUR
 }
 
 enum SessionFinancialPayoutPurpose {

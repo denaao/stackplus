@@ -1,0 +1,3 @@
+-- Add DEALER and SANGEUR values to MemberRole enum
+ALTER TYPE "MemberRole" ADD VALUE IF NOT EXISTS 'DEALER';
+ALTER TYPE "MemberRole" ADD VALUE IF NOT EXISTS 'SANGEUR';

@@ -250,7 +250,7 @@ export async function setMemberRole(input: {
   homeGameId: string
   ownerUserId: string   // quem esta fazendo a chamada (tem que ser o dono)
   memberUserId: string  // quem sera promovido/rebaixado
-  role: 'HOST' | 'PLAYER'
+  role: 'HOST' | 'PLAYER' | 'DEALER' | 'SANGEUR'
 }) {
   await assertHomeGameOwner(input.ownerUserId, input.homeGameId)
 

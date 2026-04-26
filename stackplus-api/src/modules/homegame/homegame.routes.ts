@@ -124,7 +124,7 @@ router.delete('/:id', authenticate, destructiveLimiter, async (req: AuthRequest,
 })
 
 const setMemberRoleSchema = z.object({
-  role: z.enum(['HOST', 'PLAYER']),
+  role: z.enum(['HOST', 'PLAYER', 'DEALER', 'SANGEUR']),
 })
 
 router.patch('/:id/members/:userId/role', authenticate, async (req: AuthRequest, res: Response) => {
