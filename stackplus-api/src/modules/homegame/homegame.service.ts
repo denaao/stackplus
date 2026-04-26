@@ -339,17 +339,50 @@ export async function listSangeurAccesses(homeGameId: string, hostId: string) {
   })
 }
 
+function slugifyName(name: string): string {
+  return name
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '.')         // espaços → ponto
+    .replace(/[^a-z0-9.]/g, '')  // remove caracteres especiais
+    .slice(0, 40)
+}
+
 export async function enableSangeurAccess(input: {
   homeGameId: string
   hostId: string
   memberUserId: string
-  username: string
+  username?: string
   password?: string
 }) {
   await ensureHostAndMember(input.homeGameId, input.hostId, input.memberUserId)
 
-  const normalizedUsername = input.username.trim().toLowerCase()
-  if (!normalizedUsername) throw new Error('Username é obrigatório')
+  let normalizedUsername: string
+
+  if (input.username?.trim()) {
+    normalizedUsername = input.username.trim().toLowerCase()
+  } else {
+    // Gera username a partir do nome do usuário
+    const member = await prisma.user.findUniqueOrThrow({
+      where: { id: input.memberUserId },
+      select: { name: true },
+    })
+    const base = slugifyName(member.name) || 'sangeur'
+    // Garante unicidade dentro do home game
+    const existing = await prisma.homeGameSangeurAccess.findMany({
+      where: { homeGameId: input.homeGameId },
+      select: { username: true },
+    })
+    const taken = new Set(existing.map((a) => a.username))
+    normalizedUsername = base
+    let suffix = 2
+    while (taken.has(normalizedUsername)) {
+      normalizedUsername = `${base}${suffix++}`
+    }
+  }
+
+  if (!normalizedUsername) throw new Error('Não foi possível gerar username')
 
   // Gera token de ativação — a SANGEUR define a própria senha via QR Code
   const activationToken = generateActivationToken()

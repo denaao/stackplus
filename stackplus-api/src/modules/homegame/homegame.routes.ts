@@ -24,7 +24,7 @@ const financialConfigSchema = z.object({
 
 const enableSangeurSchema = z.object({
   userId: z.string().uuid(),
-  username: z.string().trim().min(3).max(40),
+  username: z.string().trim().min(3).max(40).optional(),
   password: z.string().trim().min(6).max(120).optional(),
 })
 
