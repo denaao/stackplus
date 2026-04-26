@@ -179,6 +179,24 @@ router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) =>
   res.status(201).json(result)
 })
 
+// POST /comanda/:comandaId/transfer
+router.post('/:comandaId/transfer', async (req: AuthRequest, res: Response) => {
+  const data = z.object({
+    destPlayerId: z.string().uuid(),
+    amount: z.number().positive(),
+    reason: z.string().trim().max(300).optional(),
+  }).parse(req.body)
+
+  const result = await ComandaService.transferComandaBalance({
+    sourceComandaId: req.params.comandaId,
+    destPlayerId: data.destPlayerId,
+    amount: data.amount,
+    reason: data.reason,
+    createdByUserId: req.user!.userId,
+  })
+  res.status(201).json(result)
+})
+
 // POST /comanda/:comandaId/close
 router.post('/:comandaId/close', async (req: AuthRequest, res: Response) => {
   const comanda = await ComandaService.closeComanda({

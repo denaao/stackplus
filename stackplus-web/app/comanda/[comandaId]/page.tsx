@@ -110,6 +110,13 @@ export default function ComandaDetailPage() {
   const [paymentDesc, setPaymentDesc] = useState('')
   const [saving, setSaving] = useState(false)
   const [reversingItemId, setReversingItemId] = useState<string | null>(null)
+  // Transferência entre comandas
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [transferMembers, setTransferMembers] = useState<{ id: string; name: string }[]>([])
+  const [transferDestId, setTransferDestId] = useState('')
+  const [transferAmount, setTransferAmount] = useState('')
+  const [transferReason, setTransferReason] = useState('')
+  const [transferring, setTransferring] = useState(false)
   const [showSendPix, setShowSendPix] = useState(false)
   const [pixAmount, setPixAmount] = useState('')
   const [sendingPix, setSendingPix] = useState(false)
@@ -321,6 +328,55 @@ export default function ComandaDetailPage() {
     }
   }
 
+  const openTransferModal = async () => {
+    if (!comanda) return
+    setError(null)
+    setTransferAmount(parseFloat(comanda.balance).toFixed(2))
+    setTransferDestId('')
+    setTransferReason('')
+    try {
+      // Busca todos os membros do HG (+ host) excluindo o próprio jogador da comanda
+      const [membersRes, hgRes] = await Promise.all([
+        api.get(`/home-games/${comanda.homeGameId}/members`),
+        api.get(`/home-games/${comanda.homeGameId}`),
+      ])
+      const members: { userId: string; user: { id: string; name: string } }[] = membersRes.data ?? []
+      const candidates = members
+        .map(m => ({ id: m.user?.id ?? m.userId, name: m.user?.name ?? '' }))
+        .filter(m => m.id !== comanda.player.id)
+
+      // Inclui o host se não estiver na lista de membros
+      const hg = hgRes.data
+      if (hg?.host && hg.host.id !== comanda.player.id && !candidates.find(c => c.id === hg.host.id)) {
+        candidates.unshift({ id: hg.host.id, name: hg.host.name })
+      }
+
+      setTransferMembers(candidates)
+      setShowTransfer(true)
+    } catch (e) {
+      setError(getErrorMessage(e, 'Erro ao carregar membros'))
+    }
+  }
+
+  const handleTransfer = async () => {
+    if (!transferDestId || !transferAmount) return
+    setTransferring(true)
+    setError(null)
+    try {
+      await api.post(`/comanda/${comandaId}/transfer`, {
+        destPlayerId: transferDestId,
+        amount: parseFloat(transferAmount),
+        reason: transferReason || undefined,
+      })
+      setShowTransfer(false)
+      load()
+    } catch (e) {
+      setError(getErrorMessage(e, 'Erro ao transferir saldo'))
+    } finally {
+      setTransferring(false)
+    }
+  }
+
   const input = 'w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan'
 
   if (loading) return <AppLoading />
@@ -428,15 +484,22 @@ export default function ComandaDetailPage() {
             </div>
           )}
 
-          {/* Botão Enviar PIX — quando jogador tem saldo credor (aberta ou fechada) */}
+          {/* Botões de saldo credor — quando jogador tem saldo positivo */}
           {balance > 0 && (
-            <div className="mt-4 pt-4 border-t border-sx-border">
+            <div className="mt-4 pt-4 border-t border-sx-border grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => { setPixAmount(balance.toFixed(2)); setShowSendPix(true) }}
-                className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 hover:bg-sx-cyan/20 px-3 py-2.5 text-sm font-bold text-sx-cyan"
+                className="rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 hover:bg-sx-cyan/20 px-3 py-2.5 text-sm font-bold text-sx-cyan"
               >
                 ↗ Enviar PIX ao jogador
+              </button>
+              <button
+                type="button"
+                onClick={openTransferModal}
+                className="rounded-lg border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 px-3 py-2.5 text-sm font-bold text-purple-300"
+              >
+                ⇄ Transferir para jogador
               </button>
             </div>
           )}
@@ -703,6 +766,72 @@ export default function ComandaDetailPage() {
                 Cobrança gerada, mas QR/copia-e-cola não retornou. Verifique o extrato Annapay.
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal transferência */}
+      {showTransfer && (
+        <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 p-4" style={{ backdropFilter: 'blur(4px)' }}>
+          <div className="bg-sx-card border border-sx-border rounded-2xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Transferir saldo</h3>
+              <button onClick={() => setShowTransfer(false)} className="text-white/40 hover:text-white">✕</button>
+            </div>
+
+            <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.2)' }}>
+              <div className="text-xs text-sx-muted mb-0.5">Origem</div>
+              <div className="font-semibold text-white">{comanda.player.name}</div>
+              <div className="text-xs text-purple-300 mt-0.5">Saldo disponível: {fmtMoney(balance)}</div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-sx-muted mb-1">Destinatário</label>
+              <select
+                className={input}
+                value={transferDestId}
+                onChange={e => setTransferDestId(e.target.value)}
+              >
+                <option value="">Selecione um jogador...</option>
+                {transferMembers.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-sx-muted mb-1">Valor (R$)</label>
+              <input
+                className={input}
+                type="number"
+                step="0.01"
+                max={balance}
+                value={transferAmount}
+                onChange={e => setTransferAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-sx-muted mb-1">Motivo (opcional)</label>
+              <input
+                className={input}
+                value={transferReason}
+                onChange={e => setTransferReason(e.target.value)}
+                placeholder="Ex: troco, ajuste..."
+              />
+            </div>
+
+            {error && <div className="text-red-400 text-sm">{error}</div>}
+
+            <button
+              onClick={handleTransfer}
+              disabled={transferring || !transferDestId || !transferAmount}
+              className="w-full py-3 rounded-xl font-semibold text-sm disabled:opacity-50"
+              style={{ background: 'rgba(168,85,247,0.8)', color: '#fff' }}
+            >
+              {transferring ? 'Transferindo...' : 'Confirmar transferência'}
+            </button>
           </div>
         </div>
       )}

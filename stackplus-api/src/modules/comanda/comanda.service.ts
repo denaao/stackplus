@@ -1237,6 +1237,104 @@ export async function findOrOpenComanda(params: FindOrOpenParams) {
   return prisma.$transaction((tx: Prisma.TransactionClient) => findOrOpenComandaWithTx(tx, params))
 }
 
+// ─── Transfer balance between comandas ────────────────────────────────────────
+/**
+ * Transfere saldo de uma comanda para outra dentro do mesmo home game.
+ * - Qualquer pessoa com acesso à comanda de origem pode iniciar (owner ou manager).
+ * - Só transfere se a origem tiver saldo positivo suficiente.
+ * - Se o destino não tiver comanda aberta, abre automaticamente.
+ * - Cria TRANSFER_OUT na origem, TRANSFER_IN no destino, e um registro ComandaTransfer linkando os dois.
+ */
+export async function transferComandaBalance({
+  sourceComandaId,
+  destPlayerId,
+  amount,
+  reason,
+  createdByUserId,
+}: {
+  sourceComandaId: string
+  destPlayerId: string
+  amount: number
+  reason?: string
+  createdByUserId: string
+}) {
+  if (amount <= 0) throw new Error('Valor deve ser maior que zero')
+
+  // Verifica acesso à comanda de origem (owner ou manager)
+  await assertComandaAccess(createdByUserId, { comandaId: sourceComandaId })
+
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const source = await tx.comanda.findUniqueOrThrow({
+      where: { id: sourceComandaId },
+      include: { player: { select: { id: true, name: true } } },
+    })
+
+    if (source.playerId === destPlayerId) {
+      throw new Error('Não é possível transferir para a própria comanda')
+    }
+
+    const sourceBalance = Number(source.balance)
+    if (sourceBalance < amount) {
+      throw new Error(`Saldo insuficiente (disponível: R$ ${sourceBalance.toFixed(2)})`)
+    }
+
+    // Garante comanda de destino aberta (abre se necessário)
+    const dest = await findOrOpenComandaWithTx(tx, {
+      playerId: destPlayerId,
+      homeGameId: source.homeGameId,
+      openedByUserId: createdByUserId,
+    })
+
+    // Cria TRANSFER_OUT na origem
+    const sourceItem = await tx.comandaItem.create({
+      data: {
+        comandaId: sourceComandaId,
+        type: 'TRANSFER_OUT',
+        amount,
+        description: reason ?? null,
+        createdByUserId,
+      },
+    })
+    await tx.comanda.update({
+      where: { id: sourceComandaId },
+      data: { balance: { decrement: amount } },
+    })
+
+    // Cria TRANSFER_IN no destino
+    const destItem = await tx.comandaItem.create({
+      data: {
+        comandaId: dest.id,
+        type: 'TRANSFER_IN',
+        amount,
+        description: reason ?? null,
+        createdByUserId,
+      },
+    })
+    await tx.comanda.update({
+      where: { id: dest.id },
+      data: { balance: { increment: amount } },
+    })
+
+    // Registra o vínculo entre os dois itens
+    await tx.comandaTransfer.create({
+      data: {
+        sourceItemId: sourceItem.id,
+        destItemId: destItem.id,
+        reason: reason ?? null,
+        createdByUserId,
+      },
+    })
+
+    return {
+      sourceComandaId,
+      destComandaId: dest.id,
+      amount,
+      sourceItem,
+      destItem,
+    }
+  })
+}
+
 // ─── Reverse item ─────────────────────────────────────────────────────────────
 /**
  * Estorna um item da comanda de forma não-destrutiva:
