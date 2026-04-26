@@ -547,9 +547,6 @@ export default function ComandaDetailPage() {
             <div className="space-y-3">
               {Object.entries(grouped).map(([date, items]) => {
                 const isOpen = openDates.size === 0 ? false : openDates.has(date)
-                const effectiveDayItems = items.filter(i => !i.reversal && !i.reversalOfId)
-                const dayDebits = effectiveDayItems.filter(i => typeIsDebit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
-                const dayCredits = effectiveDayItems.filter(i => typeIsCredit(i.type)).reduce((s, i) => s + parseFloat(i.amount), 0)
                 return (
                   <div key={date} className="rounded-xl overflow-hidden border border-white/5">
                     {/* Cabeçalho da data — sempre visível, clicável */}
@@ -562,15 +559,7 @@ export default function ComandaDetailPage() {
                         <span className="text-xs text-white/50 uppercase tracking-widest font-medium">{date}</span>
                         <span className="text-xs text-white/30">{items.length} lançamento{items.length !== 1 ? 's' : ''}</span>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {dayDebits > 0 && (
-                          <span className="text-xs font-semibold text-red-400">− {fmtMoney(dayDebits)}</span>
-                        )}
-                        {dayCredits > 0 && (
-                          <span className="text-xs font-semibold text-sx-cyan">+ {fmtMoney(dayCredits)}</span>
-                        )}
-                        <span className="text-white/30 text-sm">{isOpen ? '▲' : '▼'}</span>
-                      </div>
+                      <span className="text-white/30 text-sm">{isOpen ? '▲' : '▼'}</span>
                     </button>
 
                     {/* Lançamentos — visíveis só quando aberto */}
