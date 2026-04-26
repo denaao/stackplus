@@ -289,7 +289,6 @@ export default function SessionManagePage() {
   const [sangeurAccesses, setSangeurAccesses] = useState<SangeurAccess[]>([])
   const [sangeurMembers, setSangeurMembers] = useState<SangeurMember[]>([])
   const [sangeurUserId, setSangeurUserId] = useState('')
-  const [sangeurUsername, setSangeurUsername] = useState('')
   const [sangeurLoading, setSangeurLoading] = useState(false)
   const [sangeurActionUserId, setSangeurActionUserId] = useState<string | null>(null)
   const [sangeurError, setSangeurError] = useState<string | null>(null)
@@ -456,16 +455,11 @@ export default function SessionManagePage() {
       setSangeurError('Selecione um participante para habilitar como SANGEUR.')
       return
     }
-    if (!sangeurUsername.trim()) {
-      setSangeurError('Informe o usuario da SANGEUR para POS.')
-      return
-    }
     setSangeurError(null)
     setSangeurLoading(true)
     try {
       const payload = {
         userId: sangeurUserId,
-        username: sangeurUsername.trim(),
       }
 
       const { data } = await api.post(`/home-games/${session.homeGame.id}/sangeurs`, payload)
@@ -477,7 +471,6 @@ export default function SessionManagePage() {
         activationToken: data.activationToken,
       })
       setSangeurUserId('')
-      setSangeurUsername('')
       setShowHabilitarForm(false)
       setPageFeedback({ tone: 'success', message: 'SANGEUR habilitada. Mostre o QR Code para ela criar a senha.' })
     } catch (err) {
@@ -1518,16 +1511,6 @@ export default function SessionManagePage() {
                     )}
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs uppercase tracking-wide text-sx-muted">Usuário POS</label>
-                    <input
-                      type="text"
-                      value={sangeurUsername}
-                      onChange={(e) => setSangeurUsername(e.target.value)}
-                      className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-                    />
-                  </div>
-
                   {sangeurError && (
                     <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
                       {sangeurError}
@@ -1559,9 +1542,6 @@ export default function SessionManagePage() {
                           style={{ width: 200, height: 200 }}
                         />
                       </div>
-                      <p className="text-center text-[10px] text-sx-muted">
-                        Usuário POS: <span className="font-mono text-sx-cyan">{sangeurIssuedCredential.username}</span>
-                      </p>
                     </div>
                   )}
                 </div>
