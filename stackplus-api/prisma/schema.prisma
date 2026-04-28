@@ -86,6 +86,8 @@ enum ComandaItemType {
   CARRY_OUT
   STAFF_CAIXINHA
   STAFF_RAKEBACK
+  MANUAL_CREDIT
+  MANUAL_DEBIT
 }
 
 enum ComandaItemPaymentStatus {
@@ -128,6 +130,45 @@ enum CashTableStatus {
   CLOSED
 }
 
+
+enum EventStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  FINISHED
+  CANCELED
+}
+
+enum EventStaffRole {
+  HOST
+  CASHIER
+  DEALER
+  SANGEUR
+  TOURNAMENT_DIRECTOR
+  CASH_DIRECTOR
+}
+
+enum EventPermissionKey {
+  CREATE_TOURNAMENT
+  MANAGE_TOURNAMENT
+  MANAGE_CASH_GAME
+  VIEW_COMANDAS
+  DAILY_CLOSE
+  POS_TOURNAMENT
+  POS_CASH
+  CAIXINHA
+  PONTO
+}
+
+enum DailyCloseStatus {
+  OPEN
+  CLOSED
+}
+
+enum DocumentType {
+  CPF
+  PASSPORT
+}
 enum SangeurMovementType {
   INITIAL_LOAD
   RELOAD
@@ -151,7 +192,10 @@ model User {
   id           String   @id @default(uuid())
   name         String
   email        String?  @unique
-  cpf          String   @unique
+  cpf          String?  @unique
+  // Migration 4: documento principal (CPF ou passaporte)
+  documentType   DocumentType @default(CPF)
+  documentNumber String
   phone        String?
   pixType      PixKeyType?
   pixKey       String?
@@ -160,6 +204,8 @@ model User {
   avatarUrl    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@unique([documentType, documentNumber])
 
   hostedGames     HomeGame[]
   memberships     HomeGameMember[]
@@ -188,6 +234,11 @@ model User {
   tournamentPlayers      TournamentPlayer[]
   auditLogs              AuditLog[]
   refreshTokens          RefreshToken[]
+  // Events (Migration 1)
+  eventSangeurAccesses   EventSangeurAccess[]
+  hostedEvents           Event[]           @relation("EventHost")
+  eventStaffRoles        EventStaff[]
+  eventDailyClosesBy     EventDailyClose[] @relation("DailyCloseClosedBy")
 }
 
 // Refresh tokens para rotação de JWT (SEC-004).
@@ -342,7 +393,8 @@ model HomeGameSangeurAccess {
 
 model Session {
   id          String        @id @default(uuid())
-  homeGameId  String
+  homeGameId  String?
+  eventId     String?
   name        String?
   pokerVariant String?
   gameType    GameType      @default(CASH_GAME)
@@ -368,7 +420,8 @@ model Session {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  homeGame     HomeGame             @relation(fields: [homeGameId], references: [id])
+  homeGame     HomeGame?            @relation(fields: [homeGameId], references: [id])
+  event        Event?               @relation("EventSessions", fields: [eventId], references: [id])
   cashier      User?                @relation("CashierSessions", fields: [cashierId], references: [id])
   transactions Transaction[]
   playerStates PlayerSessionState[]
@@ -386,14 +439,19 @@ model Session {
   @@index([status])
   @@index([homeGameId, createdAt])
   @@index([homeGameId, status, finishedAt])
+  @@index([eventId])
+  @@index([eventId, status, finishedAt])
+  @@index([eventId, createdAt])
 }
 
 model SangeurShift {
   id              String            @id @default(uuid())
-  homeGameId      String
-  sessionId       String
-  sangeurAccessId String
-  sangeurUserId   String
+  homeGameId           String?
+  eventId              String?
+  sessionId            String?
+  sangeurAccessId      String?
+  eventSangeurAccessId String?
+  sangeurUserId        String
   status          SangeurShiftStatus @default(OPEN)
   initialChips    Decimal           @default(0) @db.Decimal(10, 2)
   note            String?
@@ -402,10 +460,12 @@ model SangeurShift {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  homeGame      HomeGame              @relation(fields: [homeGameId], references: [id])
-  session       Session               @relation(fields: [sessionId], references: [id])
-  sangeurAccess HomeGameSangeurAccess @relation(fields: [sangeurAccessId], references: [id])
-  sangeurUser   User                  @relation("SangeurOperatorShifts", fields: [sangeurUserId], references: [id])
+  homeGame             HomeGame?              @relation(fields: [homeGameId], references: [id])
+  event                Event?                 @relation("EventSangeurShifts", fields: [eventId], references: [id])
+  session              Session?               @relation(fields: [sessionId], references: [id])
+  sangeurAccess        HomeGameSangeurAccess? @relation(fields: [sangeurAccessId], references: [id])
+  eventSangeurAccess   EventSangeurAccess?    @relation(fields: [eventSangeurAccessId], references: [id])
+  sangeurUser          User                   @relation("SangeurOperatorShifts", fields: [sangeurUserId], references: [id])
   movements     SangeurShiftMovement[]
   sales         SangeurSale[]
 
@@ -414,6 +474,9 @@ model SangeurShift {
   @@index([sangeurUserId])
   @@index([status])
   @@index([sessionId, sangeurUserId, status])
+  @@index([eventId])
+  @@index([eventId, status])
+  @@index([eventSangeurAccessId])
 }
 
 model SangeurShiftMovement {
@@ -449,13 +512,18 @@ model SangeurSale {
   note             String?
   signatureData    String?
   settledAt        DateTime?
+  tournamentId         String?
+  tournamentPlayerId   String?
+  actionType           String?
   createdByUserId  String
   createdAt        DateTime            @default(now())
 
-  shift        SangeurShift @relation(fields: [shiftId], references: [id])
-  createdBy    User         @relation("SangeurSaleCreator", fields: [createdByUserId], references: [id])
-  sessionUser  User?        @relation("SangeurSalePlayer", fields: [sessionUserId], references: [id])
-  transaction  Transaction? @relation("SangeurSaleTransaction", fields: [transactionId], references: [id])
+  shift              SangeurShift      @relation(fields: [shiftId], references: [id])
+  createdBy          User              @relation("SangeurSaleCreator", fields: [createdByUserId], references: [id])
+  sessionUser        User?             @relation("SangeurSalePlayer", fields: [sessionUserId], references: [id])
+  transaction        Transaction?      @relation("SangeurSaleTransaction", fields: [transactionId], references: [id])
+  tournament         Tournament?       @relation("TournamentSangeurSales", fields: [tournamentId], references: [id])
+  tournamentPlayer   TournamentPlayer? @relation("TournamentPlayerSangeurSales", fields: [tournamentPlayerId], references: [id])
 
   @@index([shiftId])
   @@index([paymentMethod])
@@ -463,6 +531,8 @@ model SangeurSale {
   @@index([createdAt])
   @@index([paymentMethod, paymentReference, paymentStatus])
   @@index([sessionUserId])
+  @@index([tournamentId])
+  @@index([tournamentPlayerId])
 }
 
 model SessionParticipant {
@@ -628,7 +698,8 @@ model SessionFinancialPayoutPending {
 model Comanda {
   id             String        @id @default(uuid())
   playerId       String
-  homeGameId     String
+  homeGameId     String?
+  eventId        String?
   status         ComandaStatus @default(OPEN)
   mode           ComandaMode   @default(PREPAID)
   creditLimit    Decimal?      @db.Decimal(10, 2)
@@ -642,7 +713,8 @@ model Comanda {
   updatedAt      DateTime      @updatedAt
 
   player           User              @relation("PlayerComandas", fields: [playerId], references: [id])
-  homeGame         HomeGame          @relation(fields: [homeGameId], references: [id])
+  homeGame         HomeGame?         @relation(fields: [homeGameId], references: [id])
+  event            Event?            @relation("EventComandas", fields: [eventId], references: [id])
   openedBy         User              @relation("ComandaOpenedBy", fields: [openedByUserId], references: [id])
   closedBy         User?             @relation("ComandaClosedBy", fields: [closedByUserId], references: [id])
   items            ComandaItem[]
@@ -651,9 +723,11 @@ model Comanda {
   @@index([playerId])
   @@index([homeGameId])
   @@index([status])
+  // Unique constraints via partial indexes no DB (ver migration SQL — Prisma nao suporta partial unique indexes)
   @@index([playerId, homeGameId, status])
-  // PERF: listagem de comandas do home game filtrando por status (OPEN/CLOSED).
+  @@index([playerId, eventId, status])
   @@index([homeGameId, status])
+  @@index([eventId, status])
 }
 
 model ComandaItem {
@@ -715,7 +789,8 @@ model ComandaTransfer {
 
 model Tournament {
   id                       String           @id @default(uuid())
-  homeGameId               String
+  homeGameId               String?
+  eventId                  String?
   name                     String
   status                   TournamentStatus @default(REGISTRATION)
 
@@ -754,6 +829,13 @@ model Tournament {
   dealPayouts              String?
   payoutStructure          String?
   doubleRebuyEnabled       Boolean          @default(false)
+  doubleRebuyBonusChips    Int?
+  totalChipsInPlay         Int              @default(0)
+  staffRetentionPct        Decimal?         @db.Decimal(5, 2)
+  staffRetentionDest       String?
+  rankingRetentionPct      Decimal?         @db.Decimal(5, 2)
+  timeChipBonus            Int?
+  timeChipUntilLevel       Int?
   prizePool                Decimal          @default(0) @db.Decimal(10, 2)
   totalRake                Decimal          @default(0) @db.Decimal(10, 2)
   totalTax                 Decimal          @default(0) @db.Decimal(10, 2)
@@ -763,14 +845,18 @@ model Tournament {
   createdAt                DateTime         @default(now())
   updatedAt                DateTime         @updatedAt
 
-  homeGame    HomeGame               @relation(fields: [homeGameId], references: [id])
-  blindLevels TournamentBlindLevel[]
-  players     TournamentPlayer[]
-  comandaItems ComandaItem[]         @relation("TournamentComandaItems")
+  homeGame     HomeGame?              @relation(fields: [homeGameId], references: [id])
+  event        Event?                 @relation("EventTournaments", fields: [eventId], references: [id])
+  blindLevels  TournamentBlindLevel[]
+  players      TournamentPlayer[]
+  comandaItems ComandaItem[]          @relation("TournamentComandaItems")
+  sangeurSales SangeurSale[]          @relation("TournamentSangeurSales")
 
   @@index([homeGameId])
   @@index([status])
   @@index([homeGameId, status])
+  @@index([eventId])
+  @@index([eventId, status])
 }
 
 model TournamentBlindLevel {
@@ -796,6 +882,8 @@ model TournamentPlayer {
   position             Int?
   rebuysCount          Int                    @default(0)
   hasAddon             Boolean                @default(false)
+  timeChipAwarded      Boolean                @default(false)
+  buyInChips           Int                    @default(0)
   bountyCollected      Decimal                @default(0) @db.Decimal(10, 2)
   prizeAmount          Decimal?               @db.Decimal(10, 2)
   eliminatedByPlayerId String?
@@ -811,6 +899,7 @@ model TournamentPlayer {
   eliminatedBy TournamentPlayer? @relation("EliminationRelation", fields: [eliminatedByPlayerId], references: [id])
   eliminations TournamentPlayer[] @relation("EliminationRelation")
   comandaItems ComandaItem[]
+  sangeurSales SangeurSale[]     @relation("TournamentPlayerSangeurSales")
 
   @@unique([tournamentId, playerId])
   @@index([tournamentId])
@@ -891,4 +980,130 @@ model CashTableSangria {
   @@index([tableId])
   @@index([tableId, isFinal])
   @@index([createdAt])
+}
+
+// --- EVENTS ------------------------------------------------------------------
+
+model Event {
+  id                   String          @id @default(uuid())
+  name                 String
+  description          String?
+  venue                String?
+
+  hostId               String
+  host                 User            @relation("EventHost", fields: [hostId], references: [id])
+
+  status               EventStatus     @default(DRAFT)
+  startDate            DateTime
+  endDate              DateTime
+
+  registrationOpenAt   DateTime?
+  registrationCloseAt  DateTime?
+
+  isPublic             Boolean         @default(true)
+  accessCode           String?         @unique
+
+  financialModule      FinancialModule @default(POSTPAID)
+  chipValue            Decimal         @db.Decimal(10, 2)
+  bankBalance          Decimal         @default(0) @db.Decimal(10, 2)
+
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  staff             EventStaff[]
+  dailyCloses       EventDailyClose[]
+  sangeurAccesses   EventSangeurAccess[]
+  sangeurShifts     SangeurShift[]        @relation("EventSangeurShifts")
+  tournaments       Tournament[]          @relation("EventTournaments")
+  sessions          Session[]             @relation("EventSessions")
+  comandas          Comanda[]             @relation("EventComandas")
+  permissionConfigs EventPermissionConfig[]
+
+  @@index([hostId])
+  @@index([status])
+  @@index([startDate])
+  @@index([hostId, status])
+}
+
+model EventStaff {
+  id        String         @id @default(uuid())
+  eventId   String
+  event     Event          @relation(fields: [eventId], references: [id])
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  role      EventStaffRole
+  createdAt DateTime       @default(now())
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([eventId, role])
+}
+
+model EventPermissionConfig {
+  id         String             @id @default(uuid())
+  eventId    String
+  event      Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  role       EventStaffRole
+  permission EventPermissionKey
+  allowed    Boolean            @default(true)
+  updatedAt  DateTime           @updatedAt
+
+  @@unique([eventId, role, permission])
+  @@index([eventId])
+  @@index([eventId, role])
+}
+
+// Snapshot de fechamento de caixa por dia do evento.
+// Consolida todas as ComandaItem com createdAt::date = date.
+// Campos total* sao imutaveis apos status CLOSED.
+model EventDailyClose {
+  id             String           @id @default(uuid())
+  eventId        String
+  event          Event            @relation(fields: [eventId], references: [id])
+
+  date           DateTime         @db.Date
+
+  status         DailyCloseStatus @default(OPEN)
+
+  closedByUserId String?
+  closedBy       User?            @relation("DailyCloseClosedBy", fields: [closedByUserId], references: [id])
+  closedAt       DateTime?
+  notes          String?
+
+  totalIn        Decimal?         @db.Decimal(10, 2)
+  totalOut       Decimal?         @db.Decimal(10, 2)
+  totalPix       Decimal?         @db.Decimal(10, 2)
+  totalCash      Decimal?         @db.Decimal(10, 2)
+
+  createdAt      DateTime         @default(now())
+
+  @@unique([eventId, date])
+  @@index([eventId])
+  @@index([status])
+  @@index([date])
+}
+
+model EventSangeurAccess {
+  id                       String    @id @default(uuid())
+  eventId                  String
+  userId                   String
+  username                 String
+  passwordHash             String
+  isActive                 Boolean   @default(true)
+  mustChangePassword       Boolean   @default(true)
+  activationToken          String?   @unique
+  activationTokenExpiresAt DateTime?
+  lastLoginAt              DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  event   Event        @relation(fields: [eventId], references: [id])
+  user    User         @relation(fields: [userId], references: [id])
+  shifts  SangeurShift[]
+
+  @@unique([eventId, userId])
+  @@unique([eventId, username])
+  @@index([eventId])
+  @@index([userId])
 }

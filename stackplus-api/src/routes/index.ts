@@ -12,6 +12,9 @@ import comandaRoutes from '../modules/comanda/comanda.routes'
 import tournamentRoutes from '../modules/tournament/tournament.routes'
 import tournamentClockRoutes from '../modules/tournament/tournament-clock.routes'
 import cashTableRoutes from '../modules/cash-table/cash-table.routes'
+import eventRoutes from '../modules/event/event.routes'
+import eventStaffRoutes from '../modules/event-staff/event-staff.routes'
+import eventDailyCloseRoutes from '../modules/event-daily-close/event-daily-close.routes'
 
 const router = Router()
 
@@ -28,5 +31,8 @@ router.use('/comanda', comandaRoutes)
 router.use('/tournaments', tournamentRoutes)
 router.use('/tournament-clock', tournamentClockRoutes)
 router.use('/cash-tables', cashTableRoutes)
+router.use('/events', eventRoutes)
+router.use('/events/:eventId/staff', eventStaffRoutes)
+router.use('/events/:eventId/daily-closes', eventDailyCloseRoutes)
 
 export default router

@@ -13,10 +13,13 @@ router.use(authenticate)
 router.post('/open', async (req: AuthRequest, res: Response) => {
   const data = z.object({
     playerId: z.string().uuid(),
-    homeGameId: z.string().uuid(),
+    homeGameId: z.string().uuid().optional(),
+    eventId: z.string().uuid().optional(),
     mode: z.enum(['PREPAID', 'POSTPAID']).optional(),
     creditLimit: z.number().positive().optional().nullable(),
     note: z.string().trim().max(300).optional(),
+  }).refine((d) => d.homeGameId || d.eventId, {
+    message: 'homeGameId ou eventId e obrigatorio',
   }).parse(req.body)
 
   const comanda = await ComandaService.openComanda({
@@ -27,23 +30,39 @@ router.post('/open', async (req: AuthRequest, res: Response) => {
 })
 
 // GET /comanda?homeGameId=...&status=OPEN|CLOSED
+// GET /comanda?eventId=...&status=OPEN|CLOSED
 router.get('/', async (req: AuthRequest, res: Response) => {
-  const homeGameId = z.string().uuid().parse(req.query.homeGameId)
-  const status = z.enum(['OPEN', 'CLOSED']).optional().parse(req.query.status)
+  const query = z.object({
+    homeGameId: z.string().uuid().optional(),
+    eventId: z.string().uuid().optional(),
+    status: z.enum(['OPEN', 'CLOSED']).optional(),
+  }).refine((d) => d.homeGameId || d.eventId, {
+    message: 'homeGameId ou eventId e obrigatorio',
+  }).parse(req.query)
+
   const comandas = await ComandaService.listComandas({
-    homeGameId,
-    status,
+    homeGameId: query.homeGameId,
+    eventId: query.eventId,
+    status: query.status,
     viewerUserId: req.user!.userId,
   })
   res.json(comandas)
 })
 
 // GET /comanda/player/:playerId?homeGameId=...
+// GET /comanda/player/:playerId?eventId=...
 router.get('/player/:playerId', async (req: AuthRequest, res: Response) => {
-  const homeGameId = z.string().uuid().parse(req.query.homeGameId)
+  const query = z.object({
+    homeGameId: z.string().uuid().optional(),
+    eventId: z.string().uuid().optional(),
+  }).refine((d) => d.homeGameId || d.eventId, {
+    message: 'homeGameId ou eventId e obrigatorio',
+  }).parse(req.query)
+
   const comanda = await ComandaService.getComandaByPlayer({
     playerId: req.params.playerId,
-    homeGameId,
+    homeGameId: query.homeGameId,
+    eventId: query.eventId,
     viewerUserId: req.user!.userId,
   })
   res.json(comanda)
@@ -204,6 +223,22 @@ router.post('/:comandaId/close', async (req: AuthRequest, res: Response) => {
     closedByUserId: req.user!.userId,
   })
   res.json(comanda)
+})
+
+// POST /comanda/:comandaId/adjustment
+router.post('/:comandaId/adjustment', async (req: AuthRequest, res: Response) => {
+  const data = z.object({
+    amount: z.number().refine((n) => n !== 0, { message: 'Valor não pode ser zero' }),
+    description: z.string().trim().min(1, 'Justificativa é obrigatória').max(300),
+  }).parse(req.body)
+
+  const result = await ComandaService.addComandaAdjustment({
+    comandaId: req.params.comandaId,
+    amount: data.amount,
+    description: data.description,
+    createdByUserId: req.user!.userId,
+  })
+  res.status(201).json(result)
 })
 
 router.post('/:comandaId/items/:itemId/reverse', async (req: AuthRequest, res: Response) => {

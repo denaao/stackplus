@@ -29,6 +29,20 @@ body {
   opacity: 0.5;
 }
 
+/* Gradient CTA button — Eventos (amber → laranja) */
+.btn-event-primary {
+  background: linear-gradient(135deg, #F59E0B 0%, #C2410C 100%);
+  box-shadow: 0 4px 22px rgba(245, 158, 11, 0.45);
+  transition: all 0.2s ease;
+}
+.btn-event-primary:hover:not(:disabled) {
+  box-shadow: 0 6px 32px rgba(245, 158, 11, 0.65);
+  transform: translateY(-1px);
+}
+.btn-event-primary:disabled {
+  opacity: 0.5;
+}
+
 /* Glowing card */
 .card-sx {
   background: rgba(7, 24, 40, 0.85);

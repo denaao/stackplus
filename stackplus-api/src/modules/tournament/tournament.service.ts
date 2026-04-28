@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma'
 import { Prisma, TournamentStatus } from '@prisma/client'
 import * as ComandaService from '../comanda/comanda.service'
+import { isEventStaff } from '../../lib/event-auth'
 
 // Alias mantido pra reduzir churn do diff. Pode ser removido gradualmente.
 const db = prisma
@@ -92,6 +93,12 @@ export async function createTournament({
   blindLevels,
   doubleBuyInBonusChips,
   doubleRebuyEnabled,
+  doubleRebuyBonusChips,
+  staffRetentionPct,
+  staffRetentionDest,
+  rankingRetentionPct,
+  timeChipBonus,
+  timeChipUntilLevel,
 }: {
   homeGameId: string
   name: string
@@ -119,6 +126,12 @@ export async function createTournament({
   blindLevels?: BlindLevel[]
   doubleBuyInBonusChips?: number | null
   doubleRebuyEnabled?: boolean
+  doubleRebuyBonusChips?: number | null
+  staffRetentionPct?: number | null
+  staffRetentionDest?: string | null
+  rankingRetentionPct?: number | null
+  timeChipBonus?: number | null
+  timeChipUntilLevel?: number | null
 }) {
   // Resolve blind levels: custom > template > default
   let levels = blindLevels
@@ -155,6 +168,12 @@ export async function createTournament({
       blindTemplateName: blindTemplateName ?? null,
       doubleBuyInBonusChips: doubleBuyInBonusChips ?? null,
       doubleRebuyEnabled: doubleRebuyEnabled ?? false,
+      doubleRebuyBonusChips: doubleRebuyBonusChips ?? null,
+      staffRetentionPct: staffRetentionPct ?? null,
+      staffRetentionDest: staffRetentionDest ?? null,
+      rankingRetentionPct: rankingRetentionPct ?? null,
+      timeChipBonus: timeChipBonus ?? null,
+      timeChipUntilLevel: timeChipUntilLevel ?? null,
       blindLevels: levels
         ? {
             create: levels.map((l) => ({
@@ -203,6 +222,12 @@ export async function updateTournament(
     blindLevels?: BlindLevel[]
     doubleBuyInBonusChips?: number | null
     doubleRebuyEnabled?: boolean
+    doubleRebuyBonusChips?: number | null
+    staffRetentionPct?: number | null
+    staffRetentionDest?: string | null
+    rankingRetentionPct?: number | null
+    timeChipBonus?: number | null
+    timeChipUntilLevel?: number | null
   },
 ) {
   const existing = await db.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { status: true } })
@@ -296,15 +321,18 @@ export async function registerPlayer({
   tournamentId,
   playerId,
   homeGameId,
+  eventId,
   registeredByUserId,
   buyInType = 'NORMAL',
 }: {
   tournamentId: string
   playerId: string
-  homeGameId: string
+  homeGameId?: string
+  eventId?: string
   registeredByUserId: string
   buyInType?: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
 }) {
+  if (!homeGameId && !eventId) throw new Error('homeGameId ou eventId e obrigatorio')
   const tournament = await db.tournament.findUniqueOrThrow({
     where: { id: tournamentId },
   })
@@ -327,12 +355,14 @@ export async function registerPlayer({
   if (existing) throw new Error('Jogador já registrado neste torneio')
 
   let comanda = await db.comanda.findFirst({
-    where: { playerId, homeGameId, status: 'OPEN' },
+    where: homeGameId
+      ? { playerId, homeGameId, status: 'OPEN' }
+      : { playerId, eventId, status: 'OPEN' },
   })
   if (!comanda) {
     comanda = await ComandaService.openComanda({
       playerId,
-      homeGameId,
+      ...(homeGameId ? { homeGameId } : { eventId }),
       mode: 'PREPAID',
       openedByUserId: registeredByUserId,
     })
@@ -344,6 +374,13 @@ export async function registerPlayer({
   const bonusChips = Number(tournament.doubleBuyInBonusChips ?? 0)
   const rakeRate = Number(tournament.rake) / 100
 
+  // Time chip: elegível se o torneio ainda não começou ou o nível atual está dentro do período configurado
+  const timeChipAwarded = !!tournament.timeChipBonus && (
+    tournament.status === 'REGISTRATION' ||
+    tournament.currentLevel <= (tournament.timeChipUntilLevel ?? Infinity)
+  )
+  const timeChipBonus = timeChipAwarded ? Number(tournament.timeChipBonus) : 0
+
   // Calcula valor base (sobre o qual incide o rake), taxa da casa e fichas
   let baseForRake: number  // valor que entra no prize/rake
   let taxForHouse: number  // taxa que vai integral para a casa
@@ -354,17 +391,17 @@ export async function registerPlayer({
     // 2× base + 2× taxa
     baseForRake = base * 2
     taxForHouse = taxAmount * 2
-    chips = (tournament.startingChips + taxChips) * 2 + bonusChips
+    chips = (tournament.startingChips + taxChips) * 2 + bonusChips + timeChipBonus
     description = `Buy-in Duplo: ${tournament.name}`
   } else if (buyInType === 'NORMAL_WITH_TAX' && taxAmount > 0) {
     baseForRake = base
     taxForHouse = taxAmount
-    chips = tournament.startingChips + taxChips
+    chips = tournament.startingChips + taxChips + timeChipBonus
     description = `Buy-in + Opcional: ${tournament.name}`
   } else {
     baseForRake = base
     taxForHouse = 0
-    chips = tournament.startingChips
+    chips = tournament.startingChips + timeChipBonus
     description = `Buy-in: ${tournament.name}`
   }
 
@@ -380,6 +417,8 @@ export async function registerPlayer({
         comandaId: comanda!.id,
         // Buy-in duplo conta como 1 rebuy (fichas extras desde o início)
         ...(buyInType === 'DOUBLE' ? { rebuysCount: 1 } : {}),
+        timeChipAwarded,
+        buyInChips: chips,
       },
       include: { player: { select: { id: true, name: true } } },
     })
@@ -407,6 +446,7 @@ export async function registerPlayer({
         prizePool: { increment: prizeIncrement },
         totalRake: { increment: rakeIncrement },
         totalTax: { increment: taxForHouse },
+        totalChipsInPlay: { increment: chips },
       },
     })
 
@@ -463,13 +503,14 @@ export async function cancelRegistration({
       await tx.comandaItem.delete({ where: { id: buyInItem.id } })
     }
 
-    // Reverte prize pool, rake e taxa corretamente
+    // Reverte prize pool, rake, taxa e fichas em jogo
     await tx.tournament.update({
       where: { id: tp.tournamentId },
       data: {
         prizePool: { decrement: prizeToRevert },
         totalRake: { decrement: rakeToRevert },
         totalTax: { decrement: taxAmount },
+        totalChipsInPlay: { decrement: tp.buyInChips },
       },
     })
 
@@ -508,6 +549,7 @@ export async function registerRebuy({
   const taxUnit = Number(tp.tournament.rebuyTaxAmount ?? 0)
   const taxChipsUnit = Number(tp.tournament.rebuyTaxChips ?? 0)
   const baseChips = tp.tournament.rebuyChips ?? tp.tournament.startingChips
+  const rebuyBonusChips = Number(tp.tournament.doubleRebuyBonusChips ?? 0)
   const rakeRate = Number(tp.tournament.rake) / 100
 
   let baseForRake: number
@@ -518,7 +560,7 @@ export async function registerRebuy({
   if (rebuyType === 'DOUBLE') {
     baseForRake = base * 2
     taxForHouse = taxUnit * 2
-    totalChips = (baseChips + taxChipsUnit) * 2
+    totalChips = (baseChips + taxChipsUnit) * 2 + rebuyBonusChips
     description = `Rebuy Duplo`
   } else if (rebuyType === 'NORMAL_WITH_TAX' && taxUnit > 0) {
     baseForRake = base
@@ -565,6 +607,7 @@ export async function registerRebuy({
         prizePool: { increment: prizeIncrement },
         totalRake: { increment: rakeIncrement },
         totalTax: { increment: taxForHouse },
+        totalChipsInPlay: { increment: totalChips },
       },
     })
 
@@ -690,6 +733,7 @@ export async function reEntryPlayer({
         prizePool: { increment: rebuyPrizeIncrement },
         totalRake: { increment: rebuyRakeIncrement },
         totalTax: { increment: rebuyTaxTotal },
+        totalChipsInPlay: { increment: rebuyTotalChips },
       },
     })
 
@@ -715,6 +759,7 @@ export async function reEntryPlayer({
         data: {
           prizePool: { increment: addonPrizeIncrement },
           totalRake: { increment: addonRakeIncrement },
+          totalChipsInPlay: { increment: addonTotalChips },
         },
       })
     }
@@ -790,6 +835,7 @@ export async function registerAddon({
         prizePool: { increment: prizeIncrement },
         totalRake: { increment: rakeIncrement },
         totalTax: { increment: taxAmount },
+        totalChipsInPlay: { increment: totalChips },
       },
     })
 
@@ -930,22 +976,34 @@ export async function eliminatePlayer({
         include: { comanda: true },
       })
       if (winner) {
-        const winnerPrize = effectivePayouts.find((p) => p.position === 1)
+        // Soma todos os prizeAmounts já creditados (acordos parciais, posições eliminadas, etc.)
+        // para calcular o pot restante que ainda não foi distribuído.
+        const savedAgg = await tx.tournamentPlayer.aggregate({
+          where: { tournamentId: tp.tournamentId },
+          _sum: { prizeAmount: true },
+        })
+        const totalAlreadySaved = Number(savedAgg._sum.prizeAmount ?? 0)
+        const remainingPot = Math.max(0, Math.round((prizePool - totalAlreadySaved) * 100) / 100)
+
+        // Total final do vencedor = o que já tinha salvo + o pot restante
+        const winnerCurrentPrize = Number(winner.prizeAmount ?? 0)
+        const winnerTotalPrize = Math.round((winnerCurrentPrize + remainingPot) * 100) / 100
+
         await tx.tournamentPlayer.update({
           where: { id: winner.id },
           data: {
             status: 'WINNER',
             position: 1,
-            ...(winnerPrize && winnerPrize.amount > 0 ? { prizeAmount: winnerPrize.amount } : {}),
+            ...(winnerTotalPrize > 0 ? { prizeAmount: winnerTotalPrize } : {}),
           },
         })
-        // Auto-prêmio do vencedor
-        if (winnerPrize && winnerPrize.amount > 0) {
+        // Cria item na comanda apenas pelo valor incremental (evita creditar novamente o que já foi salvo)
+        if (remainingPot > 0) {
           await tx.comandaItem.create({
             data: {
               comandaId: winner.comanda.id,
               type: 'TOURNAMENT_PRIZE',
-              amount: winnerPrize.amount,
+              amount: remainingPot,
               description: `Prêmio 1º lugar: ${tp.tournament.name}`,
               tournamentId: tp.tournamentId,
               tournamentPlayerId: winner.id,
@@ -954,7 +1012,7 @@ export async function eliminatePlayer({
           })
           await tx.comanda.update({
             where: { id: winner.comanda.id },
-            data: { balance: { increment: winnerPrize.amount } },
+            data: { balance: { increment: remainingPot } },
           })
         }
       }
@@ -1238,10 +1296,13 @@ export async function cancelTournament(tournamentId: string) {
 // ─── Payout structure ─────────────────────────────────────────────────────────
 
 export function calcPayoutSuggestion(prizePool: number, playerCount: number): Array<{ position: number; amount: number; percent: number }> {
-  // Estrutura simples: top 15-20% recebem, decrescente
   if (playerCount < 3) return [{ position: 1, amount: prizePool, percent: 100 }]
 
-  const paid = Math.max(1, Math.ceil(playerCount * 0.15))
+  // Torneios pequenos: garante no mínimo 2 posições premiadas até 9 jogadores
+  // 10+: top ~20% do campo (mínimo 3)
+  const paid = playerCount <= 9
+    ? Math.min(playerCount - 1, Math.max(2, Math.ceil(playerCount * 0.33)))
+    : Math.max(3, Math.ceil(playerCount * 0.2))
 
   // Distribuição decrescente aproximada
   const weights: number[] = []
@@ -1260,4 +1321,107 @@ export function calcPayoutSuggestion(prizePool: number, playerCount: number): Ar
     amount: Math.round((prizePool * pct) / 100),
     percent: pct,
   }))
+}
+
+// ─── Event tournaments ────────────────────────────────────────────────────────
+
+export async function createEventTournament(input: {
+  eventId: string
+  requesterId: string
+  name: string
+  buyInAmount: number
+  rebuyAmount?: number | null
+  addonAmount?: number | null
+  bountyAmount?: number | null
+  rake?: number
+  startingChips: number
+  rebuyChips?: number | null
+  addonChips?: number | null
+  buyInTaxAmount?: number | null
+  buyInTaxChips?: number | null
+  rebuyTaxAmount?: number | null
+  rebuyTaxChips?: number | null
+  addonTaxAmount?: number | null
+  addonTaxChips?: number | null
+  lateRegistrationLevel?: number | null
+  rebuyUntilLevel?: number | null
+  addonAfterLevel?: number | null
+  minutesPerLevelPreLateReg: number
+  minutesPerLevelPostLateReg?: number | null
+  breaks?: { afterLevel: number; durationMinutes: number }[]
+  blindTemplateName?: string | null
+  blindLevels?: BlindLevel[]
+  doubleBuyInBonusChips?: number | null
+  doubleRebuyEnabled?: boolean
+  doubleRebuyBonusChips?: number | null
+  staffRetentionPct?: number | null
+  staffRetentionDest?: string | null
+  rankingRetentionPct?: number | null
+  timeChipBonus?: number | null
+  timeChipUntilLevel?: number | null
+}) {
+  if (!(await isEventStaff(input.requesterId, input.eventId))) {
+    throw new Error('Apenas staff do evento pode criar torneios')
+  }
+
+  let levels = input.blindLevels
+  if (!levels || levels.length === 0) {
+    if (input.blindTemplateName && BLIND_TEMPLATES[input.blindTemplateName]) {
+      levels = BLIND_TEMPLATES[input.blindTemplateName]
+    }
+  }
+
+  return db.tournament.create({
+    data: {
+      eventId: input.eventId,
+      name: input.name,
+      buyInAmount: input.buyInAmount,
+      rebuyAmount: input.rebuyAmount ?? null,
+      addonAmount: input.addonAmount ?? null,
+      bountyAmount: input.bountyAmount ?? null,
+      rake: input.rake ?? 0,
+      startingChips: input.startingChips,
+      rebuyChips: input.rebuyChips ?? null,
+      addonChips: input.addonChips ?? null,
+      buyInTaxAmount: input.buyInTaxAmount ?? null,
+      buyInTaxChips: input.buyInTaxChips ?? null,
+      rebuyTaxAmount: input.rebuyTaxAmount ?? null,
+      rebuyTaxChips: input.rebuyTaxChips ?? null,
+      addonTaxAmount: input.addonTaxAmount ?? null,
+      addonTaxChips: input.addonTaxChips ?? null,
+      lateRegistrationLevel: input.lateRegistrationLevel ?? null,
+      rebuyUntilLevel: input.rebuyUntilLevel ?? null,
+      addonAfterLevel: input.addonAfterLevel ?? null,
+      minutesPerLevelPreLateReg: input.minutesPerLevelPreLateReg,
+      minutesPerLevelPostLateReg: input.minutesPerLevelPostLateReg ?? null,
+      blindTemplateName: input.blindTemplateName ?? null,
+      doubleBuyInBonusChips: input.doubleBuyInBonusChips ?? null,
+      doubleRebuyEnabled: input.doubleRebuyEnabled ?? false,
+      doubleRebuyBonusChips: input.doubleRebuyBonusChips ?? null,
+      staffRetentionPct: input.staffRetentionPct ?? null,
+      staffRetentionDest: input.staffRetentionDest ?? null,
+      rankingRetentionPct: input.rankingRetentionPct ?? null,
+      timeChipBonus: input.timeChipBonus ?? null,
+      timeChipUntilLevel: input.timeChipUntilLevel ?? null,
+      blindLevels: levels
+        ? {
+            create: levels.map((l) => ({
+              level: l.level,
+              smallBlind: l.smallBlind,
+              bigBlind: l.bigBlind,
+              ante: l.ante ?? 0,
+            })),
+          }
+        : undefined,
+      breaks: input.breaks ? JSON.stringify(input.breaks) : JSON.stringify([]),
+    },
+  })
+}
+
+export async function listTournamentsByEvent(eventId: string, status?: TournamentStatus) {
+  return db.tournament.findMany({
+    where: { eventId, ...(status ? { status } : {}) },
+    orderBy: { createdAt: 'desc' },
+    include: { _count: { select: { players: true } } },
+  })
 }

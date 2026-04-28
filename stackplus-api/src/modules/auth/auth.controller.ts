@@ -57,45 +57,33 @@ function isValidCnpj(value: string) {
   return first === Number(digits[12]) && second === Number(digits[13])
 }
 
-const registerSchema = z.object({
-  name: z.string().min(2),
-  cpf: z.string().trim().min(11),
-  email: z.string().email().optional().or(z.literal('')),
-  phone: z.string().trim().optional(),
-  password: passwordSchema,
-  pixType: pixTypeEnum,
-  pixKey: z.string().trim().min(3).max(120),
-}).superRefine((data, ctx) => {
-  if (!isValidCpf(data.cpf)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF inválido' })
-  }
+// ─── Shared PIX + phone refinement ───────────────────────────────────────────
 
-  const raw = data.pixKey.trim()
-  const digits = raw.replace(/\D/g, '')
+function refinePixAndPhone(
+  data: { pixType?: string; pixKey?: string; phone?: string },
+  ctx: z.RefinementCtx,
+) {
+  if (data.pixKey !== undefined && data.pixType !== undefined) {
+    const raw = data.pixKey.trim()
+    const digits = raw.replace(/\D/g, '')
 
-  if (data.pixType === 'CPF' && !isValidCpf(raw)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX CPF inválido' })
-  }
-
-  if (data.pixType === 'CNPJ' && !isValidCnpj(raw)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX CNPJ inválido' })
-  }
-
-  if (data.pixType === 'PHONE' && (digits.length < 10 || digits.length > 13)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX telefone deve ter entre 10 e 13 dígitos' })
-  }
-
-  if (data.pixType === 'EMAIL') {
-    const emailResult = z.string().email().safeParse(raw)
-    if (!emailResult.success) {
+    if (data.pixType === 'CPF' && !isValidCpf(raw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX CPF inválido' })
+    }
+    if (data.pixType === 'CNPJ' && !isValidCnpj(raw)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX CNPJ inválido' })
+    }
+    if (data.pixType === 'PHONE' && (digits.length < 10 || digits.length > 13)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX telefone deve ter entre 10 e 13 dígitos' })
+    }
+    if (data.pixType === 'EMAIL' && !z.string().email().safeParse(raw).success) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX email inválido' })
     }
-  }
-
-  if (data.pixType === 'RANDOM') {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(raw)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX chave aleatória deve ser um UUID válido' })
+    if (data.pixType === 'RANDOM') {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(raw)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'PIX chave aleatória deve ser um UUID válido' })
+      }
     }
   }
 
@@ -105,15 +93,79 @@ const registerSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['phone'], message: 'Telefone deve ter 10 ou 11 dígitos' })
     }
   }
+}
+
+// ─── Register schema ──────────────────────────────────────────────────────────
+// z.discriminatedUnion não aceita ZodEffects (resultado de .superRefine).
+// Usamos z.object flat + superRefine, igual ao loginSchema.
+
+const registerSchema = z.object({
+  documentType: z.enum(['CPF', 'PASSPORT']),
+  // campos CPF
+  cpf: z.string().trim().optional(),
+  // campos PASSPORT
+  passportNumber: z.string().trim().max(30).optional(),
+  nationality: z.string().trim().max(80).optional(),
+  // campos comuns
+  name: z.string().min(2),
+  email: z.string().email().optional().or(z.literal('')),
+  phone: z.string().trim().optional(),
+  password: passwordSchema,
+  pixType: pixTypeEnum.optional(),
+  pixKey: z.string().trim().max(120).optional(),
+}).superRefine((data, ctx) => {
+  if (data.documentType === 'CPF') {
+    if (!data.cpf || data.cpf.length < 11) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF obrigatório' })
+    } else if (!isValidCpf(data.cpf)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF inválido' })
+    }
+    if (!data.pixType) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixType'], message: 'Tipo de PIX obrigatório' })
+    }
+    if (!data.pixKey || data.pixKey.trim().length < 3) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pixKey'], message: 'Chave PIX obrigatória' })
+    }
+  } else {
+    if (!data.passportNumber || data.passportNumber.trim().length < 3) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['passportNumber'], message: 'Número do passaporte obrigatório' })
+    }
+    if (!data.nationality || data.nationality.trim().length < 2) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['nationality'], message: 'Nacionalidade obrigatória' })
+    }
+  }
+  refinePixAndPhone(data, ctx)
 })
 
+// ─── Login schema ─────────────────────────────────────────────────────────────
+// Usa z.object simples com superRefine para evitar limitações do discriminatedUnion + .or()
+
 const loginSchema = z.object({
-  cpf: z.string().trim().min(11),
+  documentType: z.enum(['CPF', 'PASSPORT']).optional(),
+  cpf: z.string().trim().optional(),
+  passportNumber: z.string().trim().optional(),
   password: z.string().min(1),
+}).superRefine((data, ctx) => {
+  const docType = data.documentType ?? 'CPF'
+  if (docType === 'CPF') {
+    if (!data.cpf || data.cpf.length < 11) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF obrigatório' })
+    }
+  } else {
+    if (!data.passportNumber || data.passportNumber.trim().length < 3) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['passportNumber'], message: 'Número do passaporte obrigatório' })
+    }
+  }
 })
 
 const sangeurLoginSchema = z.object({
   homeGameId: z.string().uuid(),
+  cpf: z.string().trim().min(11),
+  password: z.string().min(1),
+})
+
+const eventSangeurLoginSchema = z.object({
+  eventId: z.string().uuid(),
   cpf: z.string().trim().min(11),
   password: z.string().min(1),
 })
@@ -126,19 +178,49 @@ const sangeurChangePasswordSchema = z.object({
 
 export async function register(req: Request, res: Response): Promise<void> {
   const data = registerSchema.parse(req.body)
+
+  if (data.documentType === 'CPF') {
+    const result = await AuthService.register({
+      documentType: 'CPF',
+      cpf: data.cpf!,
+      name: data.name,
+      email: data.email || undefined,
+      phone: data.phone,
+      password: data.password,
+      pixType: data.pixType!,
+      pixKey: data.pixKey!,
+    })
+    res.status(201).json(result)
+    return
+  }
+
+  // PASSPORT
   const result = await AuthService.register({
-    ...data,
+    documentType: 'PASSPORT',
+    passportNumber: data.passportNumber!,
+    nationality: data.nationality!,
+    name: data.name,
     email: data.email || undefined,
+    phone: data.phone,
+    password: data.password,
+    pixType: data.pixType,
+    pixKey: data.pixKey,
   })
   res.status(201).json(result)
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
-  const { cpf, password } = loginSchema.parse(req.body)
-  const result = await AuthService.login(cpf, password, {
-    ip: req.ip ?? null,
-    userAgent: String(req.headers['user-agent'] ?? '') || null,
-  })
+  const data = loginSchema.parse(req.body)
+  const context = { ip: req.ip ?? null, userAgent: String(req.headers['user-agent'] ?? '') || null }
+
+  if (data.documentType === 'PASSPORT') {
+    const result = await AuthService.loginByPassport(data.passportNumber!, data.password, context)
+    res.json(result)
+    return
+  }
+
+  // CPF (ou sem documentType — retrocompatível)
+  const result = await AuthService.login(data.cpf!, data.password, context)
   res.json(result)
 }
 
@@ -167,6 +249,12 @@ export async function logout(req: AuthRequest, res: Response): Promise<void> {
 export async function loginSangeur(req: Request, res: Response): Promise<void> {
   const { homeGameId, cpf, password } = sangeurLoginSchema.parse(req.body)
   const result = await AuthService.loginSangeur(homeGameId, cpf, password)
+  res.json(result)
+}
+
+export async function loginEventSangeur(req: Request, res: Response): Promise<void> {
+  const { eventId, cpf, password } = eventSangeurLoginSchema.parse(req.body)
+  const result = await AuthService.loginEventSangeur(eventId, cpf, password)
   res.json(result)
 }
 

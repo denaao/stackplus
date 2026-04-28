@@ -35,6 +35,7 @@ function extractChargeId(note: string | undefined | null): string | null {
 
 async function applyTransactionToComandaTx(tx: Prisma.TransactionClient, {
   homeGameId,
+  eventId,
   playerId,
   operatorUserId,
   sessionId,
@@ -44,7 +45,8 @@ async function applyTransactionToComandaTx(tx: Prisma.TransactionClient, {
   description,
   chargeId,
 }: {
-  homeGameId: string
+  homeGameId?: string | null
+  eventId?: string | null
   playerId: string
   operatorUserId: string
   sessionId: string
@@ -54,7 +56,10 @@ async function applyTransactionToComandaTx(tx: Prisma.TransactionClient, {
   description: string
   chargeId: string | null
 }) {
-  const comanda = await findOrOpenComandaWithTx(tx, { playerId, homeGameId, openedByUserId: operatorUserId })
+  const findParams = homeGameId
+    ? { playerId, homeGameId, openedByUserId: operatorUserId }
+    : { playerId, eventId: eventId!, openedByUserId: operatorUserId }
+  const comanda = await findOrOpenComandaWithTx(tx, findParams)
 
   await addComandaItemWithTx(tx, {
     comandaId: comanda.id,
@@ -84,12 +89,20 @@ async function applyTransactionToComandaTx(tx: Prisma.TransactionClient, {
 export async function registerTransaction(input: TransactionInput) {
   const session = await prisma.session.findUniqueOrThrow({
     where: { id: input.sessionId },
-    include: { homeGame: true },
+    include: {
+      homeGame: true,
+      event: { select: { id: true, name: true, chipValue: true } },
+    },
   })
 
   if (session.status !== 'ACTIVE') throw new Error('Sessão não está ativa')
 
-  const chipValue = Number(session.chipValue ?? session.homeGame.chipValue)
+  const chipValue = Number(
+    session.chipValue ??
+    session.homeGame?.chipValue ??
+    session.event?.chipValue ??
+    1
+  )
   const isJackpot = input.type === 'JACKPOT'
   if (isJackpot && session.jackpotEnabled === false) {
     throw new Error('Jackpot está desabilitado para esta partida')
@@ -123,7 +136,8 @@ export async function registerTransaction(input: TransactionInput) {
   const typeLabels: Partial<Record<CashierTransactionType, string>> = {
     BUYIN: 'Buy-in', REBUY: 'Rebuy', ADDON: 'Addon', CASHOUT: 'Cashout',
   }
-  const comandaDescription = `${typeLabels[input.type] ?? String(input.type)} — ${session.homeGame.name}`
+  const contextName = session.homeGame?.name ?? session.event?.name ?? 'Mesa'
+  const comandaDescription = `${typeLabels[input.type] ?? String(input.type)} — ${contextName}`
   const chargeId = extractChargeId(input.note)
 
   const transaction = await prisma.$transaction(async (tx) => {
@@ -180,6 +194,7 @@ export async function registerTransaction(input: TransactionInput) {
     if (cashType) {
       await applyTransactionToComandaTx(tx, {
         homeGameId: session.homeGameId,
+        eventId: session.eventId,
         playerId: input.userId,
         operatorUserId: input.registeredBy,
         sessionId: input.sessionId,

@@ -1,9 +1,14 @@
 'use client'
 
 import React, { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import api from '@/services/api'
+import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
+import EventTabs from '@/components/EventTabs'
+import HomeGameTabs from '@/components/HomeGameTabs'
+import { useAuthStore } from '@/store/useStore'
 import { getErrorMessage } from '@/lib/errors'
 import { useConfirm } from '@/components/ConfirmDialog'
 
@@ -18,6 +23,7 @@ interface TournamentPlayer {
   position: number | null
   rebuysCount: number
   hasAddon: boolean
+  timeChipAwarded: boolean
   bountyCollected: string
   prizeAmount: string | null
   eliminatedAtLevel: number | null
@@ -65,9 +71,16 @@ interface Tournament {
   totalRake: string
   totalTax: string
   doubleRebuyEnabled: boolean
+  doubleRebuyBonusChips: number | null
+  staffRetentionPct: string | null
+  staffRetentionDest: string | null
+  rankingRetentionPct: string | null
+  timeChipBonus: number | null
+  timeChipUntilLevel: number | null
   startedAt: string | null
   finishedAt: string | null
-  homeGameId: string
+  homeGameId: string | null
+  eventId: string | null
   blindLevels: BlindLevel[]
   players: TournamentPlayer[]
 }
@@ -77,15 +90,6 @@ interface PayoutSuggestion {
   suggestion: Array<{ position: number; amount: number; percent: number }>
 }
 
-// Membro do home game (formato devolvido por GET /home-games/:id).
-// O host é injetado ad-hoc com id "host-<uid>", por isso id é string livre.
-interface HomeGameMember {
-  id: string
-  userId: string
-  user?: { id: string; name: string; cpf?: string }
-  paymentMode?: 'POSTPAID' | 'PREPAID' | null
-  role?: 'HOST' | 'PLAYER'
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -136,26 +140,20 @@ function useTimer(
 ) {
   const startStr = isOnBreak ? breakStartedAt : levelStartedAt
 
-  // Quando pausado, elapsed = momento da pausa − início (congelado)
-  const frozenElapsed = isPaused && pausedAt ? elapsedSecondsFrom(startStr, new Date(pausedAt).getTime()) : null
-
-  const [elapsed, setElapsed] = useState<number>(() =>
-    frozenElapsed !== null ? frozenElapsed : elapsedSecondsFrom(startStr)
-  )
-
+  // Tick a cada segundo para forçar re-renders; elapsed é derivado diretamente
+  // de startStr — evita estado obsoleto na transição nível → intervalo, que
+  // causava overTime=true imediatamente ao entrar em break e encerrava o
+  // intervalo em poucos segundos.
+  const [, setTick] = useState(0)
   useEffect(() => {
-    // Pausado: congela o elapsed no valor do momento da pausa
-    if (isPaused && pausedAt) {
-      setElapsed(elapsedSecondsFrom(startStr, new Date(pausedAt).getTime()))
-      return
-    }
-    if (!startStr) return
-    const start = new Date(startStr).getTime()
-    const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000))
-    tick()
-    const id = setInterval(tick, 1000)
+    if (isPaused) return
+    const id = setInterval(() => setTick(n => n + 1), 1000)
     return () => clearInterval(id)
-  }, [levelStartedAt, breakStartedAt, isOnBreak, isPaused, pausedAt, startStr])
+  }, [startStr, isPaused, pausedAt])
+
+  // Quando pausado, congela no momento da pausa; caso contrário usa agora
+  const effectiveNow = isPaused && pausedAt ? new Date(pausedAt).getTime() : Date.now()
+  const elapsed = elapsedSecondsFrom(startStr, effectiveNow)
 
   const safeMins = (isOnBreak ? (breakDurationMinutes || 15) : (minutesPerLevel || 15))
   const totalSeconds = safeMins * 60
@@ -173,6 +171,7 @@ function useTimer(
 export default function TournamentPage() {
   const { tournamentId } = useParams<{ tournamentId: string }>()
   const router = useRouter()
+  const { user, logout } = useAuthStore()
   const { confirm, dialog: confirmDialog } = useConfirm()
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [payout, setPayout] = useState<PayoutSuggestion | null>(null)
@@ -189,8 +188,10 @@ export default function TournamentPage() {
   const [registeringPlayerId, setRegisteringPlayerId] = useState<string | null>(null)
   const [registerSuccess, setRegisterSuccess] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [playerSearch, setPlayerSearch] = useState('')
-  const [homeGameMembers, setHomeGameMembers] = useState<HomeGameMember[]>([])
+  const [cpfInput, setCpfInput] = useState('')
+  const [cpfSearchResults, setCpfSearchResults] = useState<{id: string; name: string; cpf: string | null}[]>([])
+  const [cpfSearching, setCpfSearching] = useState(false)
+  const cpfDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [selectedTab, setSelectedTab] = useState<'playing' | 'eliminated'>('playing')
   const [eliminateModal, setEliminateModal] = useState<TournamentPlayer | null>(null)
   const [eliminatorId, setEliminatorId] = useState('')
@@ -199,6 +200,7 @@ export default function TournamentPage() {
   const [reEntrySelectedPlayer, setReEntrySelectedPlayer] = useState<TournamentPlayer | null>(null)
   const [reEntryType, setReEntryType] = useState<'NORMAL' | 'DOUBLE'>('NORMAL')
   const [reEntryWithAddon, setReEntryWithAddon] = useState(false)
+  const [reEntryAddonWithTax, setReEntryAddonWithTax] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -206,19 +208,6 @@ export default function TournamentPage() {
       setTournament(res.data)
       // Carrega membros do home game na primeira carga.
       // Inclui o HOST como opção também — o dono pode jogar o próprio torneio.
-      if (res.data.homeGameId && homeGameMembers.length === 0) {
-        api.get(`/home-games/${res.data.homeGameId}`)
-          .then((r) => {
-            const members: HomeGameMember[] = Array.isArray(r.data.members) ? r.data.members : []
-            const hostUser = r.data.host
-            // Se o host não aparece em members (que é o caso padrão), injeta ele no topo.
-            const hostAsMember: HomeGameMember[] = hostUser && !members.some((m) => m?.user?.id === hostUser.id)
-              ? [{ id: `host-${hostUser.id}`, userId: hostUser.id, user: hostUser, paymentMode: null, role: 'HOST' }]
-              : []
-            setHomeGameMembers([...hostAsMember, ...members])
-          })
-          .catch(() => {})
-      }
     } catch {
       setError('Torneio não encontrado')
     } finally {
@@ -265,10 +254,9 @@ export default function TournamentPage() {
       const name = registerSelectedPlayer.name
       await api.post(`/tournaments/${tournamentId}/players`, {
         playerId: registerSelectedPlayer.id,
-        homeGameId: tournament!.homeGameId,
         buyInType: registerBuyInType ?? 'NORMAL',
       })
-      setRegisterSelectedPlayer(null); setRegisterBuyInType(null); setPlayerSearch('')
+      setRegisterSelectedPlayer(null); setRegisterBuyInType(null); setCpfInput(''); setCpfSearchResults([])
       setRegisterSuccess(`${name} inscrito`)
       setTimeout(() => setRegisterSuccess(null), 3000)
     }, 'register')
@@ -281,15 +269,20 @@ export default function TournamentPage() {
     const base = tournament.startingChips
     const taxChips = tournament.buyInTaxChips ?? 0
     const bonus = tournament.doubleBuyInBonusChips ?? 0
-    if (type === 'DOUBLE') return (base + taxChips) * 2 + bonus
-    if (type === 'NORMAL_WITH_TAX') return base + taxChips
-    return base
+    const timeChipEligible = !!tournament.timeChipBonus && (
+      tournament.status === 'REGISTRATION' ||
+      tournament.currentLevel <= (tournament.timeChipUntilLevel ?? Infinity)
+    )
+    const timeChip = timeChipEligible ? (tournament.timeChipBonus ?? 0) : 0
+    if (type === 'DOUBLE') return (base + taxChips) * 2 + bonus + timeChip
+    if (type === 'NORMAL_WITH_TAX') return base + taxChips + timeChip
+    return base + timeChip
   }
   function calcRegisterAmount(type: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE' | null) {
     if (!tournament) return 0
     const base = Number(tournament.buyInAmount)
     const tax = tournament.buyInTaxAmount ?? 0
-    if (type === 'DOUBLE') return base * 2 + Number(tax)
+    if (type === 'DOUBLE') return base * 2 + Number(tax) * 2
     if (type === 'NORMAL_WITH_TAX') return base + Number(tax)
     return base
   }
@@ -301,11 +294,12 @@ export default function TournamentPage() {
       await api.post(`/tournaments/players/${reEntrySelectedPlayer.id}/re-entry`, {
         reEntryType,
         withAddon: reEntryWithAddon,
+        withAddonTax: reEntryWithAddon && reEntryAddonWithTax,
       })
       setReEntrySelectedPlayer(null)
       setReEntryType('NORMAL')
-      setReEntryWithAddon(false)
-      setPlayerSearch('')
+      setReEntryWithAddon(false); setReEntryAddonWithTax(false)
+      setCpfInput(''); setCpfSearchResults([])
       setRegisterSuccess(`Re-entrada: ${name}`)
       setTimeout(() => setRegisterSuccess(null), 3000)
     }, 'reentry')
@@ -313,22 +307,15 @@ export default function TournamentPage() {
 
   function closeRegisterModal() {
     setShowRegister(false)
-    setPlayerSearch('')
+    setCpfInput('')
+    setCpfSearchResults([])
+    setCpfSearching(false)
     setRegisterSelectedPlayer(null)
     setRegisterBuyInType(null)
     setReEntrySelectedPlayer(null)
     setReEntryType('NORMAL')
-    setReEntryWithAddon(false)
+    setReEntryWithAddon(false); setReEntryAddonWithTax(false)
   }
-
-  // Membros filtrados: remove quem já está inscrito no torneio
-  const registeredPlayerIds = new Set(tournament?.players.map((p) => p.playerId) ?? [])
-  const filteredMembers = homeGameMembers
-    .filter((m: HomeGameMember) => !registeredPlayerIds.has(m.user?.id ?? m.userId))
-    .filter((m: HomeGameMember) => {
-      const name: string = m.user?.name ?? ''
-      return name.toLowerCase().includes(playerSearch.toLowerCase())
-    })
 
   if (loading) return <AppLoading />
 
@@ -344,7 +331,9 @@ export default function TournamentPage() {
   const currentBreak = parsedBreaksMain.find((b) => b.afterLevel === tournament.currentLevel)
   const minutesPerLevel = tournament.isOnBreak
     ? (currentBreak?.durationMinutes ?? 15)
-    : (tournament.minutesPerLevelPostLateReg ?? tournament.minutesPerLevelPreLateReg)
+    : (tournament.lateRegistrationLevel != null && tournament.currentLevel > tournament.lateRegistrationLevel && tournament.minutesPerLevelPostLateReg)
+      ? tournament.minutesPerLevelPostLateReg
+      : tournament.minutesPerLevelPreLateReg
 
   const currentBlind = tournament.blindLevels.find((b) => b.level === tournament.currentLevel)
 
@@ -373,22 +362,188 @@ export default function TournamentPage() {
     CANCELED: 'Cancelado',
   }
 
+  function generateHtmlReport() {
+    const t = tournament!
+    const fmt = (v: string | number | null | undefined) => {
+      if (v == null) return 'R$ 0,00'
+      return `R$ ${Math.abs(Number(v)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+    }
+    const totalPlayers = t.players.length
+    const totalRebuys = t.players.reduce((s, p) => s + p.rebuysCount, 0)
+    const totalAddons = t.players.filter(p => p.hasAddon).length
+    const prizePool = Number(t.prizePool)
+    const totalRake = Number(t.totalRake)
+    const buyIn = Number(t.buyInAmount)
+    const rebuy = Number(t.rebuyAmount ?? 0)
+    const addon = Number(t.addonAmount ?? 0)
+
+    const durationStr = (() => {
+      if (!t.startedAt || !t.finishedAt) return '—'
+      const ms = new Date(t.finishedAt).getTime() - new Date(t.startedAt).getTime()
+      const h = Math.floor(ms / 3600000)
+      const m = Math.floor((ms % 3600000) / 60000)
+      return h > 0 ? `${h}h ${m}min` : `${m}min`
+    })()
+
+    const sorted = [...t.players].sort((a, b) => {
+      if (a.status === 'WINNER') return -1
+      if (b.status === 'WINNER') return 1
+      if (a.position != null && b.position != null) return a.position - b.position
+      return 0
+    })
+
+    const medal = (pos: number | null) => {
+      if (pos === 1) return '🥇'
+      if (pos === 2) return '🥈'
+      if (pos === 3) return '🥉'
+      return pos != null ? `${pos}º` : '—'
+    }
+
+    const dealPayouts: { position: number; amount: number }[] = (() => {
+      try { return t.dealPayouts ? JSON.parse(t.dealPayouts) : [] } catch { return [] }
+    })()
+    const payoutStructure: { position: number; percent: number }[] = (() => {
+      try { return t.payoutStructure ? JSON.parse(t.payoutStructure) : [] } catch { return [] }
+    })()
+
+    const getPrize = (p: TournamentPlayer): number | null => {
+      if (p.prizeAmount) return Number(p.prizeAmount)
+      if (dealPayouts.length && p.position != null) {
+        const e = dealPayouts.find(d => d.position === p.position)
+        if (e) return e.amount
+      }
+      if (payoutStructure.length && p.position != null) {
+        const e = payoutStructure.find(d => d.position === p.position)
+        if (e) return Math.round(prizePool * e.percent / 100 * 100) / 100
+      }
+      return null
+    }
+
+    const playerRows = sorted.map((p, i) => {
+      const prize = getPrize(p)
+      const isWinner = p.status === 'WINNER'
+      const bg = isWinner ? '#1a1500' : i % 2 === 0 ? '#0a1822' : '#071320'
+      const borderLeft = isWinner ? '#FBBF24' : prize ? '#00C8E0' : 'transparent'
+      const extras = [
+        p.rebuysCount > 0 ? `${p.rebuysCount}× rebuy` : '',
+        p.hasAddon ? 'add-on' : '',
+        Number(p.bountyCollected) > 0 ? `bounty ${fmt(p.bountyCollected)}` : '',
+      ].filter(Boolean).join(' · ')
+      return `
+        <tr style="background:${bg};border-left:3px solid ${borderLeft}">
+          <td style="padding:10px 16px;font-size:16px;font-weight:800;color:${isWinner ? '#FBBF24' : '#6B7280'};width:44px">${medal(p.position)}</td>
+          <td style="padding:10px 8px">
+            <div style="font-weight:600;color:${isWinner ? '#FBBF24' : '#ffffff'};font-size:14px">${isWinner ? '🏆 ' : ''}${p.player.name}</div>
+            ${extras ? `<div style="font-size:11px;color:#4A7A90;margin-top:2px">${extras}</div>` : ''}
+            ${p.eliminatedBy ? `<div style="font-size:11px;color:#374151;margin-top:2px">eliminado por ${p.eliminatedBy.player.name}</div>` : ''}
+          </td>
+          <td style="padding:10px 16px;text-align:right;font-weight:700;font-size:14px;color:${prize ? '#4ade80' : '#374151'};white-space:nowrap">
+            ${prize ? fmt(prize) : '—'}
+          </td>
+        </tr>`
+    }).join('')
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Relatório — ${t.name}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#050D15;color:#fff;font-family:system-ui,-apple-system,sans-serif;min-height:100vh;padding:32px 16px 64px}
+  .wrap{max-width:720px;margin:0 auto}
+  h1{font-size:clamp(1.4rem,4vw,2rem);font-weight:900;letter-spacing:.05em}
+  h2{font-size:.65rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#4A7A90;margin-bottom:12px}
+  .card{background:linear-gradient(135deg,#0C2438,#071828 60%,#050D15);border:1px solid rgba(0,200,224,.14);border-radius:14px;padding:20px 24px}
+  .grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:24px}
+  .metric{background:linear-gradient(135deg,#0C2438,#071828 60%,#050D15);border:1px solid rgba(0,200,224,.12);border-radius:12px;padding:14px 16px}
+  .metric .lbl{font-size:.7rem;color:#4A7A90;margin-bottom:4px}
+  .metric .val{font-size:1.1rem;font-weight:800;font-variant-numeric:tabular-nums}
+  .cyan{color:#00C8E0} .green{color:#4ade80} .yellow{color:#FBBF24} .orange{color:#fb923c} .muted{color:#6B7280}
+  table{width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden}
+  tr+tr{border-top:1px solid rgba(255,255,255,.04)}
+  .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(0,200,224,.15),transparent);margin:28px 0}
+  .header-meta{font-size:.78rem;color:#4A7A90;margin-top:6px;line-height:1.6}
+  .badge{display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;padding:2px 10px;border-radius:20px;background:rgba(0,200,224,.1);border:1px solid rgba(0,200,224,.25);color:#00C8E0}
+  .logo{font-size:.75rem;font-weight:900;letter-spacing:.25em;color:rgba(0,200,224,.35);text-transform:uppercase}
+  @media print{body{background:#fff;color:#000}.card,.metric{background:#f9f9f9!important;border-color:#ddd!important}.cyan,.green,.yellow{color:#000!important}.logo{color:#999!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px">
+    <div class="logo">STACK+</div>
+    <div style="text-align:right;font-size:.7rem;color:#4A7A90">${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;border-color:rgba(0,200,224,.25)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <h1>${t.name}</h1>
+        <div class="header-meta">
+          ${t.startedAt ? `Início: ${new Date(t.startedAt).toLocaleString('pt-BR')}` : ''}
+          ${t.finishedAt ? ` &nbsp;·&nbsp; Fim: ${new Date(t.finishedAt).toLocaleString('pt-BR')}` : ''}
+          ${durationStr !== '—' ? ` &nbsp;·&nbsp; Duração: ${durationStr}` : ''}
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <span class="badge">${t.status === 'FINISHED' ? 'Finalizado' : t.status}</span>
+        <div style="font-size:.7rem;color:#4A7A90;margin-top:6px">${totalPlayers} jogadores</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <h2 style="margin-bottom:0">Resumo financeiro</h2>
+    ${t.eventId ? `<a href="/event/${t.eventId}/comandas" style="font-size:.72rem;font-weight:700;padding:5px 14px;border-radius:8px;background:rgba(0,200,224,.1);border:1px solid rgba(0,200,224,.3);color:#00C8E0;text-decoration:none">🗂️ Comandas</a>` : t.homeGameId ? `<a href="/homegame/${t.homeGameId}/comandas" style="font-size:.72rem;font-weight:700;padding:5px 14px;border-radius:8px;background:rgba(0,200,224,.1);border:1px solid rgba(0,200,224,.3);color:#00C8E0;text-decoration:none">🗂️ Comandas</a>` : ''}
+  </div>
+  <div class="grid">
+    <div class="metric"><div class="lbl">Buy-ins (${totalPlayers}×)</div><div class="val">${fmt(buyIn * totalPlayers)}</div></div>
+    ${totalRebuys > 0 ? `<div class="metric"><div class="lbl">Rebuys (${totalRebuys}×)</div><div class="val">${fmt(rebuy * totalRebuys)}</div></div>` : ''}
+    ${totalAddons > 0 ? `<div class="metric"><div class="lbl">Add-ons (${totalAddons}×)</div><div class="val">${fmt(addon * totalAddons)}</div></div>` : ''}
+    <div class="metric"><div class="lbl">Prize Pool</div><div class="val green">${fmt(prizePool)}</div></div>
+    ${totalRake > 0 ? `<div class="metric"><div class="lbl">Rake</div><div class="val yellow">${fmt(totalRake)}</div></div>` : ''}
+  </div>
+
+  <div class="divider"></div>
+
+  <h2>Classificação final</h2>
+  <div style="border:1px solid rgba(0,200,224,.1);border-radius:12px;overflow:hidden">
+    <table>
+      <tbody>${playerRows}</tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:48px;text-align:center;font-size:.7rem;color:#1e3a50">
+    Gerado por STACK+ &nbsp;·&nbsp; ${new Date().toLocaleString('pt-BR')}
+  </div>
+
+</div>
+</body>
+</html>`
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const w = window.open(url, '_blank')
+    if (w) setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
+
   return (
     <div className="min-h-screen bg-sx-bg text-white pb-8">
       {confirmDialog}
-      {/* Header */}
-      <div className="bg-sx-card border-b border-sx-border px-4 py-3">
-        <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <button onClick={() => router.push(`/homegame/${tournament.homeGameId}/tournaments`)} className="text-sx-muted hover:text-white">←</button>
-          <div className="flex-1">
-            <h1 className="font-bold text-lg">{tournament.name}</h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge[tournament.status]}`}>
-                {statusLabel[tournament.status]}
-              </span>
-              <span className="text-xs text-white/40">{tournament.players.length} inscritos</span>
-            </div>
-          </div>
+      <AppHeader
+        title={tournament.name}
+        onBack={() => tournament.eventId
+          ? router.push(`/event/${tournament.eventId}`)
+          : router.push(`/homegame/${tournament.homeGameId}/tournaments`)
+        }
+        userName={user?.name}
+        onLogout={() => { logout(); router.push('/') }}
+        rightSlot={
           <a
             href={`/tournament/${tournamentId}/clock`}
             target="_blank"
@@ -397,8 +552,14 @@ export default function TournamentPage() {
           >
             📺 Clock
           </a>
-        </div>
-      </div>
+        }
+      />
+      {tournament.eventId
+        ? <EventTabs eventId={tournament.eventId} active="MESAS" canManage={true} />
+        : tournament.homeGameId
+          ? <HomeGameTabs homeGameId={tournament.homeGameId} active="TOURNAMENTS" />
+          : null
+      }
 
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
 
@@ -431,8 +592,8 @@ export default function TournamentPage() {
               await action(() => api.patch(`/tournaments/${tournamentId}/blind-levels`, { levels: editLevels, breaks: validBreaks }), 'blinds')
               setEditingBlinds(false)
             }}
-            onUpdateLimits={(rebuyUntilLevel, addonAfterLevel) =>
-              action(() => api.patch(`/tournaments/${tournamentId}/limits`, { rebuyUntilLevel, addonAfterLevel }), 'limits')
+            onUpdateLimits={(addonAfterLevel) =>
+              action(() => api.patch(`/tournaments/${tournamentId}/limits`, { addonAfterLevel }), 'limits')
             }
           />
         )}
@@ -443,8 +604,37 @@ export default function TournamentPage() {
             <div className="text-xs text-white/40 mb-1">Prize Pool</div>
             <div className="text-2xl font-bold text-green-400">{fmt(tournament.prizePool)}</div>
             {Number(tournament.totalRake) > 0 && (
-              <div className="text-xs text-white/40 mt-0.5">Rake: {fmt(tournament.totalRake)}</div>
+              <div className="text-xs text-white/40 mt-0.5 flex items-center gap-2">
+                <span>Rake: {fmt(tournament.totalRake)}</span>
+                {Number(tournament.totalTax) > 0 && (
+                  <span className="text-white/25">·</span>
+                )}
+                {Number(tournament.totalTax) > 0 && (
+                  <span>Taxa: {fmt(tournament.totalTax)}</span>
+                )}
+              </div>
             )}
+            <div className="flex items-center gap-2 mt-2 text-xs text-white/40 tabular-nums">
+              <span>
+                <span className="text-white/60 font-semibold">{tournament.players.length}</span> buy-in{tournament.players.length !== 1 ? 's' : ''}
+              </span>
+              {!!tournament.rebuyAmount && (
+                <>
+                  <span className="text-white/20">·</span>
+                  <span>
+                    <span className="text-white/60 font-semibold">{tournament.players.reduce((s, p) => s + p.rebuysCount, 0)}</span> rebuy{tournament.players.reduce((s, p) => s + p.rebuysCount, 0) !== 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+              {!!tournament.addonAmount && (
+                <>
+                  <span className="text-white/20">·</span>
+                  <span>
+                    <span className="text-white/60 font-semibold">{tournament.players.filter(p => p.hasAddon).length}</span> add-on{tournament.players.filter(p => p.hasAddon).length !== 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
           {['RUNNING', 'ON_BREAK'].includes(tournament.status) && (
             <button
@@ -457,13 +647,13 @@ export default function TournamentPage() {
         </div>
 
         {/* Controls */}
-        <div className="flex gap-2 flex-wrap items-center">
+        <div className="flex gap-2 items-center overflow-x-auto pb-1">
           {(() => {
             const lateRegOpen = tournament.status === 'REGISTRATION' ||
               (tournament.status === 'RUNNING' &&
                 (tournament.lateRegistrationLevel === null || tournament.currentLevel <= tournament.lateRegistrationLevel))
             const reEntryOpen = !!tournament.rebuyAmount &&
-              (tournament.rebuyUntilLevel === null || tournament.currentLevel <= tournament.rebuyUntilLevel) &&
+              (tournament.lateRegistrationLevel === null || tournament.currentLevel <= tournament.lateRegistrationLevel) &&
               eliminatedPlayers.length > 0
             if (!['REGISTRATION', 'RUNNING'].includes(tournament.status)) return null
             if (!lateRegOpen && !reEntryOpen) return null
@@ -476,6 +666,15 @@ export default function TournamentPage() {
               </button>
             )
           })()}
+          {tournament.status === 'REGISTRATION' && (
+            <button
+              onClick={() => router.push(`/tournament/${tournamentId}/edit`)}
+              className="px-4 py-2 rounded-lg text-sm font-medium border"
+              style={{ background: 'rgba(245,158,11,0.08)', borderColor: 'rgba(245,158,11,0.3)', color: '#F59E0B' }}
+            >
+              ✏️ Editar Torneio
+            </button>
+          )}
           {tournament.status === 'REGISTRATION' && (
             <button
               onClick={() => action(() => api.post(`/tournaments/${tournamentId}/start`), 'start')}
@@ -500,13 +699,27 @@ export default function TournamentPage() {
               🏁 Encerrar Jogo
             </button>
           )}
-          <div className="flex-1" />
-          <button
-            onClick={() => router.push(`/homegame/${tournament.homeGameId}/comandas`)}
+          {tournament.players.length > 0 && (
+            <button
+              onClick={generateHtmlReport}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-sx-border2 text-sx-muted hover:text-white hover:border-white/20"
+              style={{ background: 'rgba(255,255,255,0.03)' }}
+            >
+              📋 Encerrar torneio
+            </button>
+          )}
+          <Link
+            href={
+              tournament.eventId
+                ? `/event/${tournament.eventId}/comandas`
+                : tournament.homeGameId
+                  ? `/homegame/${tournament.homeGameId}/comandas`
+                  : '#'
+            }
             className="px-4 py-2 bg-sx-card2 hover:bg-sx-input rounded-lg text-sm font-medium border border-sx-border2 text-sx-muted hover:text-white"
           >
             🗂️ Comandas
-          </button>
+          </Link>
         </div>
 
         {/* Search */}
@@ -579,7 +792,7 @@ export default function TournamentPage() {
                       setRegisterBuyInType(null)
                       setReEntrySelectedPlayer(null)
                       setReEntryType('NORMAL')
-                      setReEntryWithAddon(false)
+                      setReEntryWithAddon(false); setReEntryAddonWithTax(false)
                     }}
                     className="text-sx-muted hover:text-white text-lg leading-none"
                   >
@@ -602,70 +815,95 @@ export default function TournamentPage() {
                     <span>{registerSuccess}</span>
                   </div>
                 )}
-                <input
-                  className="w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sx-cyan"
-                  placeholder="Filtrar por nome..."
-                  value={playerSearch}
-                  onChange={(e) => setPlayerSearch(e.target.value)}
-                  autoFocus
-                />
-                <div className="space-y-1 max-h-72 overflow-y-auto">
-                  {/* Novos jogadores */}
-                  {filteredMembers.length === 0 && eliminatedPlayers.filter(p => p.player.name.toLowerCase().includes(playerSearch.toLowerCase())).length === 0 ? (
-                    <div className="text-center text-white/30 py-6 text-sm">
-                      {homeGameMembers.length === 0 ? 'Carregando membros...' : 'Nenhum jogador disponível'}
-                    </div>
-                  ) : (
-                    <>
-                      {filteredMembers.map((m) => {
-                        // m.user sempre vem populado pelo backend (include: user).
-                        // Fallback defensivo pra garantir renderização mesmo se faltar.
-                        const u = m.user ?? { id: m.userId, name: '', cpf: undefined as string | undefined }
-                        return (
-                          <button
-                            key={u.id}
-                            onClick={() => { setRegisterSelectedPlayer({ id: u.id, name: u.name }); setRegisterBuyInType('NORMAL') }}
-                            className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center justify-between transition-colors"
-                            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
-                            onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(0,200,224,0.08)')}
-                            onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
-                          >
+                {/* Busca por CPF */}
+                <div className="space-y-2">
+                  <div className="relative">
+                    <input
+                      className="w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-sx-cyan"
+                      placeholder="Digite CPF ou parte dele..."
+                      inputMode="numeric"
+                      value={cpfInput}
+                      autoFocus
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '').slice(0, 11)
+                        const masked = digits
+                          .replace(/(\d{3})(\d)/, '$1.$2')
+                          .replace(/(\d{3})(\d)/, '$1.$2')
+                          .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+                        setCpfInput(masked)
+                        setCpfSearchResults([])
+                        if (cpfDebounceRef.current) clearTimeout(cpfDebounceRef.current)
+                        if (digits.length < 3) { setCpfSearching(false); return }
+                        setCpfSearching(true)
+                        cpfDebounceRef.current = setTimeout(async () => {
+                          try {
+                            const res = await api.get(`/users/search?q=${digits}`)
+                            const registeredIds = new Set(tournament.players.map((p) => p.playerId))
+                            setCpfSearchResults(res.data.filter((u: {id: string}) => !registeredIds.has(u.id)))
+                          } catch {
+                            setCpfSearchResults([])
+                          } finally {
+                            setCpfSearching(false)
+                          }
+                        }, 400)
+                      }}
+                    />
+                    {cpfSearching && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sx-muted text-xs">...</span>
+                    )}
+                  </div>
+
+                  {/* Resultados da busca */}
+                  {cpfSearchResults.length > 0 && (
+                    <div className="space-y-1">
+                      {cpfSearchResults.map((u) => (
+                        <button
+                          key={u.id}
+                          onClick={() => { setRegisterSelectedPlayer({ id: u.id, name: u.name }); setRegisterBuyInType('NORMAL') }}
+                          className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center justify-between transition-colors"
+                          style={{ background: 'rgba(0,200,224,0.06)', border: '1px solid rgba(0,200,224,0.2)' }}
+                          onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(0,200,224,0.12)')}
+                          onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(0,200,224,0.06)')}
+                        >
+                          <div>
                             <span className="font-medium text-white">{u.name}</span>
-                            <span className="text-white/30 text-xs">{u.cpf?.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}</span>
-                          </button>
-                        )
-                      })}
-                      {/* Eliminados que podem re-entrar */}
-                      {(() => {
-                        const canReEntry = !!tournament.rebuyAmount &&
-                          (tournament.rebuyUntilLevel === null || tournament.currentLevel <= tournament.rebuyUntilLevel)
-                        if (!canReEntry) return null
-                        const filteredElim = eliminatedPlayers.filter(p =>
-                          p.player.name.toLowerCase().includes(playerSearch.toLowerCase())
-                        )
-                        if (filteredElim.length === 0) return null
-                        return (
-                          <>
-                            <div className="text-xs text-white/35 uppercase tracking-widest pt-3 pb-1 px-1">↩ Re-entrada</div>
-                            {filteredElim.map((p) => (
-                              <button
-                                key={p.id}
-                                onClick={() => { setReEntrySelectedPlayer(p); setReEntryType('NORMAL'); setReEntryWithAddon(false) }}
-                                className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center justify-between transition-colors"
-                                style={{ background: 'rgba(251,146,60,0.06)', border: '1px solid rgba(251,146,60,0.15)' }}
-                                onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(251,146,60,0.12)')}
-                                onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(251,146,60,0.06)')}
-                              >
-                                <span className="font-medium text-white">{p.player.name}</span>
-                                <span className="text-orange-400 text-xs font-medium">Re-entrada</span>
-                              </button>
-                            ))}
-                          </>
-                        )
-                      })()}
-                    </>
+                            {u.cpf && <span className="text-sx-muted text-xs ml-2">{u.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}</span>}
+                          </div>
+                          <span className="text-sx-cyan text-xs font-medium">Selecionar →</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {cpfSearchResults.length === 0 && !cpfSearching && cpfInput.replace(/\D/g, '').length >= 3 && (
+                    <p className="text-center text-white/30 text-sm py-3">Nenhum jogador encontrado</p>
                   )}
                 </div>
+
+                {/* Re-entradas */}
+                {(() => {
+                  const canReEntry = !!tournament.rebuyAmount &&
+                    (tournament.lateRegistrationLevel === null || tournament.currentLevel <= tournament.lateRegistrationLevel)
+                  if (!canReEntry || eliminatedPlayers.length === 0) return null
+                  return (
+                    <div className="space-y-1">
+                      <div className="text-xs text-white/35 uppercase tracking-widest pt-1 pb-1 px-1">↩ Re-entrada</div>
+                      {eliminatedPlayers.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => { setReEntrySelectedPlayer(p); setReEntryType('NORMAL'); setReEntryWithAddon(false); setReEntryAddonWithTax(false) }}
+                          className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center justify-between transition-colors"
+                          style={{ background: 'rgba(251,146,60,0.06)', border: '1px solid rgba(251,146,60,0.15)' }}
+                          onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(251,146,60,0.12)')}
+                          onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(251,146,60,0.06)')}
+                        >
+                          <span className="font-medium text-white">{p.player.name}</span>
+                          <span className="text-orange-400 text-xs font-medium">Re-entrada</span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
               </>
             ) : reEntrySelectedPlayer ? (
               /* ── Step 2: re-entrada ── */
@@ -728,50 +966,119 @@ export default function TournamentPage() {
 
                 {/* Addon (se disponível neste nível e jogador ainda não fez) */}
                 {!!tournament.addonAmount && !reEntrySelectedPlayer.hasAddon &&
-                  (tournament.addonAfterLevel === null || tournament.currentLevel >= (tournament.addonAfterLevel ?? 0)) && (
-                  <button
-                    type="button"
-                    onClick={() => setReEntryWithAddon(!reEntryWithAddon)}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left"
-                    style={{
-                      background: reEntryWithAddon ? 'linear-gradient(135deg, #00E0A0 0%, #00957A 100%)' : 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${reEntryWithAddon ? 'transparent' : 'rgba(255,255,255,0.1)'}`,
-                      boxShadow: reEntryWithAddon ? '0 4px 16px rgba(0,224,160,0.3)' : 'none',
-                    }}
-                  >
-                    <span className="text-lg">{reEntryWithAddon ? '☑' : '☐'}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold" style={{ color: reEntryWithAddon ? '#050D15' : 'rgba(255,255,255,0.7)' }}>
-                        Incluir Add-on
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: reEntryWithAddon ? 'rgba(5,13,21,0.6)' : 'rgba(255,255,255,0.35)' }}>
-                        +{(tournament.addonChips ?? tournament.startingChips).toLocaleString('pt-BR')} fichas
-                      </p>
-                    </div>
-                    <span className="text-base font-black" style={{ color: reEntryWithAddon ? '#050D15' : 'white' }}>
-                      {fmt(Number(tournament.addonAmount))}
-                    </span>
-                  </button>
-                )}
+                  (tournament.addonAfterLevel === null || tournament.currentLevel >= (tournament.addonAfterLevel ?? 0)) && (() => {
+                  const addonBase      = Number(tournament.addonAmount)
+                  const addonTax       = Number(tournament.addonTaxAmount ?? 0)
+                  const addonBaseChips = tournament.addonChips ?? tournament.startingChips
+                  const addonTaxChips  = Number(tournament.addonTaxChips ?? 0)
+                  return (
+                    <>
+                      {/* Addon base — selecionado exclusivamente (sem taxa) */}
+                      {(() => {
+                        const selected = reEntryWithAddon && !reEntryAddonWithTax
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (selected) {
+                                // deseleciona
+                                setReEntryWithAddon(false)
+                                setReEntryAddonWithTax(false)
+                              } else {
+                                // seleciona addon simples, remove taxa
+                                setReEntryWithAddon(true)
+                                setReEntryAddonWithTax(false)
+                              }
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left"
+                            style={{
+                              background: selected ? 'linear-gradient(135deg, #00E0A0 0%, #00957A 100%)' : 'rgba(255,255,255,0.04)',
+                              border: `1px solid ${selected ? 'transparent' : 'rgba(255,255,255,0.1)'}`,
+                              boxShadow: selected ? '0 4px 16px rgba(0,224,160,0.3)' : 'none',
+                            }}
+                          >
+                            <span className="text-lg">{selected ? '☑' : '☐'}</span>
+                            <div className="flex-1">
+                              <p className="text-sm font-bold" style={{ color: selected ? '#050D15' : 'rgba(255,255,255,0.7)' }}>
+                                Incluir Add-on
+                              </p>
+                              <p className="text-xs mt-0.5" style={{ color: selected ? 'rgba(5,13,21,0.6)' : 'rgba(255,255,255,0.35)' }}>
+                                +{addonBaseChips.toLocaleString('pt-BR')} fichas
+                              </p>
+                            </div>
+                            <span className="text-base font-black" style={{ color: selected ? '#050D15' : 'white' }}>
+                              {fmt(addonBase)}
+                            </span>
+                          </button>
+                        )
+                      })()}
+
+                      {/* Addon com taxa — opção exclusiva (addon + taxa juntos) */}
+                      {addonTax > 0 && (() => {
+                        const selected = reEntryWithAddon && reEntryAddonWithTax
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (selected) {
+                                // deseleciona tudo
+                                setReEntryWithAddon(false)
+                                setReEntryAddonWithTax(false)
+                              } else {
+                                // seleciona addon + taxa, remove addon simples
+                                setReEntryWithAddon(true)
+                                setReEntryAddonWithTax(true)
+                              }
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left"
+                            style={{
+                              background: selected ? 'linear-gradient(135deg, #00E0A0 0%, #00957A 100%)' : 'rgba(255,255,255,0.04)',
+                              border: `1px solid ${selected ? 'transparent' : 'rgba(255,255,255,0.1)'}`,
+                              boxShadow: selected ? '0 4px 16px rgba(0,224,160,0.3)' : 'none',
+                            }}
+                          >
+                            <span className="text-lg">{selected ? '☑' : '☐'}</span>
+                            <div className="flex-1">
+                              <p className="text-sm font-bold" style={{ color: selected ? '#050D15' : 'rgba(255,255,255,0.7)' }}>
+                                Taxa do Add-on
+                              </p>
+                              <p className="text-xs mt-0.5" style={{ color: selected ? 'rgba(5,13,21,0.6)' : 'rgba(255,255,255,0.35)' }}>
+                                +{(addonBaseChips + addonTaxChips).toLocaleString('pt-BR')} fichas
+                              </p>
+                            </div>
+                            <span className="text-base font-black" style={{ color: selected ? '#050D15' : 'white' }}>
+                              {fmt(addonBase + addonTax)}
+                            </span>
+                          </button>
+                        )
+                      })()}
+                    </>
+                  )
+                })()}
 
                 {/* Preview total */}
-                <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(251,146,60,0.15)' }}>
-                  <p className="text-xs text-sx-muted mb-1">
-                    Total · {fmt(
-                      Number(tournament.rebuyAmount) * (reEntryType === 'DOUBLE' ? 2 : 1) +
-                      (reEntryWithAddon ? Number(tournament.addonAmount ?? 0) : 0)
-                    )}
-                  </p>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-white">
-                      {(
-                        (tournament.rebuyChips ?? tournament.startingChips) * (reEntryType === 'DOUBLE' ? 2 : 1) +
-                        (reEntryWithAddon ? (tournament.addonChips ?? tournament.startingChips) : 0)
-                      ).toLocaleString('pt-BR')}
-                    </span>
-                    <span className="text-sx-muted text-sm">fichas</span>
-                  </div>
-                </div>
+                {(() => {
+                  const rebuyMult       = reEntryType === 'DOUBLE' ? 2 : 1
+                  const rebuyAmt        = Number(tournament.rebuyAmount) * rebuyMult
+                  const addonAmt        = reEntryWithAddon ? Number(tournament.addonAmount ?? 0) : 0
+                  const addonTaxAmt     = reEntryWithAddon && reEntryAddonWithTax ? Number(tournament.addonTaxAmount ?? 0) : 0
+                  const rebuyChips      = (tournament.rebuyChips ?? tournament.startingChips) * rebuyMult
+                  const addonChipsAmt   = reEntryWithAddon ? (tournament.addonChips ?? tournament.startingChips) : 0
+                  const addonTaxChipsAmt = reEntryWithAddon && reEntryAddonWithTax ? Number(tournament.addonTaxChips ?? 0) : 0
+                  return (
+                    <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(251,146,60,0.15)' }}>
+                      <p className="text-xs text-sx-muted mb-1">
+                        Total · {fmt(rebuyAmt + addonAmt + addonTaxAmt)}
+                      </p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-bold text-white">
+                          {(rebuyChips + addonChipsAmt + addonTaxChipsAmt).toLocaleString('pt-BR')}
+                        </span>
+                        <span className="text-sx-muted text-sm">fichas</span>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Erro */}
                 {error && (
@@ -813,15 +1120,33 @@ export default function TournamentPage() {
                 />
 
                 {/* Preview de fichas */}
-                <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-                  <p className="text-xs text-sx-muted mb-1">Fichas a entregar · {fmt(calcRegisterAmount(registerBuyInType))}</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-white">
-                      {calcRegisterChips(registerBuyInType).toLocaleString('pt-BR')}
-                    </span>
-                    <span className="text-sx-muted text-sm">fichas</span>
-                  </div>
-                </div>
+                {(() => {
+                  const timeChipEligible = !!tournament.timeChipBonus && (
+                    tournament.status === 'REGISTRATION' ||
+                    tournament.currentLevel <= (tournament.timeChipUntilLevel ?? Infinity)
+                  )
+                  return (
+                    <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
+                      <p className="text-xs text-sx-muted mb-1">Fichas a entregar · {fmt(calcRegisterAmount(registerBuyInType))}</p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-bold text-white">
+                          {calcRegisterChips(registerBuyInType).toLocaleString('pt-BR')}
+                        </span>
+                        <span className="text-sx-muted text-sm">fichas</span>
+                      </div>
+                      {timeChipEligible && (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,184,0,0.15)', color: '#FFB800', border: '1px solid rgba(255,184,0,0.3)' }}>
+                            TIME CHIP
+                          </span>
+                          <span className="text-xs text-sx-muted">
+                            inclui <span className="text-white font-medium">+{tournament.timeChipBonus!.toLocaleString('pt-BR')}</span> por inscrição antecipada
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Erro de inscrição */}
                 {error && (
@@ -987,7 +1312,7 @@ function TimerCard({ tournament, currentBlind, onAdvance, onPrevious, onBreak, o
   editBreaks: { id: string; afterLevel: string; durationMinutes: string }[]
   setEditBreaks: React.Dispatch<React.SetStateAction<{ id: string; afterLevel: string; durationMinutes: string }[]>>
   onSaveBlinds: () => Promise<void>
-  onUpdateLimits: (rebuyUntilLevel: number | null, addonAfterLevel: number | null) => void
+  onUpdateLimits: (addonAfterLevel: number | null) => void
 }) {
   const parsedBreaksTimer: { afterLevel: number; durationMinutes: number }[] = (() => {
     try { return JSON.parse(tournament.breaks ?? '[]') } catch { return [] }
@@ -999,7 +1324,9 @@ function TimerCard({ tournament, currentBlind, onAdvance, onPrevious, onBreak, o
 
   const minutesPerLevel = tournament.isOnBreak
     ? breakDuration
-    : (tournament.minutesPerLevelPostLateReg || tournament.minutesPerLevelPreLateReg || 15)
+    : (tournament.lateRegistrationLevel != null && tournament.currentLevel > tournament.lateRegistrationLevel && tournament.minutesPerLevelPostLateReg)
+      ? tournament.minutesPerLevelPostLateReg
+      : (tournament.minutesPerLevelPreLateReg || 15)
 
   const { display, overTime } = useTimer(
     tournament.levelStartedAt,
@@ -1294,8 +1621,9 @@ function PlayerRow({ player, tournament, rowIndex, actionLoading, onRebuy, onAdd
   onCancelRegistration: () => void
 }) {
   const isActive = ['REGISTERED', 'ACTIVE', 'WINNER'].includes(player.status)
-  const canRebuy = isActive && tournament.status !== 'REGISTRATION' && !!tournament.rebuyAmount &&
-    (tournament.rebuyUntilLevel === null || tournament.currentLevel <= tournament.rebuyUntilLevel)
+  const tournamentRunning = ['RUNNING', 'ON_BREAK'].includes(tournament.status)
+  const canRebuy = isActive && tournamentRunning && !!tournament.rebuyAmount &&
+    (tournament.lateRegistrationLevel === null || tournament.currentLevel <= tournament.lateRegistrationLevel)
 
   const parsedBreaksForAddon: { afterLevel: number; durationMinutes: number }[] = (() => {
     try { return JSON.parse(tournament.breaks ?? '[]') } catch { return [] }
@@ -1307,10 +1635,11 @@ function PlayerRow({ player, tournament, rowIndex, actionLoading, onRebuy, onAdd
   // Quando não há break configurado após addonAfterLevel, o addon aparece no nível seguinte
   const atAddonLevelNoBreak = addonLevel != null && !addonNextIsBreak &&
     !tournament.isOnBreak && tournament.currentLevel === addonLevel + 1
-  const canAddon = isActive && !!tournament.addonAmount && !player.hasAddon &&
+  const canAddon = isActive && tournamentRunning && !!tournament.addonAmount && !player.hasAddon &&
     (addonLevel === null || atAddonLevel || duringAddonBreak || atAddonLevelNoBreak)
-  const canEliminate = isActive && tournament.status !== 'REGISTRATION' && player.status !== 'WINNER'
-  const canPrize = isActive && tournament.status === 'RUNNING'
+  const canEliminate = isActive && tournamentRunning && player.status !== 'WINNER'
+  // Permite corrigir prêmio manualmente também quando o torneio encerrou sem creditar
+  const canPrize = isActive && (tournament.status === 'RUNNING' || (tournament.status === 'FINISHED' && !player.prizeAmount))
   const canCancelRegistration = tournament.status === 'REGISTRATION' && player.status === 'REGISTERED'
 
   const rowBg = player.status === 'WINNER'
@@ -1405,25 +1734,18 @@ function PlayerRow({ player, tournament, rowIndex, actionLoading, onRebuy, onAdd
 
 function InlineLimitsEditor({ tournament, onSave, actionLoading }: {
   tournament: Tournament
-  onSave: (rebuyUntilLevel: number | null, addonAfterLevel: number | null) => void
+  onSave: (addonAfterLevel: number | null) => void
   actionLoading: string | null
 }) {
   const [editing, setEditing] = useState(false)
-  const [rebuyUntil, setRebuyUntil] = useState(String(tournament.rebuyUntilLevel ?? ''))
   const [addonAfter, setAddonAfter] = useState(String(tournament.addonAfterLevel ?? ''))
 
   React.useEffect(() => {
-    if (!editing) {
-      setRebuyUntil(String(tournament.rebuyUntilLevel ?? ''))
-      setAddonAfter(String(tournament.addonAfterLevel ?? ''))
-    }
-  }, [tournament.rebuyUntilLevel, tournament.addonAfterLevel, editing])
+    if (!editing) setAddonAfter(String(tournament.addonAfterLevel ?? ''))
+  }, [tournament.addonAfterLevel, editing])
 
   const handleSave = async () => {
-    await onSave(
-      rebuyUntil ? parseInt(rebuyUntil) : null,
-      addonAfter ? parseInt(addonAfter) : null,
-    )
+    await onSave(addonAfter ? parseInt(addonAfter) : null)
     setEditing(false)
   }
 
@@ -1432,20 +1754,6 @@ function InlineLimitsEditor({ tournament, onSave, actionLoading }: {
   if (editing) {
     return (
       <div className="flex items-center gap-3 flex-wrap">
-        {!!tournament.rebuyAmount && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-white/40">Rebuy até nível</span>
-            <input
-              type="number"
-              min={1}
-              style={miniInput}
-              value={rebuyUntil}
-              onChange={(e) => setRebuyUntil(e.target.value)}
-              placeholder="∞"
-              autoFocus
-            />
-          </div>
-        )}
         {!!tournament.addonAmount && (
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-white/40">Addon após nível</span>
@@ -1456,6 +1764,7 @@ function InlineLimitsEditor({ tournament, onSave, actionLoading }: {
               value={addonAfter}
               onChange={(e) => setAddonAfter(e.target.value)}
               placeholder="—"
+              autoFocus
             />
           </div>
         )}
@@ -1468,17 +1777,12 @@ function InlineLimitsEditor({ tournament, onSave, actionLoading }: {
   return (
     <div className="flex items-center gap-3 flex-wrap">
       {!!tournament.rebuyAmount && (
-        <button
-          onClick={() => setEditing(true)}
-          className="flex items-center gap-1 text-xs text-white/40 hover:text-sx-cyan transition-colors group"
-          title="Clique para editar"
-        >
+        <span className="flex items-center gap-1 text-xs text-white/40">
           Rebuy até{' '}
-          <span className="text-white/70 font-medium group-hover:text-sx-cyan">
-            {tournament.rebuyUntilLevel ?? '∞'}
+          <span className="text-white/70 font-medium">
+            {tournament.lateRegistrationLevel ?? '∞'}
           </span>
-          <span className="text-white/20 group-hover:text-sx-cyan ml-0.5">✎</span>
-        </button>
+        </span>
       )}
       {!!tournament.addonAmount && (
         <button
@@ -1511,7 +1815,8 @@ function BuyInSelector({ baseAmount, taxAmount, taxChips, startingChips, doubleB
   selected: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
   onChange: (t: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE') => void
 }) {
-  const hasTax = taxAmount > 0 && taxChips > 0
+  // taxa opcional pode existir sem fichas extras (rake adicional sem bônus de chips)
+  const hasTax = taxAmount > 0
   const hasDouble = doubleBonusChips > 0
 
   const options: { key: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'; label: string; amount: number; chips: number; color: string; glow: string }[] = [
@@ -1567,7 +1872,8 @@ function ActionModal({ title, baseLabel, baseAmount, taxAmount, baseChips, taxCh
   onClose: () => void
   onConfirm: (type: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE') => void
 }) {
-  const hasTax = taxAmount > 0 && taxChips > 0
+  // taxa opcional pode existir sem fichas extras
+  const hasTax = taxAmount > 0
   type ActionType = 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
   const [selected, setSelected] = useState<ActionType>('NORMAL')
 
@@ -1705,21 +2011,18 @@ function PayoutModal({ payout, players, tournamentId, actionLoading, onClose, on
     } else if (type === 'partial') {
       setSaveValues(initEqualValues(remainingPot / 2, 'fixed'))
     } else if (type === 'positions') {
+      // Todos os jogadores ativos participam do acordo — nenhum travado
       const pcts = getSuggestedPayouts(n)
-      const lastPct = pcts[n - 1] ?? 0
-      const lockedLast = Math.round(remainingPot * lastPct / 100 * 100) / 100
-      const dealPot = Math.round((remainingPot - lockedLast) * 100) / 100
-      const topPcts = getSuggestedPayouts(Math.max(1, n - 1))
       const amounts: { position: number; amount: number; locked: boolean }[] = Array.from(
-        { length: n - 1 }, (_, i) => ({
+        { length: n }, (_, i) => ({
           position: i + 1,
-          amount: Math.round(dealPot * (topPcts[i] ?? 0) / 100 * 100) / 100,
+          amount: Math.round(remainingPot * (pcts[i] ?? 0) / 100 * 100) / 100,
           locked: false,
         })
       )
-      const topTotal = amounts.reduce((s, a) => s + a.amount, 0)
-      if (amounts.length > 0) amounts[0].amount = Math.round((amounts[0].amount + dealPot - topTotal) * 100) / 100
-      amounts.push({ position: n, amount: lockedLast, locked: true })
+      // Ajusta o 1º lugar para absorver diferença de arredondamento
+      const total = amounts.reduce((s, a) => s + a.amount, 0)
+      if (amounts.length > 0) amounts[0].amount = Math.round((amounts[0].amount + remainingPot - total) * 100) / 100
       setPositionAmounts(amounts)
     }
     setStep('deal')
@@ -1732,13 +2035,11 @@ function PayoutModal({ payout, players, tournamentId, actionLoading, onClose, on
   }, 0)
   const dealBalanced = Math.abs(dealTotal - remainingPot) < 0.02
 
-  // Tipo 2
-  const lockedAmount = positionAmounts.filter((a) => a.locked).reduce((s, a) => s + a.amount, 0)
-  const dealPotForValidation = Math.round((remainingPot - lockedAmount) * 100) / 100
-  const editableTotal = positionAmounts.filter((a) => !a.locked).reduce((s, a) => s + a.amount, 0)
+  // Tipo 2 — todos editáveis, total deve fechar com remainingPot
+  const editableTotal = positionAmounts.reduce((s, a) => s + a.amount, 0)
   const positionsValid = positionAmounts.length > 0
     && positionAmounts.every((a) => a.amount >= 0)
-    && Math.abs(editableTotal - dealPotForValidation) < 0.02
+    && Math.abs(editableTotal - remainingPot) < 0.02
 
   // Tipo 3
   const saveTotal = activeDealPlayers.reduce((s, p) => s + (parseFloat(saveValues[p.id] || '0') || 0), 0)
@@ -1979,19 +2280,18 @@ function PayoutModal({ payout, players, tournamentId, actionLoading, onClose, on
         {/* ── Tipo 2: redistribuir por posição ── */}
         {step === 'deal' && dealType === 'positions' && (<>
           <p className="text-xs text-white/40">
-            O último lugar recebe o prêmio padrão (bloqueado). Distribua o restante entre as posições acima.
+            Distribua o prize pool entre todos os jogadores ativos. O total deve fechar com o valor do pot.
           </p>
           <div className="space-y-2">
-            {positionAmounts.filter((e) => !e.locked).map((entry) => {
+            {positionAmounts.map((entry, idx) => {
               const medalIcon = entry.position === 1 ? '🥇' : entry.position === 2 ? '🥈' : entry.position === 3 ? '🥉' : `${entry.position}º`
-              const pct = dealPotForValidation > 0 ? (entry.amount / dealPotForValidation * 100).toFixed(1) : '0.0'
-              const editableIndex = positionAmounts.findIndex((x) => x.position === entry.position)
+              const pct = remainingPot > 0 ? (entry.amount / remainingPot * 100).toFixed(1) : '0.0'
               return (
                 <div key={entry.position} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div className="w-8 text-center text-base">{medalIcon}</div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-white">{entry.position}º lugar</div>
-                    <div className="text-xs text-white/30">{pct}% do pot negociável</div>
+                    <div className="text-xs text-white/30">{pct}% do pot</div>
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-white/40 text-sm">R$</span>
@@ -2000,7 +2300,7 @@ function PayoutModal({ payout, players, tournamentId, actionLoading, onClose, on
                       value={entry.amount}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value) || 0
-                        setPositionAmounts((prev) => prev.map((x, j) => j === editableIndex ? { ...x, amount: Math.round(v * 100) / 100 } : x))
+                        setPositionAmounts((prev) => prev.map((x, j) => j === idx ? { ...x, amount: Math.round(v * 100) / 100 } : x))
                       }}
                       className="w-28 bg-sx-input border border-sx-border2 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:border-sx-cyan"
                     />
@@ -2010,31 +2310,19 @@ function PayoutModal({ payout, players, tournamentId, actionLoading, onClose, on
             })}
           </div>
           <div className={`flex justify-between text-sm font-semibold px-1 ${positionsValid ? 'text-sx-cyan' : 'text-red-400'}`}>
-            <span>Pot negociável</span>
+            <span>Total distribuído</span>
             <span>
               R$ {editableTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               {' / '}
-              R$ {dealPotForValidation.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {remainingPot.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               {positionsValid && ' ✓'}
               {!positionsValid && (
                 <span className="text-xs font-normal ml-1">
-                  ({editableTotal > dealPotForValidation ? '+' : '−'}R$ {Math.abs(editableTotal - dealPotForValidation).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                  ({editableTotal > remainingPot ? '+' : '−'}R$ {Math.abs(editableTotal - remainingPot).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
                 </span>
               )}
             </span>
           </div>
-          {positionAmounts.filter((e) => e.locked).map((entry) => (
-            <div key={entry.position} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', opacity: 0.7 }}>
-              <div className="w-8 text-center text-base">🔒</div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-white/50">{entry.position}º lugar — prêmio padrão</div>
-                <div className="text-xs text-white/30">Bloqueado, não faz parte do acordo</div>
-              </div>
-              <div className="text-sm font-semibold text-white/50">
-                R$ {entry.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </div>
-            </div>
-          ))}
           <button disabled={!positionsValid || !!actionLoading} onClick={handleConfirmDeal}
             className="w-full py-3 rounded-xl font-bold text-sm disabled:opacity-40"
             style={{ background: positionsValid ? '#EAB308' : 'rgba(234,179,8,0.3)', color: '#000' }}

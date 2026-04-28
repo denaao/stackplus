@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
+import EventTabs from '@/components/EventTabs'
+import HomeGameTabs from '@/components/HomeGameTabs'
 import { useAuthStore } from '@/store/useStore'
 
 interface Player {
@@ -23,6 +25,8 @@ interface Tournament {
   id: string
   name: string
   status: string
+  homeGameId: string | null
+  eventId: string | null
   buyInAmount: string
   rebuyAmount: string | null
   addonAmount: string | null
@@ -171,6 +175,12 @@ export default function TournamentReportPage() {
         userName={user?.name}
         onLogout={() => { logout(); router.push('/') }}
       />
+      {t.eventId
+        ? <EventTabs eventId={t.eventId} active="MESAS" canManage={true} />
+        : t.homeGameId
+          ? <HomeGameTabs homeGameId={t.homeGameId} active="TOURNAMENTS" />
+          : null
+      }
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
 

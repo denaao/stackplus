@@ -8,19 +8,12 @@ import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
 import { getErrorMessage } from '@/lib/errors'
 
-function maskCpf(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 11)
-  if (digits.length <= 3) return digits
-  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`
-  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
-  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
-}
-
 export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
   const user = useAuthStore((s) => s.user)
-  const [form, setForm] = useState({ cpf: '', password: '' })
+  const [docType, setDocType] = useState<'CPF' | 'PASSPORT'>('CPF')
+  const [form, setForm] = useState({ credential: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -34,15 +27,31 @@ export default function LoginPage() {
     else router.replace('/dashboard')
   }, [user, router])
 
+  function handleCredentialChange(value: string) {
+    if (docType === 'CPF') {
+      const d = value.replace(/\D/g, '').slice(0, 11)
+      const masked = d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+      setForm((p) => ({ ...p, credential: masked }))
+    } else {
+      setForm((p) => ({ ...p, credential: value.toUpperCase() }))
+    }
+  }
+
+  function switchDocType(type: 'CPF' | 'PASSPORT') {
+    setDocType(type)
+    setForm((p) => ({ ...p, credential: '' }))
+    setError('')
+  }
+
   async function handleSubmit(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const { data } = await api.post('/auth/login', {
-        cpf: form.cpf.replace(/\D/g, ''),
-        password: form.password,
-      })
+      const payload = docType === 'CPF'
+        ? { documentType: 'CPF', cpf: form.credential.replace(/\D/g, ''), password: form.password }
+        : { documentType: 'PASSPORT', passportNumber: form.credential.trim().toUpperCase(), password: form.password }
+      const { data } = await api.post('/auth/login', payload)
       setAuth(data.token, data.user, data.refreshToken ?? null)
       const role = data.user.role
       if (role === 'CASHIER') router.push('/cashier/select')
@@ -84,6 +93,18 @@ export default function LoginPage() {
         <div className="card-sx rounded-2xl p-8 space-y-5">
           <h2 className="text-lg font-bold text-white">Entrar na sua conta</h2>
 
+          {/* Toggle CPF / Passaporte */}
+          <div className="flex rounded-xl overflow-hidden border border-sx-border2">
+            <button type="button" onClick={() => switchDocType('CPF')}
+              className={`flex-1 py-2 text-xs font-bold transition-colors ${docType === 'CPF' ? 'bg-sx-cyan text-sx-bg' : 'bg-sx-input text-sx-muted hover:text-white'}`}>
+              Brasileiro (CPF)
+            </button>
+            <button type="button" onClick={() => switchDocType('PASSPORT')}
+              className={`flex-1 py-2 text-xs font-bold transition-colors ${docType === 'PASSPORT' ? 'bg-sx-cyan text-sx-bg' : 'bg-sx-input text-sx-muted hover:text-white'}`}>
+              Estrangeiro
+            </button>
+          </div>
+
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3">
               {error}
@@ -91,16 +112,18 @@ export default function LoginPage() {
           )}
 
           <div className="space-y-1.5">
-            <label className="text-[11px] text-sx-muted uppercase tracking-widest font-medium">CPF</label>
+            <label className="text-[11px] text-sx-muted uppercase tracking-widest font-medium">
+              {docType === 'CPF' ? 'CPF' : 'Número do passaporte'}
+            </label>
             <input
               type="text"
-              inputMode="numeric"
+              inputMode={docType === 'CPF' ? 'numeric' : 'text'}
               required
-              value={form.cpf}
-              onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              value={form.credential}
+              onChange={(e) => handleCredentialChange(e.target.value)}
               className="w-full bg-sx-input border border-sx-border2 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sx-cyan transition-colors placeholder:text-sx-muted/50"
-              placeholder="000.000.000-00"
-              maxLength={14}
+              placeholder={docType === 'CPF' ? '000.000.000-00' : 'AB1234567'}
+              maxLength={docType === 'CPF' ? 14 : 30}
               autoComplete="username"
             />
           </div>

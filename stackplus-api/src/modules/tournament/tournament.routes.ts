@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
 import { destructiveLimiter } from '../../middlewares/rate-limit.middleware'
 import * as TournamentService from './tournament.service'
+import { prisma as db } from '../../lib/prisma'
 
 const router = Router()
 router.use(authenticate)
@@ -43,6 +44,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     blindLevels: z.array(blindLevelSchema).optional(),
     doubleBuyInBonusChips: z.number().int().positive().optional().nullable(),
     doubleRebuyEnabled: z.boolean().optional(),
+    doubleRebuyBonusChips: z.number().int().positive().optional().nullable(),
+    staffRetentionPct: z.number().min(0).max(100).optional().nullable(),
+    staffRetentionDest: z.enum(['STAFF', 'ADM']).optional().nullable(),
+    rankingRetentionPct: z.number().min(0).max(100).optional().nullable(),
+    timeChipBonus: z.number().int().positive().optional().nullable(),
+    timeChipUntilLevel: z.number().int().positive().optional().nullable(),
   }).parse(req.body)
 
   const tournament = await TournamentService.createTournament(data)
@@ -173,6 +180,12 @@ router.patch('/:tournamentId', async (req: AuthRequest, res: Response) => {
     blindLevels: z.array(blindLevelSchema).optional(),
     doubleBuyInBonusChips: z.number().int().positive().optional().nullable(),
     doubleRebuyEnabled: z.boolean().optional(),
+    doubleRebuyBonusChips: z.number().int().positive().optional().nullable(),
+    staffRetentionPct: z.number().min(0).max(100).optional().nullable(),
+    staffRetentionDest: z.enum(['STAFF', 'ADM']).optional().nullable(),
+    rankingRetentionPct: z.number().min(0).max(100).optional().nullable(),
+    timeChipBonus: z.number().int().positive().optional().nullable(),
+    timeChipUntilLevel: z.number().int().positive().optional().nullable(),
   }).parse(req.body)
 
   const tournament = await TournamentService.updateTournament(req.params.tournamentId, data)
@@ -223,14 +236,29 @@ router.get('/:tournamentId/payout-suggestion', async (req: AuthRequest, res: Res
 router.post('/:tournamentId/players', async (req: AuthRequest, res: Response) => {
   const data = z.object({
     playerId: z.string().uuid(),
-    homeGameId: z.string().uuid(),
     buyInType: z.enum(['NORMAL', 'NORMAL_WITH_TAX', 'DOUBLE']).optional(),
+    // homeGameId e eventId são opcionais — a rota resolve pelo torneio se ausentes
+    homeGameId: z.string().uuid().optional(),
+    eventId: z.string().uuid().optional(),
   }).parse(req.body)
+
+  // Resolve homeGameId / eventId a partir do torneio se o cliente não enviou
+  let homeGameId = data.homeGameId
+  let eventId = data.eventId
+  if (!homeGameId && !eventId) {
+    const t = await db.tournament.findUniqueOrThrow({
+      where: { id: req.params.tournamentId },
+      select: { homeGameId: true, eventId: true },
+    })
+    homeGameId = t.homeGameId ?? undefined
+    eventId = t.eventId ?? undefined
+  }
 
   const player = await TournamentService.registerPlayer({
     tournamentId: req.params.tournamentId,
     playerId: data.playerId,
-    homeGameId: data.homeGameId,
+    homeGameId,
+    eventId,
     registeredByUserId: req.user!.userId,
     buyInType: data.buyInType ?? 'NORMAL',
   })

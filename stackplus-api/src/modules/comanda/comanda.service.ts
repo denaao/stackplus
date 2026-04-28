@@ -2,6 +2,7 @@ import { prisma } from '../../lib/prisma'
 import { ComandaItemPaymentStatus, ComandaItemType, ComandaMode, Prisma } from '@prisma/client'
 import { createNormalizedCob, checkPixChargeIsPaid, createPix } from '../banking/annapay.service'
 import { isHomeGameHost } from '../../lib/homegame-auth'
+import { isEventCashier } from '../../lib/event-auth'
 import { logger } from '../../lib/logger'
 
 /**
@@ -14,35 +15,46 @@ import { logger } from '../../lib/logger'
  */
 async function assertComandaAccess(
   viewerUserId: string,
-  comandaIdOrPlayerAndHomeGame:
+  comandaIdOrPlayerAndContext:
     | { comandaId: string }
-    | { playerId: string; homeGameId: string },
+    | { playerId: string; homeGameId: string }
+    | { playerId: string; eventId: string },
   options: { managerOnly?: boolean } = {},
 ) {
-  let homeGameId: string
+  let homeGameId: string | null = null
+  let eventId: string | null = null
   let playerId: string
 
-  if ('comandaId' in comandaIdOrPlayerAndHomeGame) {
+  if ('comandaId' in comandaIdOrPlayerAndContext) {
     const comanda = await db.comanda.findUniqueOrThrow({
-      where: { id: comandaIdOrPlayerAndHomeGame.comandaId },
-      select: { homeGameId: true, playerId: true },
+      where: { id: comandaIdOrPlayerAndContext.comandaId },
+      select: { homeGameId: true, eventId: true, playerId: true },
     })
     homeGameId = comanda.homeGameId
+    eventId = comanda.eventId
     playerId = comanda.playerId
+  } else if ('homeGameId' in comandaIdOrPlayerAndContext) {
+    homeGameId = comandaIdOrPlayerAndContext.homeGameId
+    playerId = comandaIdOrPlayerAndContext.playerId
   } else {
-    homeGameId = comandaIdOrPlayerAndHomeGame.homeGameId
-    playerId = comandaIdOrPlayerAndHomeGame.playerId
+    eventId = comandaIdOrPlayerAndContext.eventId
+    playerId = comandaIdOrPlayerAndContext.playerId
   }
 
-  const isManager = await isHomeGameHost(viewerUserId, homeGameId)
+  // Contexto de evento
+  if (eventId) {
+    const isManager = await isEventCashier(viewerUserId, eventId)
+    if (isManager) return { isManager: true, isOwnComanda: viewerUserId === playerId }
+    if (options.managerOnly) throw new Error('Acesso negado — apenas staff do evento pode executar esta ação')
+    if (viewerUserId === playerId) return { isManager: false, isOwnComanda: true }
+    throw new Error('Acesso negado')
+  }
+
+  // Contexto de home game
+  const isManager = await isHomeGameHost(viewerUserId, homeGameId!)
   if (isManager) return { isManager: true, isOwnComanda: viewerUserId === playerId }
-
-  if (options.managerOnly) {
-    throw new Error('Acesso negado — apenas host/co-host pode executar esta ação')
-  }
-
+  if (options.managerOnly) throw new Error('Acesso negado — apenas host/co-host pode executar esta ação')
   if (viewerUserId === playerId) return { isManager: false, isOwnComanda: true }
-
   throw new Error('Acesso negado')
 }
 
@@ -84,45 +96,69 @@ async function resolveDefaultComandaMode(
 export async function openComanda({
   playerId,
   homeGameId,
+  eventId,
   mode,
   creditLimit,
   note,
   openedByUserId,
 }: {
   playerId: string
-  homeGameId: string
+  homeGameId?: string
+  eventId?: string
   mode?: ComandaMode
   creditLimit?: number | null
   note?: string
   openedByUserId: string
 }) {
-  // Somente host/co-host pode abrir comanda pra outro jogador.
-  await assertComandaAccess(openedByUserId, { playerId, homeGameId }, { managerOnly: true })
+  if (!homeGameId && !eventId) throw new Error('homeGameId ou eventId é obrigatório')
 
-  // Garante que não existe comanda OPEN para o mesmo jogador/home game
+  const context = homeGameId
+    ? ({ playerId, homeGameId } as const)
+    : ({ playerId, eventId: eventId! } as const)
+
+  // Somente host/co-host/staff pode abrir comanda pra outro jogador.
+  await assertComandaAccess(openedByUserId, context, { managerOnly: true })
+
+  // Garante que não existe comanda OPEN para o mesmo jogador no mesmo contexto
   const existing = await db.comanda.findFirst({
-    where: { playerId, homeGameId, status: 'OPEN' },
+    where: homeGameId
+      ? { playerId, homeGameId, status: 'OPEN' }
+      : { playerId, eventId, status: 'OPEN' },
   })
   if (existing) {
-    throw new Error('Jogador já possui uma comanda aberta neste home game')
+    throw new Error('Jogador já possui uma comanda aberta neste ' + (homeGameId ? 'home game' : 'evento'))
   }
 
-  // Verifica se há saldo a transferir da comanda fechada mais recente
-  const lastClosed = await db.comanda.findFirst({
-    where: { playerId, homeGameId, status: 'CLOSED' },
-    orderBy: { closedAt: 'desc' },
-  })
+  // Transporta saldo da comanda anterior (home game ou evento)
+  const lastClosed = homeGameId
+    ? await db.comanda.findFirst({
+        where: { playerId, homeGameId, status: 'CLOSED' },
+        orderBy: { closedAt: 'desc' },
+      })
+    : await db.comanda.findFirst({
+        where: { playerId, eventId, status: 'CLOSED' },
+        orderBy: { closedAt: 'desc' },
+      })
   const carryBalance = lastClosed ? Number(lastClosed.balance) : 0
 
-  // Se mode não foi passado explicitamente, herda do home game (+ preferência do jogador em HYBRID)
-  const resolvedMode = mode ?? (await resolveDefaultComandaMode(playerId, homeGameId))
+  // Resolve mode: home game usa regra HG; evento usa financialModule do evento
+  let resolvedMode: ComandaMode
+  if (homeGameId) {
+    resolvedMode = mode ?? (await resolveDefaultComandaMode(playerId, homeGameId))
+  } else {
+    const event = await db.event.findUniqueOrThrow({
+      where: { id: eventId! },
+      select: { financialModule: true },
+    })
+    resolvedMode = mode ?? (event.financialModule === 'PREPAID' ? ComandaMode.PREPAID : ComandaMode.POSTPAID)
+  }
 
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Cria a nova comanda
     const newComanda = await tx.comanda.create({
       data: {
         playerId,
-        homeGameId,
+        ...(homeGameId ? { homeGameId } : { eventId }),
         mode: resolvedMode,
         creditLimit: creditLimit ?? null,
         note: note ?? null,
@@ -187,15 +223,23 @@ export async function getComanda(comandaId: string, viewerUserId: string) {
 export async function getComandaByPlayer({
   playerId,
   homeGameId,
+  eventId,
   viewerUserId,
 }: {
   playerId: string
-  homeGameId: string
+  homeGameId?: string
+  eventId?: string
   viewerUserId: string
 }) {
-  await assertComandaAccess(viewerUserId, { playerId, homeGameId })
+  if (!homeGameId && !eventId) throw new Error('homeGameId ou eventId é obrigatório')
+  const context = homeGameId
+    ? ({ playerId, homeGameId } as const)
+    : ({ playerId, eventId: eventId! } as const)
+  await assertComandaAccess(viewerUserId, context)
   return db.comanda.findFirst({
-    where: { playerId, homeGameId, status: 'OPEN' },
+    where: homeGameId
+      ? { playerId, homeGameId, status: 'OPEN' }
+      : { playerId, eventId, status: 'OPEN' },
     include: {
       player: { select: { id: true, name: true, cpf: true } },
       items: {
@@ -210,19 +254,27 @@ export async function getComandaByPlayer({
 
 export async function listComandas({
   homeGameId,
+  eventId,
   status,
   viewerUserId,
 }: {
-  homeGameId: string
+  homeGameId?: string
+  eventId?: string
   status?: 'OPEN' | 'CLOSED'
   viewerUserId: string
 }) {
-  // Listagem completa é só pra host/co-host. Jogador comum usa getComandaByPlayer.
-  const isManager = await isHomeGameHost(viewerUserId, homeGameId)
-  if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode listar comandas')
+  if (!homeGameId && !eventId) throw new Error('homeGameId ou eventId é obrigatório')
+  // Listagem completa é só pra host/co-host/staff.
+  if (homeGameId) {
+    const isManager = await isHomeGameHost(viewerUserId, homeGameId)
+    if (!isManager) throw new Error('Acesso negado — apenas host/co-host pode listar comandas')
+  } else {
+    const isManager = await isEventCashier(viewerUserId, eventId!)
+    if (!isManager) throw new Error('Acesso negado — apenas staff do evento pode listar comandas')
+  }
   return db.comanda.findMany({
     where: {
-      homeGameId,
+      ...(homeGameId ? { homeGameId } : { eventId }),
       ...(status ? { status } : {}),
     },
     orderBy: { openedAt: 'desc' },
@@ -1222,37 +1274,57 @@ export async function closeComanda({
 
 // ─── Find or open (used by cashier / sangeur auto-integration) ────────────────
 
-type FindOrOpenParams = {
-  playerId: string
-  homeGameId: string
-  openedByUserId: string
-}
+type FindOrOpenParams =
+  | { playerId: string; homeGameId: string; eventId?: never; openedByUserId: string }
+  | { playerId: string; eventId: string; homeGameId?: never; openedByUserId: string }
 
 // Versão "inner" que opera em uma tx já aberta.
 export async function findOrOpenComandaWithTx(tx: Prisma.TransactionClient, params: FindOrOpenParams) {
-  const { playerId, homeGameId, openedByUserId } = params
+  const { playerId, openedByUserId } = params
+  const homeGameId = params.homeGameId ?? null
+  const eventId = params.eventId ?? null
 
   const existing = await tx.comanda.findFirst({
-    where: { playerId, homeGameId, status: 'OPEN' },
+    where: homeGameId
+      ? { playerId, homeGameId, status: 'OPEN' }
+      : { playerId, eventId, status: 'OPEN' },
   })
   if (existing) return existing
 
-  // Nenhuma comanda aberta — abre automaticamente herdando do home game
-  const lastClosed = await tx.comanda.findFirst({
-    where: { playerId, homeGameId, status: 'CLOSED' },
-    orderBy: { closedAt: 'desc' },
-  })
+  // Nenhuma comanda aberta — abre automaticamente transportando saldo anterior
+  const lastClosed = homeGameId
+    ? await tx.comanda.findFirst({
+        where: { playerId, homeGameId, status: 'CLOSED' },
+        orderBy: { closedAt: 'desc' },
+      })
+    : await tx.comanda.findFirst({
+        where: { playerId, eventId, status: 'CLOSED' },
+        orderBy: { closedAt: 'desc' },
+      })
+
   const carryBalance = lastClosed ? Number(lastClosed.balance) : 0
 
-  const resolvedMode = await resolveDefaultComandaMode(playerId, homeGameId)
-  // PREPAID estrito: creditLimit 0 pra não acumular fiado silenciosamente.
-  // POSTPAID: sem limite por default (null).
-  const resolvedCreditLimit = resolvedMode === 'PREPAID' ? 0 : null
+  // Para eventos: usa o financialModule do evento; para home games: usa resolveDefaultComandaMode
+  let resolvedMode: ComandaMode
+  let resolvedCreditLimit: number | null
+
+  if (homeGameId) {
+    resolvedMode = await resolveDefaultComandaMode(playerId, homeGameId)
+    resolvedCreditLimit = resolvedMode === 'PREPAID' ? 0 : null
+  } else {
+    // Evento: busca financialModule do evento
+    const event = await tx.event.findUniqueOrThrow({
+      where: { id: eventId! },
+      select: { financialModule: true },
+    })
+    resolvedMode = event.financialModule === 'PREPAID' ? ComandaMode.PREPAID : ComandaMode.POSTPAID
+    resolvedCreditLimit = resolvedMode === 'PREPAID' ? 0 : null
+  }
 
   const newComanda = await tx.comanda.create({
     data: {
       playerId,
-      homeGameId,
+      ...(homeGameId ? { homeGameId } : { eventId }),
       mode: resolvedMode,
       creditLimit: resolvedCreditLimit,
       note: null,
@@ -1326,12 +1398,12 @@ export async function transferComandaBalance({
       select: { name: true },
     })
 
-    // Garante comanda de destino aberta (abre se necessário)
-    const dest = await findOrOpenComandaWithTx(tx, {
-      playerId: destPlayerId,
-      homeGameId: source.homeGameId,
-      openedByUserId: createdByUserId,
-    })
+    // Garante comanda de destino aberta (abre se necessário).
+    // Usa o mesmo contexto (homeGame ou event) da comanda de origem.
+    const dest = await findOrOpenComandaWithTx(tx, source.eventId
+      ? { playerId: destPlayerId, eventId: source.eventId, openedByUserId: createdByUserId }
+      : { playerId: destPlayerId, homeGameId: source.homeGameId!, openedByUserId: createdByUserId }
+    )
 
     const outDesc = reason
       ? `Para ${destUser.name} · ${reason}`
@@ -1486,6 +1558,54 @@ export async function reverseComandaItem({
           },
         },
       },
+    })
+  })
+}
+
+// ─── Manual adjustment ────────────────────────────────────────────────────────
+/**
+ * Lança um ajuste livre na comanda com valor positivo (crédito) ou negativo (débito).
+ * - Cria um item MANUAL_ADJUSTMENT com o valor assinado (pode ser negativo).
+ * - Atualiza o balance da comanda com o mesmo delta.
+ * - Requer justificativa (description).
+ * - Só pode ser feito por host/co-host/staff (managerOnly).
+ */
+export async function addComandaAdjustment({
+  comandaId,
+  amount,
+  description,
+  createdByUserId,
+}: {
+  comandaId: string
+  amount: number  // positivo = crédito, negativo = débito
+  description: string
+  createdByUserId: string
+}) {
+  if (amount === 0) throw new Error('Valor do ajuste não pode ser zero')
+  if (!description || !description.trim()) throw new Error('Justificativa é obrigatória')
+  await assertComandaAccess(createdByUserId, { comandaId }, { managerOnly: true })
+
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const comanda = await tx.comanda.findUniqueOrThrow({ where: { id: comandaId } })
+    if (comanda.status === 'CLOSED') throw new Error('Comanda já está fechada')
+
+    // Positivo = MANUAL_CREDIT (aumenta saldo), negativo = MANUAL_DEBIT (reduz saldo).
+    // amount armazenado é sempre o valor absoluto — direção determinada pelo tipo.
+    // Raw SQL para contornar o enum desatualizado no Prisma client gerado
+    // (até que `npx prisma generate` seja executado localmente).
+    const itemType = amount > 0 ? 'MANUAL_CREDIT' : 'MANUAL_DEBIT'
+    const absAmount = Math.abs(amount)
+
+    await tx.$executeRaw`
+      INSERT INTO "ComandaItem"
+        (id, "comandaId", type, amount, description, "createdByUserId", "createdAt", "updatedAt")
+      VALUES
+        (gen_random_uuid(), ${comandaId}, ${itemType}::"ComandaItemType", ${absAmount}, ${description.trim()}, ${createdByUserId}, NOW(), NOW())
+    `
+
+    return tx.comanda.update({
+      where: { id: comandaId },
+      data: { balance: { increment: amount } },
     })
   })
 }

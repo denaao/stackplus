@@ -21,6 +21,10 @@ const config: Config = {
           'cyan-deep': '#005A73',
           teal:     '#0A3A50',
           muted:    '#4A7A90',
+          // Eventos module — âmbar quente
+          amber:       '#F59E0B',
+          'amber-dim': '#D97706',
+          'amber-deep':'#78350F',
         },
       },
       boxShadow: {

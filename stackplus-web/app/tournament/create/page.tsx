@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
@@ -55,6 +55,7 @@ function CreateTournamentContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const homeGameId = searchParams.get('homeGameId') ?? ''
+  const eventId = searchParams.get('eventId') ?? ''
   const { user, logout } = useAuthStore()
 
   const [saving, setSaving] = useState(false)
@@ -63,8 +64,14 @@ function CreateTournamentContent() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [breaks, setBreaks] = useState<BreakConfig[]>([{ id: '1', afterLevel: '', durationMinutes: '15' }])
 
+  const [staffRetentionDest, setStaffRetentionDest] = useState<'STAFF' | 'ADM'>('STAFF')
+
   const [form, setForm] = useState({
     name: '',
+    staffRetentionPct: '',
+    rankingRetentionPct: '',
+    timeChipBonus: '',
+    timeChipUntilLevel: '',
     buyInAmount: '',
     rebuyAmount: '',
     addonAmount: '',
@@ -91,6 +98,7 @@ function CreateTournamentContent() {
   const [doubleBuyInEnabled, setDoubleBuyInEnabled] = useState(false)
   const [doubleBuyInBonusChips, setDoubleBuyInBonusChips] = useState('')
   const [doubleRebuyEnabled, setDoubleRebuyEnabled] = useState(false)
+  const [doubleRebuyBonusChips, setDoubleRebuyBonusChips] = useState('')
 
   useEffect(() => {
     api.get('/tournaments/blind-templates').then((r) => setTemplates(r.data)).catch(() => {})
@@ -146,7 +154,49 @@ function CreateTournamentContent() {
     set('blindTemplateName', '')
   }
 
-  const removeLevel = (i: number) => setCustomLevels((ls) => ls.filter((_, idx) => idx !== i))
+  const removeLevel = (i: number) => {
+    setCustomLevels((ls) => {
+      const removed = ls[i]
+      const filtered = ls.filter((_, idx) => idx !== i)
+      // Renumera todos os níveis sequencialmente
+      const renumbered = filtered.map((l, idx) => ({ ...l, level: idx + 1 }))
+      // Ajusta breaks: remove o break do nível deletado, decrementa os posteriores
+      setBreaks((bs) => bs
+        .filter((b) => parseInt(b.afterLevel) !== removed.level)
+        .map((b) => parseInt(b.afterLevel) > removed.level
+          ? { ...b, afterLevel: String(parseInt(b.afterLevel) - 1) }
+          : b
+        )
+      )
+      return renumbered
+    })
+    setUseCustom(true)
+    set('blindTemplateName', '')
+  }
+
+  const insertLevelAfter = (i: number) => {
+    setCustomLevels((ls) => {
+      const cur = ls[i]
+      const next = ls[i + 1]
+      const newLevel: BlindLevel = next
+        ? {
+            level: cur.level + 1,
+            smallBlind: Math.round((cur.smallBlind + next.smallBlind) / 2),
+            bigBlind: Math.round((cur.bigBlind + next.bigBlind) / 2),
+            ante: Math.round((cur.ante + next.ante) / 2),
+          }
+        : { level: cur.level + 1, smallBlind: cur.bigBlind, bigBlind: cur.bigBlind * 2, ante: cur.ante }
+      const inserted = [...ls.slice(0, i + 1), newLevel, ...ls.slice(i + 1)]
+      const renumbered = inserted.map((l, idx) => ({ ...l, level: idx + 1 }))
+      setBreaks((bs) => bs.map((b) => parseInt(b.afterLevel) > cur.level
+        ? { ...b, afterLevel: String(parseInt(b.afterLevel) + 1) }
+        : b
+      ))
+      return renumbered
+    })
+    setUseCustom(true)
+    set('blindTemplateName', '')
+  }
 
   const updateLevel = (i: number, field: keyof BlindLevel, val: string) => {
     setCustomLevels((ls) => ls.map((l, idx) => idx === i ? { ...l, [field]: parseInt(val) || 0 } : l))
@@ -160,7 +210,6 @@ function CreateTournamentContent() {
     setSaving(true)
     try {
       const payload: Record<string, unknown> = {
-        homeGameId,
         name: form.name,
         buyInAmount: parseFloat(form.buyInAmount),
         rake: parseFloat(form.rake) || 0,
@@ -186,6 +235,14 @@ function CreateTournamentContent() {
       if (form.addonAfterLevel) payload.addonAfterLevel = parseInt(form.addonAfterLevel)
       if (doubleBuyInEnabled && doubleBuyInBonusChips) payload.doubleBuyInBonusChips = parseInt(doubleBuyInBonusChips)
       if (doubleRebuyEnabled) payload.doubleRebuyEnabled = true
+      if (doubleRebuyEnabled && doubleRebuyBonusChips) payload.doubleRebuyBonusChips = parseInt(doubleRebuyBonusChips)
+      if (form.staffRetentionPct) {
+        payload.staffRetentionPct = parseFloat(form.staffRetentionPct)
+        payload.staffRetentionDest = staffRetentionDest
+      }
+      if (form.rankingRetentionPct) payload.rankingRetentionPct = parseFloat(form.rankingRetentionPct)
+      if (form.timeChipBonus) payload.timeChipBonus = parseInt(form.timeChipBonus)
+      if (form.timeChipUntilLevel) payload.timeChipUntilLevel = parseInt(form.timeChipUntilLevel)
 
       if (useCustom && customLevels.length > 0) {
         payload.blindLevels = customLevels
@@ -193,7 +250,11 @@ function CreateTournamentContent() {
         payload.blindTemplateName = form.blindTemplateName
       }
 
-      const res = await api.post('/tournaments', payload)
+      const endpoint = eventId
+        ? `/events/${eventId}/tournaments`
+        : '/tournaments'
+      if (!eventId && homeGameId) payload.homeGameId = homeGameId
+      const res = await api.post(endpoint, payload)
       router.push(`/tournament/${res.data.id}`)
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao criar torneio'))
@@ -209,7 +270,7 @@ function CreateTournamentContent() {
     <div className="min-h-screen">
       <AppHeader
         title="Criar Torneio"
-        onBack={() => homeGameId ? router.push(`/homegame/${homeGameId}/tournaments`) : router.back()}
+        onBack={() => eventId ? router.push(`/event/${eventId}`) : homeGameId ? router.push(`/homegame/${homeGameId}/tournaments`) : router.back()}
         userName={user?.name}
         onLogout={() => { logout(); router.push('/') }}
       />
@@ -257,6 +318,100 @@ function CreateTournamentContent() {
             <input className={input} value={form.name} onChange={(e) => set('name', e.target.value)} required placeholder="Ex: Torneio Semanal" />
           </div>
 
+          {/* Rake + Retenções */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={label}>Rake (%)</label>
+              <input className={input} type="number" step="0.1" value={form.rake} onChange={(e) => set('rake', e.target.value)} placeholder="0" />
+            </div>
+            <div>
+              <label className={label}>Retenção Staff (%)</label>
+              <input
+                className={input}
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={form.staffRetentionPct ?? ''}
+                onChange={(e) => set('staffRetentionPct', e.target.value)}
+                placeholder="0"
+              />
+              {form.staffRetentionPct && parseFloat(form.staffRetentionPct) > 0 && (
+                <div className="flex gap-1 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setStaffRetentionDest('STAFF')}
+                    className={`flex-1 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                      staffRetentionDest === 'STAFF'
+                        ? 'bg-sx-cyan/20 border-sx-cyan text-sx-cyan'
+                        : 'bg-sx-input border-sx-border2 text-white/50 hover:text-white'
+                    }`}
+                  >
+                    Staff
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStaffRetentionDest('ADM')}
+                    className={`flex-1 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                      staffRetentionDest === 'ADM'
+                        ? 'bg-purple-500/20 border-purple-400 text-purple-300'
+                        : 'bg-sx-input border-sx-border2 text-white/50 hover:text-white'
+                    }`}
+                  >
+                    Adm
+                  </button>
+                </div>
+              )}
+              <p className="text-[11px] text-white/30 mt-1">
+                {form.staffRetentionPct && parseFloat(form.staffRetentionPct) > 0
+                  ? staffRetentionDest === 'STAFF'
+                    ? 'Vai para a caixinha do torneio'
+                    : 'Entra como lucro no fechamento'
+                  : 'Retido da premiação para staff'}
+              </p>
+            </div>
+            <div>
+              <label className={label}>Retenção Ranking (%)</label>
+              <input
+                className={input}
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={form.rankingRetentionPct ?? ''}
+                onChange={(e) => set('rankingRetentionPct', e.target.value)}
+                placeholder="0"
+              />
+              <p className="text-[11px] text-white/30 mt-1">Retido da premiação para ranking</p>
+            </div>
+          </div>
+
+          {/* Time Chip */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={label}>Time Chip (fichas)</label>
+              <input
+                className={input}
+                type="number"
+                value={form.timeChipBonus ?? ''}
+                onChange={(e) => set('timeChipBonus', e.target.value)}
+                placeholder="Opcional"
+              />
+              <p className="text-[11px] text-white/30 mt-1">Fichas bônus para quem chegar no horário</p>
+            </div>
+            <div>
+              <label className={label}>Habilitado até o nível</label>
+              <input
+                className={input}
+                type="number"
+                value={form.timeChipUntilLevel ?? ''}
+                onChange={(e) => set('timeChipUntilLevel', e.target.value)}
+                placeholder="Opcional"
+              />
+              <p className="text-[11px] text-white/30 mt-1">Nível limite para receber o bônus</p>
+            </div>
+          </div>
+
           {/* Buy-in */}
           <div>
             <p className="text-xs font-medium text-sx-muted mb-2">Buy-in</p>
@@ -270,8 +425,16 @@ function CreateTournamentContent() {
                 <input className={input} type="number" value={form.startingChips} onChange={(e) => set('startingChips', e.target.value)} required />
               </div>
               <div>
-                <label className={label}>Rake (%)</label>
-                <input className={input} type="number" step="0.1" value={form.rake} onChange={(e) => set('rake', e.target.value)} placeholder="0" />
+                <label className={label}>Duplo</label>
+                <button
+                  type="button"
+                  onClick={() => { setDoubleBuyInEnabled((v) => !v); setDoubleBuyInBonusChips('') }}
+                  style={{ background: doubleBuyInEnabled ? '#00C8E0' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
+                  className="relative inline-flex h-[42px] w-full items-center rounded-xl transition-all duration-200 px-3 gap-2"
+                >
+                  <span className={`inline-block h-5 w-5 shrink-0 rounded-full bg-white shadow-md transition-transform duration-200 ${doubleBuyInEnabled ? 'translate-x-1' : ''}`} />
+                  <span className="text-xs font-medium" style={{ color: doubleBuyInEnabled ? '#0a1628' : 'rgba(255,255,255,0.5)' }}>{doubleBuyInEnabled ? 'Habilitado' : 'Desabilitado'}</span>
+                </button>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3 mt-2">
@@ -283,46 +446,15 @@ function CreateTournamentContent() {
                 <label className={label}>Fichas da taxa</label>
                 <input className={input} type="number" value={form.buyInTaxChips} onChange={(e) => set('buyInTaxChips', e.target.value)} placeholder="Opcional" />
               </div>
-              <div />
-            </div>
-          </div>
-
-          {/* Buy-in Duplo */}
-          <div>
-            <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-white">Buy-in Duplo <span className="text-white/30 font-normal">(opcional)</span></p>
-                <p className="text-[11px] text-sx-muted mt-0.5">Jogador paga 2× o buy-in e recebe fichas bônus extras.</p>
+                {doubleBuyInEnabled && (
+                  <>
+                    <label className={label}>Fichas bônus</label>
+                    <input className={input} type="number" min="0" value={doubleBuyInBonusChips} onChange={(e) => setDoubleBuyInBonusChips(e.target.value)} placeholder="Opcional" />
+                  </>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => { setDoubleBuyInEnabled((v) => !v); setDoubleBuyInBonusChips('') }}
-                style={{ background: doubleBuyInEnabled ? '#00C8E0' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
-                className="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-all duration-200"
-              >
-                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 mt-0.5 ${doubleBuyInEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-              </button>
             </div>
-
-            {doubleBuyInEnabled && (
-              <div className="mt-3 rounded-xl p-4" style={{ background: 'rgba(0,200,224,0.05)', border: '1px solid rgba(0,200,224,0.2)' }}>
-                <label className="text-[11px] text-sx-muted uppercase tracking-widest font-medium">Fichas bônus do buy-in duplo</label>
-                <input
-                  className={`mt-1.5 w-full rounded-xl border border-sx-border2 bg-sx-input px-3 py-2.5 text-sm focus:border-sx-cyan focus:outline-none`}
-                  type="number"
-                  min="0"
-                  value={doubleBuyInBonusChips}
-                  onChange={(e) => setDoubleBuyInBonusChips(e.target.value)}
-                  placeholder="Ex: 2500"
-                />
-                <p className="mt-1.5 text-[11px] text-sx-muted">
-                  Fichas normais: <span className="text-white">{form.startingChips || '—'}</span>
-                  {doubleBuyInBonusChips && (
-                    <> · Total duplo: <span className="text-sx-cyan font-bold">{(parseInt(form.startingChips || '0') + parseInt(doubleBuyInBonusChips || '0')).toLocaleString('pt-BR')}</span></>
-                  )}
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Rebuy */}
@@ -338,8 +470,16 @@ function CreateTournamentContent() {
                 <input className={input} type="number" value={form.rebuyChips} onChange={(e) => set('rebuyChips', e.target.value)} placeholder="= buy-in" />
               </div>
               <div>
-                <label className={label}>Até nível</label>
-                <input className={input} type="number" value={form.rebuyUntilLevel} onChange={(e) => set('rebuyUntilLevel', e.target.value)} placeholder="Sem limite" />
+                <label className={label}>Duplo</label>
+                <button
+                  type="button"
+                  onClick={() => { setDoubleRebuyEnabled((v) => !v); setDoubleRebuyBonusChips('') }}
+                  style={{ background: doubleRebuyEnabled ? '#00C8E0' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
+                  className="relative inline-flex h-[42px] w-full items-center rounded-xl transition-all duration-200 px-3 gap-2"
+                >
+                  <span className={`inline-block h-5 w-5 shrink-0 rounded-full bg-white shadow-md transition-transform duration-200 ${doubleRebuyEnabled ? 'translate-x-1' : ''}`} />
+                  <span className="text-xs font-medium" style={{ color: doubleRebuyEnabled ? '#0a1628' : 'rgba(255,255,255,0.5)' }}>{doubleRebuyEnabled ? 'Habilitado' : 'Desabilitado'}</span>
+                </button>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3 mt-2">
@@ -351,26 +491,15 @@ function CreateTournamentContent() {
                 <label className={label}>Fichas da taxa</label>
                 <input className={input} type="number" value={form.rebuyTaxChips} onChange={(e) => set('rebuyTaxChips', e.target.value)} placeholder="Opcional" />
               </div>
-              <div />
-            </div>
-
-            {/* Rebuy Duplo toggle */}
-            {(form.rebuyAmount) && (
-              <div className="flex items-center justify-between mt-2">
-                <div>
-                  <p className="text-xs font-medium text-white">Rebuy Duplo <span className="text-white/30 font-normal">(opcional)</span></p>
-                  <p className="text-[11px] text-sx-muted mt-0.5">Jogador paga 2× o rebuy e 2× a taxa, recebendo 2× as fichas.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDoubleRebuyEnabled((v) => !v)}
-                  style={{ background: doubleRebuyEnabled ? '#00C8E0' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
-                  className="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-all duration-200"
-                >
-                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 mt-0.5 ${doubleRebuyEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
+              <div>
+                {doubleRebuyEnabled && (
+                  <>
+                    <label className={label}>Fichas bônus</label>
+                    <input className={input} type="number" min="0" value={doubleRebuyBonusChips} onChange={(e) => setDoubleRebuyBonusChips(e.target.value)} placeholder="Opcional" />
+                  </>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Add-on */}
@@ -410,71 +539,11 @@ function CreateTournamentContent() {
           </div>
         </section>
 
-        {/* Regras */}
+        {/* Blinds + Timer — seção unificada */}
         <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-          <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Regras</h2>
-          <div>
-            <label className={label}>Late registration até nível</label>
-            <input className={input} type="number" value={form.lateRegistrationLevel} onChange={(e) => set('lateRegistrationLevel', e.target.value)} placeholder="Sem limite" />
-          </div>
-        </section>
+          <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Estrutura de Blinds</h2>
 
-        {/* Timer */}
-        <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-          <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Tempo dos Níveis</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={label}>Tempo de blinds antes do late register (min) *</label>
-              <input className={input} type="number" value={form.minutesPerLevelPreLateReg} onChange={(e) => set('minutesPerLevelPreLateReg', e.target.value)} required />
-            </div>
-            <div>
-              <label className={label}>Tempo de blinds após o late register (min)</label>
-              <input className={input} type="number" value={form.minutesPerLevelPostLateReg} onChange={(e) => set('minutesPerLevelPostLateReg', e.target.value)} placeholder="Igual ao anterior" />
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-sx-muted">Intervalos</p>
-              <button
-                type="button"
-                onClick={() => setBreaks((bs) => [...bs, { id: Date.now().toString(), afterLevel: '', durationMinutes: '15' }])}
-                className="text-xs text-sx-cyan hover:text-white"
-              >
-                + Intervalo
-              </button>
-            </div>
-            <div className="space-y-2">
-              {breaks.map((b, i) => (
-                <div key={b.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                  <div>
-                    <label className={label}>Após nível</label>
-                    <input className={input} type="number" value={b.afterLevel} onChange={(e) => setBreaks((bs) => bs.map((x, idx) => idx === i ? { ...x, afterLevel: e.target.value } : x))} placeholder="Nível" />
-                  </div>
-                  <div>
-                    <label className={label}>Duração (min)</label>
-                    <input className={input} type="number" value={b.durationMinutes} onChange={(e) => setBreaks((bs) => bs.map((x, idx) => idx === i ? { ...x, durationMinutes: e.target.value } : x))} placeholder="15" />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setBreaks((bs) => bs.filter((_, idx) => idx !== i))}
-                    className="pb-2 text-white/30 hover:text-red-400"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Blinds */}
-        <section className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-sx-cyan">Estrutura de Blinds</h2>
-            <button type="button" onClick={addLevel} className="text-xs text-sx-cyan hover:text-white">+ Nível</button>
-          </div>
-
+          {/* Template + tempos globais */}
           <div>
             <label className={label}>Template</label>
             <select className={input} value={form.blindTemplateName} onChange={(e) => handleTemplateSelect(e.target.value)}>
@@ -482,7 +551,22 @@ function CreateTournamentContent() {
               {templates.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
             </select>
           </div>
+          <div className="grid grid-cols-3 gap-3 items-end">
+            <div>
+              <label className={label}>Tempo de blinds *</label>
+              <input className={input} type="number" value={form.minutesPerLevelPreLateReg} onChange={(e) => set('minutesPerLevelPreLateReg', e.target.value)} required />
+            </div>
+            <div>
+              <label className={label}>Late reg até nível</label>
+              <input className={input} type="number" value={form.lateRegistrationLevel} onChange={(e) => set('lateRegistrationLevel', e.target.value)} placeholder="—" />
+            </div>
+            <div>
+              <label className={label}>Tempo de blinds após late</label>
+              <input className={input} type="number" value={form.minutesPerLevelPostLateReg} onChange={(e) => set('minutesPerLevelPostLateReg', e.target.value)} placeholder="—" />
+            </div>
+          </div>
 
+          {/* Tabela unificada: níveis + intervalos inline */}
           {customLevels.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -492,31 +576,92 @@ function CreateTournamentContent() {
                     <th className="text-right py-1 px-2">SB</th>
                     <th className="text-right py-1 px-2">BB</th>
                     <th className="text-right py-1 px-2">Ante</th>
-                    <th className="py-1 pl-2"></th>
+                    <th className="text-right py-1 px-2">Tempo</th>
+                    <th className="text-left py-1 px-2">Legenda</th>
+                    <th className="text-right py-1 pl-2">Controles</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {customLevels.map((l, i) => (
-                    <tr key={i} className="border-b border-sx-border/50">
-                      <td className="py-1 pr-2 text-sx-muted">{l.level}</td>
-                      <td className="py-1 px-2">
-                        <input type="number" className="w-20 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.smallBlind} onChange={(e) => updateLevel(i, 'smallBlind', e.target.value)} />
-                      </td>
-                      <td className="py-1 px-2">
-                        <input type="number" className="w-20 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.bigBlind} onChange={(e) => updateLevel(i, 'bigBlind', e.target.value)} />
-                      </td>
-                      <td className="py-1 px-2">
-                        <input type="number" className="w-16 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.ante} onChange={(e) => updateLevel(i, 'ante', e.target.value)} />
-                      </td>
-                      <td className="py-1 pl-2">
-                        <button type="button" onClick={() => removeLevel(i)} className="text-white/30 hover:text-red-400">✕</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {customLevels.map((l, i) => {
+                    const lateReg = parseInt(form.lateRegistrationLevel || '0')
+                    const post = form.minutesPerLevelPostLateReg
+                    const breakCutoff = breaks.filter(b => b.afterLevel).map(b => parseInt(b.afterLevel)).sort((a, b) => a - b)[0] ?? 0
+                    const cutoff = lateReg > 0 ? lateReg : breakCutoff
+                    const tempo = cutoff > 0 && l.level > cutoff && post ? post : (form.minutesPerLevelPreLateReg || '15')
+                    const brk = breaks.find((b) => parseInt(b.afterLevel) === l.level)
+                    return (
+                      <React.Fragment key={i}>
+                        <tr className="border-b border-sx-border/50">
+                          <td className="py-1 pr-2 text-sx-muted">{l.level}</td>
+                          <td className="py-1 px-2">
+                            <input type="number" className="w-20 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.smallBlind} onChange={(e) => updateLevel(i, 'smallBlind', e.target.value)} />
+                          </td>
+                          <td className="py-1 px-2">
+                            <input type="number" className="w-20 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.bigBlind} onChange={(e) => updateLevel(i, 'bigBlind', e.target.value)} />
+                          </td>
+                          <td className="py-1 px-2">
+                            <input type="number" className="w-16 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={l.ante} onChange={(e) => updateLevel(i, 'ante', e.target.value)} />
+                          </td>
+                          <td className="py-1 px-2 text-right text-sx-muted whitespace-nowrap">{tempo} min</td>
+                          <td className="py-1 px-2">
+                            <div className="flex items-center gap-1">
+                              {form.lateRegistrationLevel && l.level <= parseInt(form.lateRegistrationLevel) && (
+                                <span title="Late Registration aberto neste nível" className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(255,184,0,0.15)', color: '#FFB800', border: '1px solid rgba(255,184,0,0.3)' }}>LR</span>
+                              )}
+                              {form.timeChipBonus && (form.timeChipUntilLevel ? l.level <= parseInt(form.timeChipUntilLevel) : true) && (
+                                <span title="Time Chip ativo neste nível" className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(0,200,224,0.15)', color: '#00C8E0', border: '1px solid rgba(0,200,224,0.3)' }}>TC</span>
+                              )}
+                              {form.addonAfterLevel && l.level === parseInt(form.addonAfterLevel) && (
+                                <span title="Add-on disponível após este nível" className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.3)' }}>AD</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-1 pl-2">
+                            <div className="flex items-center gap-1 justify-end">
+                              <button type="button" title="Inserir nível após este" onClick={() => insertLevelAfter(i)} className="text-white/25 hover:text-sx-cyan text-[11px]">+</button>
+                              {!brk && (
+                                <button type="button" title="Adicionar intervalo após este nível" onClick={() => setBreaks((bs) => [...bs, { id: Date.now().toString(), afterLevel: String(l.level), durationMinutes: '15' }])} className="text-white/25 hover:text-sx-amber text-[11px]">⏱</button>
+                              )}
+                              <button type="button" onClick={() => removeLevel(i)} className="text-white/30 hover:text-red-400">✕</button>
+                            </div>
+                          </td>
+                        </tr>
+                        {brk && (
+                          <tr className="border-b border-sx-border/30" style={{ background: 'rgba(255,184,0,0.04)' }}>
+                            <td colSpan={5} className="py-1.5 pr-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold tracking-widest px-2 py-0.5 rounded" style={{ background: 'rgba(255,184,0,0.12)', color: '#FFB800', border: '1px solid rgba(255,184,0,0.25)' }}>INTERVALO</span>
+                                <div className="flex items-center gap-1">
+                                  <input type="number" className="w-16 bg-sx-input border border-sx-border2 rounded px-2 py-1 text-right focus:outline-none focus:border-sx-cyan" value={brk.durationMinutes} onChange={(e) => setBreaks((bs) => bs.map((b) => b.id === brk.id ? { ...b, durationMinutes: e.target.value } : b))} />
+                                  <span className="text-sx-muted text-xs">min</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-1.5 px-2">
+                              <div className="flex items-center gap-1">
+                                {form.lateRegistrationLevel && l.level <= parseInt(form.lateRegistrationLevel) && (
+                                  <span title="Late Registration ainda aberto neste intervalo" className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(255,184,0,0.15)', color: '#FFB800', border: '1px solid rgba(255,184,0,0.3)' }}>LR</span>
+                                )}
+                                {form.addonAfterLevel && l.level === parseInt(form.addonAfterLevel) && (
+                                  <span title="Add-on disponível neste intervalo" className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.3)' }}>AD</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-1.5 pl-2">
+                              <div className="flex justify-end">
+                                <button type="button" onClick={() => setBreaks((bs) => bs.filter((b) => b.id !== brk.id))} className="text-white/30 hover:text-red-400">✕</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+          <button type="button" onClick={addLevel} className="text-xs text-sx-cyan hover:text-white w-full py-2 rounded-lg text-center" style={{ border: '1px dashed rgba(0,200,224,0.3)' }}>+ Nível</button>
         </section>
 
         <button

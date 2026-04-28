@@ -6,6 +6,7 @@ import api from '@/services/api'
 import AppHeader from '@/components/AppHeader'
 import AppLoading from '@/components/AppLoading'
 import HomeGameTabs from '@/components/HomeGameTabs'
+import EventTabs from '@/components/EventTabs'
 import { useAuthStore } from '@/store/useStore'
 import { getErrorMessage } from '@/lib/errors'
 import { useConfirm } from '@/components/ConfirmDialog'
@@ -28,7 +29,8 @@ interface Comanda {
   status: 'OPEN' | 'CLOSED'
   mode: 'PREPAID' | 'POSTPAID'
   balance: string
-  homeGameId: string
+  homeGameId: string | null
+  eventId: string | null
   openedAt: string
   closedAt: string | null
   note: string | null
@@ -58,6 +60,8 @@ const typeLabel: Record<string, string> = {
   CARRY_OUT: 'Saldo transportado (débito)',
   STAFF_CAIXINHA: 'Caixinha (staff)',
   STAFF_RAKEBACK: 'Rakeback (staff)',
+  MANUAL_CREDIT: 'Ajuste manual (crédito)',
+  MANUAL_DEBIT: 'Ajuste manual (débito)',
 }
 
 const typeIsCredit = (t: string) => [
@@ -65,12 +69,14 @@ const typeIsCredit = (t: string) => [
   'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'PAYMENT_CASH', 'PAYMENT_CARD',
   'TRANSFER_IN', 'CARRY_IN',
   'STAFF_CAIXINHA', 'STAFF_RAKEBACK',
+  'MANUAL_CREDIT',
 ].includes(t)
 
 const typeIsDebit = (t: string) => [
   'CASH_BUYIN', 'CASH_REBUY', 'CASH_ADDON',
   'TOURNAMENT_BUYIN', 'TOURNAMENT_REBUY', 'TOURNAMENT_ADDON',
   'TRANSFER_OUT', 'CARRY_OUT',
+  'MANUAL_DEBIT',
 ].includes(t)
 
 const paymentStatusLabel: Record<string, string> = {
@@ -148,6 +154,11 @@ export default function ComandaDetailPage() {
   } | null>(null)
   const [pixCopied, setPixCopied] = useState(false)
   const [pixPaidConfirmed, setPixPaidConfirmed] = useState(false)
+  // Ajuste livre (lançamento manual positivo ou negativo)
+  const [showAdjustment, setShowAdjustment] = useState(false)
+  const [adjustmentAmount, setAdjustmentAmount] = useState('')
+  const [adjustmentDesc, setAdjustmentDesc] = useState('')
+  const [adjusting, setAdjusting] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   // Tick a cada segundo para atualizar countdowns de PIX pendente
@@ -268,6 +279,26 @@ export default function ComandaDetailPage() {
     }
   }
 
+  const handleAdjustment = async () => {
+    if (!adjustmentAmount || !adjustmentDesc.trim()) return
+    setAdjusting(true)
+    setError(null)
+    try {
+      await api.post(`/comanda/${comandaId}/adjustment`, {
+        amount: parseFloat(adjustmentAmount),
+        description: adjustmentDesc.trim(),
+      })
+      setShowAdjustment(false)
+      setAdjustmentAmount('')
+      setAdjustmentDesc('')
+      load()
+    } catch (e) {
+      setError(getErrorMessage(e, 'Erro ao registrar ajuste'))
+    } finally {
+      setAdjusting(false)
+    }
+  }
+
   const handleReverse = async (itemId: string) => {
     const ok = await confirm('Deseja estornar este lançamento? A transação original ficará visível com marcação de estornada.', {
       title: 'Estornar lançamento',
@@ -358,21 +389,32 @@ export default function ComandaDetailPage() {
     setTransferDestId('')
     setTransferReason('')
     try {
-      const { data: hg } = await api.get(`/home-games/${comanda.homeGameId}`)
-
       const candidates: { id: string; name: string }[] = []
 
-      // Host (não está em members)
-      if (hg.host && hg.host.id !== comanda.player.id) {
-        candidates.push({ id: hg.host.id, name: hg.host.name })
-      }
+      if (comanda.eventId) {
+        // Contexto de evento: lista todos os jogadores com comanda no evento
+        const { data: eventComandas } = await api.get(`/comanda?eventId=${comanda.eventId}`)
+        for (const c of eventComandas as { player: { id: string; name: string } }[]) {
+          if (c.player.id !== comanda.player.id) {
+            candidates.push({ id: c.player.id, name: c.player.name })
+          }
+        }
+      } else {
+        // Contexto de home game: busca membros do home game
+        const { data: hg } = await api.get(`/home-games/${comanda.homeGameId}`)
 
-      // Membros
-      for (const m of hg.members ?? []) {
-        const id = m.user?.id ?? m.userId
-        const name = m.user?.name ?? ''
-        if (id && id !== comanda.player.id) {
-          candidates.push({ id, name })
+        // Host (não está em members)
+        if (hg.host && hg.host.id !== comanda.player.id) {
+          candidates.push({ id: hg.host.id, name: hg.host.name })
+        }
+
+        // Membros
+        for (const m of hg.members ?? []) {
+          const id = m.user?.id ?? m.userId
+          const name = m.user?.name ?? ''
+          if (id && id !== comanda.player.id) {
+            candidates.push({ id, name })
+          }
         }
       }
 
@@ -431,7 +473,10 @@ export default function ComandaDetailPage() {
         userName={user?.name}
         onLogout={() => { logout(); router.push('/') }}
       />
-      <HomeGameTabs homeGameId={comanda.homeGameId} active="COMANDAS" />
+      {comanda.eventId
+        ? <EventTabs eventId={comanda.eventId} active="COMANDAS" canManage={true} />
+        : <HomeGameTabs homeGameId={comanda.homeGameId!} active="COMANDAS" />
+      }
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-4">
 
@@ -518,20 +563,28 @@ export default function ComandaDetailPage() {
             </div>
           )}
 
-          {/* Pagamento manual (dinheiro/cartão): permitido com comanda aberta ou
-              com comanda fechada enquanto houver saldo devedor. */}
+          {/* Pagamento manual + lançamento livre — lado a lado quando comanda aberta */}
           {(comanda.status === 'OPEN' || balance < 0) && (
-            <div className="mt-4 pt-4 border-t border-sx-border">
+            <div className="mt-4 pt-4 border-t border-sx-border flex gap-2">
               <button
                 type="button"
                 onClick={() => {
                   if (balance < 0) setPaymentAmount(Math.abs(balance).toFixed(2))
                   setShowAddPayment(true)
                 }}
-                className="w-full rounded-lg border border-sx-border2 bg-sx-input hover:bg-sx-card2 px-3 py-2.5 text-sm font-bold text-zinc-200"
+                className="flex-1 rounded-lg border border-sx-border2 bg-sx-input hover:bg-sx-card2 px-3 py-2.5 text-sm font-bold text-zinc-200"
               >
-                + Registrar pagamento manual
+                + Pagamento manual
               </button>
+              {comanda.status === 'OPEN' && (
+                <button
+                  type="button"
+                  onClick={() => setShowAdjustment(true)}
+                  className="flex-1 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2.5 text-sm font-bold text-amber-300"
+                >
+                  ± Lançamento livre
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -594,7 +647,12 @@ export default function ComandaDetailPage() {
                               )}
                               {item.description === 'Saldo transportado da comanda anterior' ? (
                                 <button
-                                  onClick={() => router.push(`/comanda?homeGameId=${comanda.homeGameId}&playerId=${comanda.player.id}&status=CLOSED`)}
+                                  onClick={() => {
+                                    const contextParam = comanda.eventId
+                                      ? `eventId=${comanda.eventId}`
+                                      : `homeGameId=${comanda.homeGameId}`
+                                    router.push(`/comanda?${contextParam}&playerId=${comanda.player.id}&status=CLOSED`)
+                                  }}
                                   className="text-sx-cyan hover:underline"
                                 >
                                   Saldo transportado · ver histórico ↗
@@ -847,6 +905,57 @@ export default function ComandaDetailPage() {
               style={{ background: 'rgba(168,85,247,0.8)', color: '#fff' }}
             >
               {transferring ? 'Transferindo...' : 'Confirmar transferência'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal lançamento livre */}
+      {showAdjustment && (
+        <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 p-4" style={{ backdropFilter: 'blur(4px)' }}>
+          <div className="bg-sx-card border border-sx-border rounded-2xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Lançamento livre</h3>
+              <button onClick={() => { setShowAdjustment(false); setAdjustmentAmount(''); setAdjustmentDesc('') }} className="text-white/40 hover:text-white">✕</button>
+            </div>
+            <p className="text-xs text-white/40">
+              Use valores <span className="text-sx-cyan font-semibold">positivos</span> para crédito e <span className="text-red-400 font-semibold">negativos</span> para débito. Ex: <span className="text-sx-cyan">50</span> ou <span className="text-red-400">-30</span>
+            </p>
+            <div>
+              <label className="block text-xs text-sx-muted mb-1">Valor (R$)</label>
+              <input
+                className={input}
+                type="number"
+                step="0.01"
+                value={adjustmentAmount}
+                onChange={e => setAdjustmentAmount(e.target.value)}
+                placeholder="Ex: 50 ou -30"
+                autoFocus
+              />
+              {adjustmentAmount && parseFloat(adjustmentAmount) !== 0 && (
+                <div className={`text-xs mt-1 font-semibold ${parseFloat(adjustmentAmount) > 0 ? 'text-sx-cyan' : 'text-red-400'}`}>
+                  {parseFloat(adjustmentAmount) > 0 ? '↑ Crédito (aumenta saldo)' : '↓ Débito (reduz saldo)'}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs text-sx-muted mb-1">Justificativa <span className="text-red-400">*</span></label>
+              <input
+                className={input}
+                value={adjustmentDesc}
+                onChange={e => setAdjustmentDesc(e.target.value)}
+                placeholder="Ex: correção de caixa, bônus, desconto..."
+                maxLength={300}
+              />
+            </div>
+            {error && <div className="text-red-400 text-sm">{error}</div>}
+            <button
+              onClick={handleAdjustment}
+              disabled={adjusting || !adjustmentAmount || parseFloat(adjustmentAmount) === 0 || !adjustmentDesc.trim()}
+              className="w-full py-3 rounded-xl font-semibold text-sm disabled:opacity-50"
+              style={{ background: 'rgba(245,158,11,0.8)', color: '#050D15' }}
+            >
+              {adjusting ? 'Registrando...' : 'Confirmar lançamento'}
             </button>
           </div>
         </div>

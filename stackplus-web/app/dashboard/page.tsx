@@ -8,6 +8,33 @@ import AppHeader from '@/components/AppHeader'
 import { getErrorMessage } from '@/lib/errors'
 import { useConfirm, useAlert } from '@/components/ConfirmDialog'
 
+
+type EventStatus = 'DRAFT' | 'OPEN' | 'IN_PROGRESS' | 'FINISHED' | 'CANCELED'
+
+interface MyEvent {
+  id: string
+  name: string
+  status: EventStatus
+  startDate: string
+  endDate: string
+  isPublic: boolean
+  venue?: string
+  myRole?: string
+  _count: { sessions: number; comandas: number }
+}
+
+const EVENT_STATUS_LABEL: Record<EventStatus, string> = {
+  DRAFT: 'Rascunho', OPEN: 'Inscr. abertas', IN_PROGRESS: 'Em andamento',
+  FINISHED: 'Finalizado', CANCELED: 'Cancelado',
+}
+const EVENT_STATUS_COLOR: Record<EventStatus, string> = {
+  DRAFT: 'text-sx-muted bg-white/5',
+  OPEN: 'text-blue-300 bg-blue-400/10',
+  IN_PROGRESS: 'text-sx-amber bg-sx-amber/10',
+  FINISHED: 'text-sx-muted bg-white/5',
+  CANCELED: 'text-red-400 bg-red-400/10',
+}
+
 interface HomeGame {
   id: string
   name: string
@@ -29,6 +56,9 @@ export default function DashboardPage() {
   const [asCoHost, setAsCoHost] = useState<HomeGame[]>([])
   const [asPlayer, setAsPlayer] = useState<HomeGame[]>([])
   const [loading, setLoading] = useState(true)
+  const [asEventHost, setAsEventHost] = useState<MyEvent[]>([])
+  const [asEventStaff, setAsEventStaff] = useState<MyEvent[]>([])
+  const [eventsLoading, setEventsLoading] = useState(true)
   const [joinCode, setJoinCode] = useState('')
   const [joinModalOpen, setJoinModalOpen] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
@@ -54,6 +84,10 @@ export default function DashboardPage() {
       setAsCoHost(data.asCoHost || [])
       setAsPlayer(data.asPlayer || [])
     }).finally(() => setLoading(false))
+    api.get('/events/mine').then(({ data }) => {
+      setAsEventHost(data.asHost || [])
+      setAsEventStaff(data.asStaff || [])
+    }).catch(() => {}).finally(() => setEventsLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -236,15 +270,12 @@ export default function DashboardPage() {
                           <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl"
                             style={{ background: style.accent }} />
 
-                          <div className="pl-5 pr-5 pt-5 pb-4">
-                            <div className="flex items-start justify-between mb-4">
-                              <div>
+                          <div className="pl-5 pr-5 pt-4 pb-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <h3 className="font-black text-lg text-white group-hover:text-sx-cyan transition-colors">{game.name}</h3>
-                                <span className={`inline-block mt-1 text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border ${style.badge}`}>
-                                  {gameTypeLabel[gameType]}
-                                </span>
                               </div>
-                              <div className="relative flex items-center gap-2">
+                              <div className="relative flex items-center gap-2 shrink-0">
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs font-mono font-bold px-2 py-1 rounded"
                                     style={{ background: 'rgba(0,200,224,0.1)', color: '#00C8E0', border: '1px solid rgba(0,200,224,0.2)' }}>
@@ -290,13 +321,11 @@ export default function DashboardPage() {
                               </div>
                             </div>
 
-                            <p className="text-sx-muted text-sm mb-1">📍 {game.address}</p>
-                            <p className="text-sx-muted text-sm mb-3">🕐 {game.dayOfWeek} às {game.startTime}</p>
-
-                            <div className="flex gap-4 text-xs text-sx-muted">
+                            <div className="flex flex-wrap gap-4 text-xs text-sx-muted">
+                              <span>📍 {game.address}</span>
+                              <span>🕐 {game.dayOfWeek} às {game.startTime}</span>
                               <span>👥 {game._count.members} membros</span>
                               <span>🎮 {game._count.sessions} sessões</span>
-                              <span>{gameType === 'CASH_GAME' ? `💵 R$ ${game.chipValue}/ficha` : '🏆 Estrutura de torneio'}</span>
                             </div>
                           </div>
                         </div>
@@ -306,6 +335,67 @@ export default function DashboardPage() {
                 </section>
               )
             })}
+          </div>
+        )}
+      </main>
+
+
+      {/* ── Events section ── */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pb-8">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Eventos</h2>
+            <p className="text-sx-muted text-sm mt-1">Eventos multi-dia que você hospeda ou integra como staff</p>
+          </div>
+          <button
+            onClick={() => router.push('/event/create')}
+            className="btn-event-primary text-sx-bg font-bold px-5 py-2.5 rounded-lg text-sm"
+          >
+            + Criar evento
+          </button>
+        </div>
+
+        {eventsLoading ? (
+          <div className="bg-sx-card border border-sx-border rounded-xl p-6 animate-pulse h-28" />
+        ) : asEventHost.length === 0 && asEventStaff.length === 0 ? (
+          <div className="text-center py-12 rounded-2xl"
+            style={{ background: 'rgba(245,158,11,0.03)', border: '1px dashed rgba(245,158,11,0.15)' }}>
+            <p className="text-4xl mb-3 opacity-20">🃏</p>
+            <p className="text-sm font-medium text-white">Você não tem eventos ativos</p>
+            <p className="text-xs mt-1 text-sx-muted">Crie um evento para organizar torneios e cash games ao longo de vários dias</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {asEventHost.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border bg-sx-amber/15 text-sx-amber border-sx-amber/40">
+                    HOST
+                  </span>
+                  <h3 className="text-sm uppercase tracking-wide text-sx-muted">Meus eventos</h3>
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                  {asEventHost.map((ev) => (
+                    <EventCard key={ev.id} event={ev} onClick={() => router.push(`/event/${ev.id}`)} />
+                  ))}
+                </div>
+              </section>
+            )}
+            {asEventStaff.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border bg-white/5 text-sx-muted border-white/10">
+                    STAFF
+                  </span>
+                  <h3 className="text-sm uppercase tracking-wide text-sx-muted">Como staff</h3>
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                  {asEventStaff.map((ev) => (
+                    <EventCard key={ev.id} event={ev} onClick={() => router.push(`/event/${ev.id}`)} />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </main>
@@ -417,6 +507,42 @@ export default function DashboardPage() {
         </div>
       )}
 
+    </div>
+  )
+}
+
+
+// ─── EventCard ────────────────────────────────────────────────────────────────
+
+function EventCard({ event, onClick }: { event: MyEvent; onClick: () => void }) {
+  const status = event.status as EventStatus
+  return (
+    <div
+      onClick={onClick}
+      className="relative rounded-2xl overflow-hidden transition-all group cursor-pointer"
+      style={{
+        background: 'linear-gradient(135deg, #1C1000 0%, #0F0800 55%, #050300 100%)',
+        border: '1px solid rgba(245,158,11,0.18)',
+        boxShadow: '0 4px 20px rgba(245,158,11,0.08)',
+      }}
+    >
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl"
+        style={{ background: 'linear-gradient(180deg, #F59E0B 0%, rgba(245,158,11,0.2) 100%)' }} />
+      <div className="pl-5 pr-5 pt-4 pb-4">
+        <div className="flex items-start justify-between mb-2">
+          <h3 className="font-black text-lg text-white group-hover:text-sx-amber transition-colors">{event.name}</h3>
+          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${EVENT_STATUS_COLOR[status]}`}>
+            {EVENT_STATUS_LABEL[status]}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-4 text-xs text-sx-muted">
+          <span>📅 {new Date(event.startDate).toLocaleDateString('pt-BR')} → {new Date(event.endDate).toLocaleDateString('pt-BR')}</span>
+          {event.venue && <span>📍 {event.venue}</span>}
+          <span>👥 {event._count.comandas} jogadores</span>
+          <span>🎮 {event._count.sessions} sessões</span>
+          {event.myRole && <span className="text-sx-amber">{event.myRole}</span>}
+        </div>
+      </div>
     </div>
   )
 }

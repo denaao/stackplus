@@ -2,6 +2,7 @@ import { prisma } from '../../lib/prisma'
 import { generateSessionFinancialReport } from '../banking/annapay.service'
 import { FinancialModule, ComandaItemType } from '@prisma/client'
 import { isHomeGameHost } from '../../lib/homegame-auth'
+import { isEventStaff } from '../../lib/event-auth'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
 import { logger } from '../../lib/logger'
 
@@ -778,4 +779,75 @@ export async function deleteSession(sessionId: string, hostId: string) {
     await tx.sessionParticipant.deleteMany({ where: { sessionId } })
     await tx.session.delete({ where: { id: sessionId } })
   })
+}
+
+// ─── Event sessions ───────────────────────────────────────────────────────────
+
+export async function createEventSession(eventId: string, requesterId: string, input: CreateSessionInput = {}) {
+  if (!(await isEventStaff(requesterId, eventId))) {
+    throw new Error('Apenas staff do evento pode criar sessoes')
+  }
+
+  const event = await prisma.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { financialModule: true, chipValue: true },
+  })
+
+  const finalGameType = input.gameType || 'CASH_GAME'
+  const finalFinancialModule = input.financialModule || event.financialModule || FinancialModule.POSTPAID
+
+  return prisma.session.create({
+    data: {
+      eventId,
+      name: input.name ?? null,
+      status: 'WAITING',
+      pokerVariant: input.pokerVariant ?? null,
+      gameType: finalGameType,
+      financialModule: finalFinancialModule,
+      jackpotEnabled: input.jackpotEnabled ?? false,
+      jackpotAccumulated: null,
+      chipValue: finalGameType === 'CASH_GAME'
+        ? (input.chipValue ?? Number(event.chipValue))
+        : null,
+      smallBlind: finalGameType === 'CASH_GAME' ? (input.smallBlind ?? null) : null,
+      bigBlind: finalGameType === 'CASH_GAME' ? (input.bigBlind ?? null) : null,
+      minimumBuyIn: finalGameType === 'CASH_GAME' ? (input.minimumBuyIn ?? null) : null,
+      minimumStayMinutes: finalGameType === 'CASH_GAME' ? (input.minimumStayMinutes ?? null) : null,
+      foodFee: finalGameType === 'CASH_GAME' ? (input.foodFee ?? null) : null,
+      buyInAmount: finalGameType === 'TOURNAMENT' ? (input.buyInAmount ?? null) : null,
+      rebuyAmount: finalGameType === 'TOURNAMENT' ? (input.rebuyAmount ?? null) : null,
+      addOnAmount: finalGameType === 'TOURNAMENT' ? (input.addOnAmount ?? null) : null,
+      blindsMinutesBeforeBreak: finalGameType === 'TOURNAMENT' ? (input.blindsMinutesBeforeBreak ?? null) : null,
+      blindsMinutesAfterBreak: finalGameType === 'TOURNAMENT' ? (input.blindsMinutesAfterBreak ?? null) : null,
+      levelsUntilBreak: finalGameType === 'TOURNAMENT' ? (input.levelsUntilBreak ?? null) : null,
+    },
+  })
+}
+
+export async function getSessionsByEvent(eventId: string) {
+  return prisma.session.findMany({
+    where: { eventId },
+    include: { _count: { select: { playerStates: true, transactions: true } } },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+export async function getSessionsByEventForUser(eventId: string, userId: string) {
+  // Evento publico: qualquer usuario autenticado pode listar sessoes.
+  const event = await prisma.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { isPublic: true },
+  })
+  if (!event.isPublic) {
+    const ok = await isEventStaff(userId, eventId)
+    if (!ok) {
+      // Verifica se tem comanda no evento
+      const hasComanda = await prisma.comanda.findFirst({
+        where: { eventId, playerId: userId },
+        select: { id: true },
+      })
+      if (!hasComanda) throw new Error('Acesso negado')
+    }
+  }
+  return getSessionsByEvent(eventId)
 }

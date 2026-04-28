@@ -54,10 +54,12 @@ interface SessionStore {
 }
 
 interface SangeurContext {
-  homeGameId: string
-  homeGameName: string
-  username: string
-  mustChangePassword: boolean
+  homeGameId?: string
+  homeGameName?: string
+  eventId?: string
+  eventName?: string
+  username?: string
+  mustChangePassword?: boolean
 }
 
 interface SangeurAuthStore {

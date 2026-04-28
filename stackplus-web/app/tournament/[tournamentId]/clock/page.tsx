@@ -7,7 +7,7 @@ import Image from 'next/image'
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
 
 interface BlindLevel { level: number; smallBlind: number; bigBlind: number; ante: number }
-interface TournamentPlayer { status: string; rebuysCount: number; hasAddon: boolean; player?: { name: string } }
+interface TournamentPlayer { status: string; rebuysCount: number; hasAddon: boolean; timeChipAwarded: boolean; player?: { name: string } }
 interface Tournament {
   id: string; name: string; status: string
   startingChips: number; currentLevel: number
@@ -18,6 +18,8 @@ interface Tournament {
   lateRegistrationLevel: number | null; breaks: string | null
   dealPayouts: string | null
   payoutStructure: string | null
+  timeChipBonus: number | null
+  totalChipsInPlay: number | undefined
   blindLevels: BlindLevel[]; players: TournamentPlayer[]
 }
 
@@ -145,12 +147,14 @@ function calcPosition(t: Tournament, breaks: { afterLevel: number; durationMinut
     }
   }
 
-  const levelMins = t.minutesPerLevelPostLateReg || t.minutesPerLevelPreLateReg || 15
+  const levelMins = (t.lateRegistrationLevel != null && t.currentLevel > t.lateRegistrationLevel && t.minutesPerLevelPostLateReg)
+    ? t.minutesPerLevelPostLateReg
+    : (t.minutesPerLevelPreLateReg || 15)
   const totalSecs = levelMins * 60
   const elapsed = elapsedFrom(t.levelStartedAt, effectiveNow)
 
-  // Próximo intervalo: quantos segundos faltam para o break depois do nível atual
-  const nextBreakEntry = breaks.find(b => b.afterLevel >= t.currentLevel)
+  // Próximo intervalo: break mais próximo após o nível atual (sort garante o mais imediato)
+  const nextBreakEntry = [...breaks].sort((a, b) => a.afterLevel - b.afterLevel).find(b => b.afterLevel >= t.currentLevel)
   let nextBreakIn: number | null = null
   if (nextBreakEntry) {
     const levelsAway = nextBreakEntry.afterLevel - t.currentLevel
@@ -251,13 +255,15 @@ export default function TournamentClockPage() {
   const breaks = parseBreaks(t.breaks)
   const pos = calcPosition(t, breaks, now)
   const { level, remaining, overTime, isPaused, isOnBreak, breakDurationMins, currentBlind, nextBlind, nextBreakIn } = pos
-  const levelMins = t.minutesPerLevelPostLateReg || t.minutesPerLevelPreLateReg || 15
+  const levelMins = (t.lateRegistrationLevel != null && level > t.lateRegistrationLevel && t.minutesPerLevelPostLateReg)
+    ? t.minutesPerLevelPostLateReg
+    : (t.minutesPerLevelPreLateReg || 15)
 
   const active  = t.players.filter(p => ['REGISTERED', 'ACTIVE', 'WINNER'].includes(p.status)).length
   const total   = t.players.length
   const rebuys  = t.players.reduce((s, p) => s + p.rebuysCount, 0)
   const addons  = t.players.filter(p => p.hasAddon).length
-  const totalChips = (total + rebuys + addons) * t.startingChips
+  const totalChips = t.totalChipsInPlay ?? 0
   const avgStack   = active > 0 ? Math.floor(totalChips / active) : 0
   const prize      = parseFloat(t.prizePool)
 
@@ -426,37 +432,45 @@ export default function TournamentClockPage() {
           </div>
 
           {/* Próximo nível + Próximo intervalo */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flexShrink: 0 }}>
-            {[
-              {
-                label: 'Próximo nível',
-                value: nextBlind
-                  ? `${fmt(nextBlind.smallBlind)} / ${fmt(nextBlind.bigBlind)}${nextBlind.ante > 0 ? ` / ${fmt(nextBlind.ante)}` : ''}`
-                  : 'Último nível',
-                hi: false,
-              },
-              {
-                label: isOnBreak ? 'Intervalo restante' : 'Próximo intervalo',
-                value: isOnBreak ? timerStr(remaining) : nextBreakIn !== null ? timerStr(nextBreakIn) : '—',
-                hi: isOnBreak,
-              },
-            ].map(({ label, value, hi }) => (
-              <div key={label} style={{
-                ...cardStyle({ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px' }),
-              }}>
-                <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                  {label}
-                </span>
-                <span style={{
-                  fontSize: 'clamp(1rem, 2vw, 1.5rem)',
-                  fontWeight: 700, color: hi ? C.breakAccent : accent,
-                  fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {value}
-                </span>
+          {(() => {
+            const nextIsBreak = !isOnBreak && breaks.some(b => b.afterLevel === level)
+            const nextLevelValue = nextBlind
+              ? `${fmt(nextBlind.smallBlind)} / ${fmt(nextBlind.bigBlind)}${nextBlind.ante > 0 ? ` / ${fmt(nextBlind.ante)}` : ''}`
+              : 'Último nível'
+            const proximoValue = nextIsBreak ? 'INTERVALO' : nextLevelValue
+            const proximoHi = nextIsBreak
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flexShrink: 0 }}>
+                <div style={cardStyle({ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px' })}>
+                  <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                    Próximo nível
+                  </span>
+                  <span style={{
+                    fontSize: 'clamp(1rem, 2vw, 1.5rem)',
+                    fontWeight: 700,
+                    color: proximoHi ? C.breakAccent : accent,
+                    fontVariantNumeric: 'tabular-nums',
+                    letterSpacing: proximoHi ? '0.1em' : undefined,
+                  }}>
+                    {proximoValue}
+                  </span>
+                </div>
+                <div style={cardStyle({ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px' })}>
+                  <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                    {isOnBreak ? 'Intervalo restante' : 'Próximo intervalo'}
+                  </span>
+                  <span style={{
+                    fontSize: 'clamp(1rem, 2vw, 1.5rem)',
+                    fontWeight: 700,
+                    color: isOnBreak ? C.breakAccent : accent,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {isOnBreak ? timerStr(remaining) : nextBreakIn !== null ? timerStr(nextBreakIn) : '—'}
+                  </span>
+                </div>
               </div>
-            ))}
-          </div>
+            )
+          })()}
         </div>
 
         {/* Right sidebar */}

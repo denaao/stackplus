@@ -2,21 +2,38 @@ import { prisma } from '../../lib/prisma'
 import { hashPassword, comparePassword } from '../../utils/hash'
 import { signToken } from '../../utils/jwt'
 import { emitRefreshTokenForUser, revokeAllForUser, rotateRefreshToken } from '../../lib/refresh-token'
-import { PixKeyType, Role } from '@prisma/client'
+import { DocumentType, PixKeyType, Role } from '@prisma/client'
 
-export async function register(data: {
-  name: string
+const USER_SAFE_SELECT = {
+  id: true, name: true, cpf: true, email: true, phone: true,
+  documentType: true, documentNumber: true,
+  pixType: true, pixKey: true, role: true, createdAt: true,
+} as const
+
+type RegisterCpfInput = {
+  documentType: 'CPF'
   cpf: string
+  name: string
   email?: string
   phone?: string
   password: string
   pixType: PixKeyType
   pixKey: string
-}) {
-  const cpfDigits = data.cpf.replace(/\D/g, '')
-  const cpfInUse = await prisma.user.findUnique({ where: { cpf: cpfDigits }, select: { id: true } })
-  if (cpfInUse) throw new Error('CPF já cadastrado')
+}
 
+type RegisterPassportInput = {
+  documentType: 'PASSPORT'
+  passportNumber: string
+  nationality: string
+  name: string
+  email?: string
+  phone?: string
+  password: string
+  pixType?: PixKeyType
+  pixKey?: string
+}
+
+export async function register(data: RegisterCpfInput | RegisterPassportInput) {
   const email = data.email?.trim().toLowerCase() || null
   if (email) {
     const emailInUse = await prisma.user.findUnique({ where: { email }, select: { id: true } })
@@ -24,18 +41,55 @@ export async function register(data: {
   }
 
   const passwordHash = await hashPassword(data.password)
+
+  if (data.documentType === 'CPF') {
+    const cpfDigits = data.cpf.replace(/\D/g, '')
+    const cpfInUse = await prisma.user.findUnique({ where: { cpf: cpfDigits }, select: { id: true } })
+    if (cpfInUse) throw new Error('CPF já cadastrado')
+
+    const user = await prisma.user.create({
+      data: {
+        name: data.name.trim(),
+        cpf: cpfDigits,
+        documentType: DocumentType.CPF,
+        documentNumber: cpfDigits,
+        email,
+        phone: data.phone?.trim() || null,
+        pixType: data.pixType,
+        pixKey: data.pixKey.trim(),
+        passwordHash,
+        role: Role.PLAYER,
+      },
+      select: USER_SAFE_SELECT,
+    })
+
+    const token = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
+    const refresh = await emitRefreshTokenForUser({ userId: user.id })
+    return { user, token, refreshToken: refresh.token, refreshTokenExpiresAt: refresh.expiresAt }
+  }
+
+  // PASSPORT
+  const passportNormalized = data.passportNumber.trim().toUpperCase()
+  const passportInUse = await prisma.user.findUnique({
+    where: { documentType_documentNumber: { documentType: DocumentType.PASSPORT, documentNumber: passportNormalized } },
+    select: { id: true },
+  })
+  if (passportInUse) throw new Error('Passaporte já cadastrado')
+
   const user = await prisma.user.create({
     data: {
       name: data.name.trim(),
-      cpf: cpfDigits,
+      cpf: null,
+      documentType: DocumentType.PASSPORT,
+      documentNumber: passportNormalized,
       email,
       phone: data.phone?.trim() || null,
-      pixType: data.pixType,
-      pixKey: data.pixKey.trim(),
+      pixType: data.pixType ?? null,
+      pixKey: data.pixKey?.trim() ?? null,
       passwordHash,
       role: Role.PLAYER,
     },
-    select: { id: true, name: true, cpf: true, email: true, phone: true, pixType: true, pixKey: true, role: true, createdAt: true },
+    select: USER_SAFE_SELECT,
   })
 
   const token = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
@@ -50,6 +104,35 @@ export async function login(
 ) {
   const cpfDigits = cpf.replace(/\D/g, '')
   const user = await prisma.user.findUnique({ where: { cpf: cpfDigits } })
+  if (!user) throw new Error('Credenciais inválidas')
+
+  const valid = await comparePassword(password, user.passwordHash)
+  if (!valid) throw new Error('Credenciais inválidas')
+
+  const token = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
+  const refresh = await emitRefreshTokenForUser({
+    userId: user.id,
+    ip: context?.ip ?? null,
+    userAgent: context?.userAgent ?? null,
+  })
+  const { passwordHash, ...safeUser } = user
+  return {
+    user: safeUser,
+    token,
+    refreshToken: refresh.token,
+    refreshTokenExpiresAt: refresh.expiresAt,
+  }
+}
+
+export async function loginByPassport(
+  passportNumber: string,
+  password: string,
+  context?: { ip?: string | null; userAgent?: string | null },
+) {
+  const passportNormalized = passportNumber.trim().toUpperCase()
+  const user = await prisma.user.findUnique({
+    where: { documentType_documentNumber: { documentType: DocumentType.PASSPORT, documentNumber: passportNormalized } },
+  })
   if (!user) throw new Error('Credenciais inválidas')
 
   const valid = await comparePassword(password, user.passwordHash)
@@ -152,6 +235,40 @@ export async function updateMe(userId: string, data: {
     select: { id: true, name: true, cpf: true, email: true, phone: true, pixType: true, pixKey: true, role: true, avatarUrl: true, createdAt: true },
   })
   return user
+}
+
+export async function loginEventSangeur(eventId: string, cpf: string, password: string) {
+  const cpfDigits = cpf.replace(/\D/g, '')
+
+  const user = await prisma.user.findFirst({ where: { cpf: cpfDigits } })
+  if (!user) throw new Error('Credenciais inválidas')
+
+  const valid = await comparePassword(password, user.passwordHash)
+  if (!valid) throw new Error('Credenciais inválidas')
+
+  const access = await prisma.eventSangeurAccess.findFirst({
+    where: { eventId, userId: user.id, isActive: true },
+    include: { event: { select: { id: true, name: true } } },
+  })
+
+  if (!access) throw new Error('Acesso de SANGEUR não encontrado ou inativo para este Evento')
+
+  await prisma.eventSangeurAccess.update({
+    where: { id: access.id },
+    data: { lastLoginAt: new Date() },
+  })
+
+  const token = signToken({ userId: user.id, email: user.email ?? '', role: user.role })
+  const { passwordHash, ...safeUser } = user
+
+  return {
+    token,
+    user: safeUser,
+    sangeur: {
+      eventId: access.event.id,
+      eventName: access.event.name,
+    },
+  }
 }
 
 export async function loginSangeur(homeGameId: string, cpf: string, password: string) {
