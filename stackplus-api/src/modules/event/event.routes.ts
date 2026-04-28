@@ -52,7 +52,7 @@ const createSessionSchema = z.object({
   minimumStayMinutes: z.number().int().positive().optional(),
   foodFee: z.number().min(0).optional(),
   jackpotEnabled: z.boolean().optional(),
-  pokerVariant: z.string().optional(),
+  pokerVariant: z.enum(['HOLDEN', 'BUTTON_CHOICE', 'PINEAPPLE', 'OMAHA', 'OMAHA_FIVE', 'OMAHA_SIX']).optional(),
 })
 
 const createTournamentSchema = z.object({

@@ -815,7 +815,7 @@ export async function sendComandaPixOut({
 
   // Valida saldo da conta bancária do home game — não pode pagar sem ter dinheiro.
   const homeGame = await db.homeGame.findUniqueOrThrow({
-    where: { id: comanda.homeGameId },
+    where: { id: comanda.homeGameId! },
     select: { bankBalance: true },
   })
   const bankBalance = Number(homeGame.bankBalance)
@@ -871,7 +871,7 @@ export async function sendComandaPixOut({
       })
       // Debita a conta bancária do home game — PIX confirmado pelo Annapay.
       await recordBankTransaction({
-        homeGameId: comanda.homeGameId,
+        homeGameId: comanda.homeGameId!,
         direction: 'OUT',
         amount,
         description: `PIX enviado para ${playerName}`,
@@ -1610,25 +1610,4 @@ export async function addComandaAdjustment({
   })
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function isDebitType(type: ComandaItemType): boolean {
-  return [
-    'CASH_BUYIN',
-    'CASH_REBUY',
-    'CASH_ADDON',
-    'TOURNAMENT_BUYIN',
-    'TOURNAMENT_REBUY',
-    'TOURNAMENT_ADDON',
-    'TRANSFER_OUT',
-  ].includes(type)
-}
-
-function isPaymentType(type: ComandaItemType): boolean {
-  return [
-    'PAYMENT_PIX_SPOT',
-    'PAYMENT_PIX_TERM',
-    'PAYMENT_CASH',
-    'PAYMENT_CARD',
-  ].includes(type)
-}
+// ─── Helpers ───────────────────────────────────────�

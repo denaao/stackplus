@@ -1,6 +1,5 @@
 import { prisma } from '../../lib/prisma'
 import { ComandaItemType, Prisma, SangeurMovementType, SangeurPaymentMethod, SangeurPaymentStatus, SangeurShiftStatus, SessionStatus, TransactionType } from '@prisma/client'
-import * as TournamentService from '../tournament/tournament.service'
 import { randomBytes } from 'crypto'
 import * as AnnapayService from '../banking/annapay.service'
 import { findOrOpenComandaWithTx, addComandaItemWithTx } from '../comanda/comanda.service'
@@ -177,7 +176,7 @@ export async function listOperationalSessions(homeGameId: string, userId: string
     }),
   ])
 
-  const openShiftMap = new Map(openShifts.map((shift) => [shift.sessionId, shift]))
+  const openShiftMap = new Map(openShifts.map((shift) => [shift.sessionId!, shift]))
 
   return sessions.map((session) => {
     const shift = openShiftMap.get(session.id)
@@ -210,7 +209,7 @@ export async function listSessionParticipants(input: {
 
   if (!shift) throw new Error('Turno SANGEUR inexistente para esta sessão')
 
-  await ensureSangeurAccess(shift.homeGameId, input.userId)
+  await ensureSangeurAccess(shift.homeGameId!, input.userId)
 
   const [playerStates, members, participants, homeGame] = await Promise.all([
     prisma.playerSessionState.findMany({
@@ -225,7 +224,7 @@ export async function listSessionParticipants(input: {
       },
     }),
     prisma.homeGameMember.findMany({
-      where: { homeGameId: shift.homeGameId },
+      where: { homeGameId: shift.homeGameId! },
       select: {
         userId: true,
         paymentMode: true,
@@ -240,7 +239,7 @@ export async function listSessionParticipants(input: {
       },
     }),
     prisma.homeGame.findUniqueOrThrow({
-      where: { id: shift.homeGameId },
+      where: { id: shift.homeGameId! },
       select: { host: { select: { id: true, name: true, avatarUrl: true } } },
     }),
   ])
@@ -436,7 +435,7 @@ export async function registerSale(input: {
 }) {
   const shift = await getShiftByIdForSangeur(input.shiftId, input.userId)
   if (shift.status !== SangeurShiftStatus.OPEN) throw new Error('Turno SANGEUR já encerrado')
-  if (shift.session.status !== SessionStatus.ACTIVE) {
+  if (shift.session!.status !== SessionStatus.ACTIVE) {
     throw new Error('A sessão precisa estar ATIVA para registrar vendas SANGEUR')
   }
 
@@ -453,26 +452,26 @@ export async function registerSale(input: {
 
   // Verifica se o jogador é membro do home game (protege contra IDs aleatórios)
   const member = await prisma.homeGameMember.findFirst({
-    where: { homeGameId: shift.homeGameId, userId: sessionUserId },
+    where: { homeGameId: shift.homeGameId!, userId: sessionUserId },
     select: { userId: true, user: { select: { id: true, name: true, cpf: true } } },
   })
   const participant = member
     ? null
     : await prisma.sessionParticipant.findFirst({
-        where: { sessionId: shift.sessionId, userId: sessionUserId },
+        where: { sessionId: shift.sessionId!, userId: sessionUserId },
         select: { userId: true, user: { select: { id: true, name: true, cpf: true } } },
       })
   const existingState = member || participant
     ? null
     : await prisma.playerSessionState.findUnique({
-        where: { sessionId_userId: { sessionId: shift.sessionId, userId: sessionUserId } },
+        where: { sessionId_userId: { sessionId: shift.sessionId!, userId: sessionUserId } },
         select: { userId: true, user: { select: { id: true, name: true, cpf: true } } },
       })
   // O host do HG não está em HomeGameMember — verificar diretamente
   const hostRecord = member || participant || existingState
     ? null
     : await prisma.homeGame.findFirst({
-        where: { id: shift.homeGameId, hostId: sessionUserId },
+        where: { id: shift.homeGameId!, hostId: sessionUserId },
         select: { hostId: true, host: { select: { id: true, name: true, cpf: true } } },
       }).then((hg) => hg ? { userId: hg.hostId, user: hg.host } : null)
   const playerLookup = member || participant || existingState || hostRecord
@@ -480,7 +479,7 @@ export async function registerSale(input: {
 
   const resolvedPlayerName = input.playerName?.trim() || playerLookup.user?.name || null
 
-  const chipValue = toNumber(shift.session.chipValue || shift.session.homeGame.chipValue)
+  const chipValue = toNumber(shift.session!.chipValue || shift.session!.homeGame!.chipValue)
   const amount = round2(chips * chipValue)
 
   let paymentStatus = input.paymentMethod === SangeurPaymentMethod.VOUCHER
@@ -505,7 +504,7 @@ export async function registerSale(input: {
           ...(playerCpf ? { cpf: playerCpf } : {}),
         },
         valor: { original: amount.toFixed(2) },
-        solicitacaoPagador: `Venda SANGEUR - ${shift.session.homeGame.name} - ${chips} fichas`,
+        solicitacaoPagador: `Venda SANGEUR - ${shift.session!.homeGame!.name} - ${chips} fichas`,
       })
 
       pixQrData = cobResult
@@ -523,7 +522,7 @@ export async function registerSale(input: {
   }
 
   // Prepara metadados da integração com comanda (aplicada dentro da mesma transaction abaixo)
-  const comandaGameLabel = shift.session.homeGame?.name ?? shift.homeGameId
+  const comandaGameLabel = shift.session.homeGame?.name ?? shift.homeGameId!
   const paymentTypeMap: Partial<Record<SangeurPaymentMethod, ComandaItemType>> = {
     [SangeurPaymentMethod.CASH]:    ComandaItemType.PAYMENT_CASH,
     [SangeurPaymentMethod.CARD]:    ComandaItemType.PAYMENT_CARD,
@@ -537,7 +536,7 @@ export async function registerSale(input: {
   // BLOCKING: se a aplicação na comanda falhar (ex.: limite estourado), a venda inteira é revertida.
   const { sale, transaction, playerState } = await prisma.$transaction(async (tx) => {
     const currentState = await tx.playerSessionState.findUnique({
-      where: { sessionId_userId: { sessionId: shift.sessionId, userId: sessionUserId } },
+      where: { sessionId_userId: { sessionId: shift.sessionId!, userId: sessionUserId } },
       include: { user: { select: { id: true, name: true, avatarUrl: true } } },
     })
 
@@ -549,15 +548,15 @@ export async function registerSale(input: {
     // Sem isso, jogadores inseridos ad-hoc pela sangeur não aparecem no seletor do caixa
     // nem em outros fluxos que filtram por participantes.
     await tx.sessionParticipant.upsert({
-      where: { sessionId_userId: { sessionId: shift.sessionId, userId: sessionUserId } },
+      where: { sessionId_userId: { sessionId: shift.sessionId!, userId: sessionUserId } },
       update: {},
-      create: { sessionId: shift.sessionId, userId: sessionUserId },
+      create: { sessionId: shift.sessionId!, userId: sessionUserId },
     })
 
     const txType = currentState ? TransactionType.REBUY : TransactionType.BUYIN
     const newTx = await tx.transaction.create({
       data: {
-        sessionId: shift.sessionId,
+        sessionId: shift.sessionId!,
         userId: sessionUserId,
         type: txType,
         amount,
@@ -574,7 +573,7 @@ export async function registerSale(input: {
     if (!currentState) {
       nextState = await tx.playerSessionState.create({
         data: {
-          sessionId: shift.sessionId,
+          sessionId: shift.sessionId!,
           userId: sessionUserId,
           chipsIn: amount,
         },
@@ -585,7 +584,7 @@ export async function registerSale(input: {
       const chipsOut = Number(currentState.chipsOut)
       const result = chipsOut - chipsIn
       nextState = await tx.playerSessionState.update({
-        where: { sessionId_userId: { sessionId: shift.sessionId, userId: sessionUserId } },
+        where: { sessionId_userId: { sessionId: shift.sessionId!, userId: sessionUserId } },
         data: { chipsIn, chipsOut, result },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       })
@@ -630,7 +629,7 @@ export async function registerSale(input: {
 
     const comanda = await findOrOpenComandaWithTx(tx, {
       playerId: sessionUserId,
-      homeGameId: shift.homeGameId,
+      homeGameId: shift.homeGameId!,
       openedByUserId: input.userId,
     })
 
@@ -639,7 +638,7 @@ export async function registerSale(input: {
       type: cashType,
       amount,
       description: txDescription,
-      sessionId: shift.sessionId,
+      sessionId: shift.sessionId!,
       transactionId: newSale.transactionId ?? undefined,
       createdByUserId: input.userId,
     })
@@ -651,7 +650,7 @@ export async function registerSale(input: {
         type: comandaPaymentType,
         amount,
         description: `Pagamento ${isPix ? 'PIX' : input.paymentMethod} — ${txDescription}`,
-        sessionId: shift.sessionId,
+        sessionId: shift.sessionId!,
         transactionId: newSale.transactionId ?? undefined,
         createdByUserId: input.userId,
       })
@@ -764,11 +763,11 @@ export async function getVoucherReceiptData(input: {
 
   // Todas as transações de compra de fichas (BUYIN/REBUY/ADDON) do jogador nesta sessão,
   // com origem (caixa ou sangeur), excluindo as já quitadas (sangeur com status PAID).
-  const playerUserId = sale.sessionUserId || sale.shift.session.id === sale.shift.session.id ? sale.sessionUserId : null
+  const playerUserId = sale.sessionUserId || sale.shift.session!.id === sale.shift.session!.id ? sale.sessionUserId : null
   const allTxs = playerUserId
     ? await prisma.transaction.findMany({
         where: {
-          sessionId: sale.shift.session.id,
+          sessionId: sale.shift.session!.id,
           userId: playerUserId,
           type: { in: [TransactionType.BUYIN, TransactionType.REBUY, TransactionType.ADDON] },
         },
@@ -828,16 +827,16 @@ export async function getVoucherReceiptData(input: {
     settledAt: sale.settledAt,
     note: sale.note,
     homeGame: {
-      id: sale.shift.session.homeGame.id,
-      name: sale.shift.session.homeGame.name,
+      id: sale.shift.session!.homeGame!.id,
+      name: sale.shift.session!.homeGame!.name,
     },
     session: {
-      id: sale.shift.session.id,
-      createdAt: sale.shift.session.createdAt,
+      id: sale.shift.session!.id,
+      createdAt: sale.shift.session!.createdAt,
     },
     operator: {
-      username: sale.shift.sangeurAccess.username,
-      name: sale.shift.sangeurAccess.user.name,
+      username: sale.shift.sangeurAccess!.username,
+      name: sale.shift.sangeurAccess!.user.name,
     },
     playerUnpaidEntries: unpaid,
     playerUnpaidTotal: unpaid.reduce((acc, v) => acc + v.amount, 0),
@@ -900,18 +899,18 @@ export async function getShiftClosingReport(input: {
       note: shift.note,
     },
     homeGame: {
-      id: shift.session.homeGame.id,
-      name: shift.session.homeGame.name,
+      id: shift.session!.homeGame!.id,
+      name: shift.session!.homeGame!.name,
     },
     session: {
-      id: shift.session.id,
-      status: shift.session.status,
-      chipValue: round2(toNumber(shift.session.chipValue || shift.session.homeGame.chipValue)),
+      id: shift.session!.id,
+      status: shift.session!.status,
+      chipValue: round2(toNumber(shift.session!.chipValue || shift.session!.homeGame!.chipValue)),
     },
     operator: {
-      id: shift.sangeurAccess.user.id,
-      username: shift.sangeurAccess.username,
-      name: shift.sangeurAccess.user.name,
+      id: shift.sangeurAccess!.user.id,
+      username: shift.sangeurAccess!.username,
+      name: shift.sangeurAccess!.user.name,
     },
     inventory: {
       initialChips: shift.summary.initialChips,
@@ -1059,370 +1058,4 @@ export async function getSangeurPixChargeDetails(chargeId: string) {
     logger.error({ err: error }, '[sangeur] failed to fetch charge details')
     throw new Error('Falha ao buscar detalhes da cobrança PIX')
   }
-}
-
-// ── Tournament Sangeur ────────────────────────────────────────────────────────
-
-async function ensureEventSangeurAccess(eventId: string, userId: string) {
-  const access = await prisma.eventSangeurAccess.findFirst({
-    where: { eventId, userId, isActive: true },
-    include: {
-      event: { select: { id: true, name: true } },
-    },
-  })
-  if (!access) throw new Error('Acesso SANGEUR não autorizado para este Evento')
-  return access
-}
-
-async function getEventShiftById(shiftId: string, userId: string) {
-  const shift = await prisma.sangeurShift.findUniqueOrThrow({
-    where: { id: shiftId },
-    include: {
-      eventSangeurAccess: {
-        select: {
-          id: true,
-          username: true,
-          isActive: true,
-          user: { select: { id: true, name: true, email: true } },
-        },
-      },
-      event: { select: { id: true, name: true } },
-      movements: { orderBy: { createdAt: 'desc' } },
-      sales: { orderBy: { createdAt: 'desc' } },
-    },
-  })
-
-  if (shift.sangeurUserId !== userId) throw new Error('Acesso negado')
-  return { ...shift, summary: buildShiftSummary(shift) }
-}
-
-export async function openTournamentShift(input: {
-  eventId: string
-  userId: string
-  note?: string
-}) {
-  const access = await ensureEventSangeurAccess(input.eventId, input.userId)
-
-  // Idempotent: retorna o turno já aberto se existir
-  const existing = await prisma.sangeurShift.findFirst({
-    where: {
-      eventId: input.eventId,
-      sangeurUserId: input.userId,
-      status: SangeurShiftStatus.OPEN,
-    },
-    select: { id: true },
-  })
-
-  if (existing) return getEventShiftById(existing.id, input.userId)
-
-  const shift = await prisma.sangeurShift.create({
-    data: {
-      eventId: input.eventId,
-      eventSangeurAccessId: access.id,
-      sangeurUserId: input.userId,
-      initialChips: 0,
-      note: input.note?.trim() || null,
-    },
-    select: { id: true },
-  })
-
-  return getEventShiftById(shift.id, input.userId)
-}
-
-export async function getEventShift(shiftId: string, userId: string) {
-  return getEventShiftById(shiftId, userId)
-}
-
-export async function listEventTournamentsForSangeur(eventId: string, userId: string) {
-  await ensureEventSangeurAccess(eventId, userId)
-
-  const [tournaments, openShift] = await Promise.all([
-    prisma.tournament.findMany({
-      where: {
-        eventId,
-        status: { in: ['REGISTRATION', 'RUNNING', 'ON_BREAK'] },
-      },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        buyInAmount: true,
-        rebuyAmount: true,
-        addonAmount: true,
-        buyInTaxAmount: true,
-        rebuyTaxAmount: true,
-        addonTaxAmount: true,
-        lateRegistrationLevel: true,
-        rebuyUntilLevel: true,
-        addonAfterLevel: true,
-        currentLevel: true,
-        startedAt: true,
-        _count: { select: { players: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.sangeurShift.findFirst({
-      where: { eventId, sangeurUserId: userId, status: SangeurShiftStatus.OPEN },
-      select: { id: true, openedAt: true },
-    }),
-  ])
-
-  const result = tournaments.map((t) => {
-    const canLateReg =
-      t.status === 'REGISTRATION' ||
-      (t.status === 'RUNNING' &&
-        (t.lateRegistrationLevel === null || t.currentLevel <= t.lateRegistrationLevel))
-    const canRebuy =
-      !!t.rebuyAmount &&
-      (t.rebuyUntilLevel === null || t.currentLevel <= t.rebuyUntilLevel)
-    const canAddon =
-      !!t.addonAmount &&
-      (t.addonAfterLevel === null || t.currentLevel >= t.addonAfterLevel)
-    return { ...t, canLateReg, canRebuy, canAddon }
-  })
-
-  return { tournaments: result, openShift }
-}
-
-export async function listTournamentPlayersForSangeur(input: {
-  shiftId: string
-  tournamentId: string
-  userId: string
-}) {
-  const shift = await prisma.sangeurShift.findUniqueOrThrow({
-    where: { id: input.shiftId },
-    select: { sangeurUserId: true, eventId: true, status: true },
-  })
-  if (shift.sangeurUserId !== input.userId) throw new Error('Acesso negado')
-  if (shift.status !== 'OPEN') throw new Error('Turno SANGEUR já encerrado')
-
-  const tournament = await prisma.tournament.findUniqueOrThrow({
-    where: { id: input.tournamentId },
-    select: {
-      id: true, name: true, status: true, eventId: true,
-      buyInAmount: true, rebuyAmount: true, addonAmount: true,
-      buyInTaxAmount: true, rebuyTaxAmount: true, addonTaxAmount: true,
-      lateRegistrationLevel: true, rebuyUntilLevel: true, addonAfterLevel: true,
-      currentLevel: true,
-    },
-  })
-  if (tournament.eventId !== shift.eventId) throw new Error('Torneio não pertence a este evento')
-
-  const [players, eventComandas] = await Promise.all([
-    prisma.tournamentPlayer.findMany({
-      where: { tournamentId: input.tournamentId },
-      select: {
-        id: true,
-        status: true,
-        rebuysCount: true,
-        hasAddon: true,
-        player: { select: { id: true, name: true } },
-      },
-      orderBy: { registeredAt: 'asc' },
-    }),
-    prisma.comanda.findMany({
-      where: { eventId: shift.eventId!, status: 'OPEN' },
-      select: { playerId: true, player: { select: { id: true, name: true } } },
-    }),
-  ])
-
-  const registeredIds = new Set(players.map((p) => p.player.id))
-  const candidates = eventComandas
-    .filter((c) => !registeredIds.has(c.playerId))
-    .map((c) => ({ userId: c.playerId, name: c.player.name }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-
-  const canLateReg =
-    tournament.status === 'REGISTRATION' ||
-    (tournament.status === 'RUNNING' &&
-      (tournament.lateRegistrationLevel === null || tournament.currentLevel <= tournament.lateRegistrationLevel))
-  const canRebuy =
-    !!tournament.rebuyAmount &&
-    (tournament.rebuyUntilLevel === null || tournament.currentLevel <= tournament.rebuyUntilLevel)
-  const canAddon =
-    !!tournament.addonAmount &&
-    (tournament.addonAfterLevel === null || tournament.currentLevel >= tournament.addonAfterLevel)
-
-  return {
-    tournament: { ...tournament, canLateReg, canRebuy, canAddon },
-    players,
-    candidates,
-  }
-}
-
-export async function registerTournamentSale(input: {
-  shiftId: string
-  userId: string
-  actionType: 'BUYIN' | 'REBUY' | 'ADDON'
-  playerId?: string
-  tournamentId?: string
-  tournamentPlayerId?: string
-  buyInType?: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
-  rebuyType?: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
-  withAddonTax?: boolean
-  paymentMethod: SangeurPaymentMethod
-  playerName?: string
-  note?: string
-  paymentReference?: string
-}) {
-  const shift = await getEventShiftById(input.shiftId, input.userId)
-  if (shift.status !== SangeurShiftStatus.OPEN) throw new Error('Turno SANGEUR já encerrado')
-  if (!shift.eventId) throw new Error('Turno não vinculado a um evento')
-
-  const TournamentService = await import('../tournament/tournament.service')
-
-  let tournamentId: string
-  let tournamentPlayerId: string
-  let amount: number
-  let resolvedPlayerId: string
-
-  if (input.actionType === 'BUYIN') {
-    if (!input.playerId || !input.tournamentId) {
-      throw new Error('playerId e tournamentId são obrigatórios para buy-in')
-    }
-
-    const result = await TournamentService.registerPlayer({
-      tournamentId: input.tournamentId,
-      playerId: input.playerId,
-      eventId: shift.eventId,
-      registeredByUserId: input.userId,
-      buyInType: input.buyInType ?? 'NORMAL',
-    })
-
-    tournamentId = input.tournamentId
-    tournamentPlayerId = result.id
-    resolvedPlayerId = input.playerId
-
-    const t = await prisma.tournament.findUniqueOrThrow({
-      where: { id: tournamentId },
-      select: { buyInAmount: true, buyInTaxAmount: true },
-    })
-    const base = Number(t.buyInAmount)
-    const tax = input.buyInType === 'NORMAL_WITH_TAX' ? Number(t.buyInTaxAmount ?? 0) : 0
-    amount = round2(base + tax)
-
-  } else if (input.actionType === 'REBUY') {
-    if (!input.tournamentPlayerId) throw new Error('tournamentPlayerId é obrigatório para rebuy')
-
-    await TournamentService.registerRebuy({
-      tournamentPlayerId: input.tournamentPlayerId,
-      registeredByUserId: input.userId,
-      rebuyType: input.rebuyType ?? 'NORMAL',
-    })
-
-    const tp = await prisma.tournamentPlayer.findUniqueOrThrow({
-      where: { id: input.tournamentPlayerId },
-      include: { tournament: { select: { rebuyAmount: true, rebuyTaxAmount: true } } },
-    })
-    tournamentId = tp.tournamentId
-    tournamentPlayerId = input.tournamentPlayerId
-    resolvedPlayerId = tp.playerId
-
-    const base = Number(tp.tournament.rebuyAmount ?? 0)
-    const tax = input.rebuyType === 'NORMAL_WITH_TAX' ? Number(tp.tournament.rebuyTaxAmount ?? 0) : 0
-    amount = round2(base + tax)
-
-  } else {
-    // ADDON
-    if (!input.tournamentPlayerId) throw new Error('tournamentPlayerId é obrigatório para add-on')
-
-    await TournamentService.registerAddon({
-      tournamentPlayerId: input.tournamentPlayerId,
-      registeredByUserId: input.userId,
-      withTax: input.withAddonTax ?? false,
-    })
-
-    const tp = await prisma.tournamentPlayer.findUniqueOrThrow({
-      where: { id: input.tournamentPlayerId },
-      include: { tournament: { select: { addonAmount: true, addonTaxAmount: true } } },
-    })
-    tournamentId = tp.tournamentId
-    tournamentPlayerId = input.tournamentPlayerId
-    resolvedPlayerId = tp.playerId
-
-    const base = Number(tp.tournament.addonAmount ?? 0)
-    const tax = input.withAddonTax ? Number(tp.tournament.addonTaxAmount ?? 0) : 0
-    amount = round2(base + tax)
-  }
-
-  let paymentStatus = input.paymentMethod === SangeurPaymentMethod.PIX_QR
-    ? SangeurPaymentStatus.PENDING
-    : SangeurPaymentStatus.PAID
-
-  let paymentReference = input.paymentReference?.trim() || null
-  let pixQrData: Awaited<ReturnType<typeof AnnapayService.createNormalizedCob>> | null = null
-
-  if (input.paymentMethod === SangeurPaymentMethod.PIX_QR) {
-    try {
-      const player = await prisma.user.findUnique({
-        where: { id: resolvedPlayerId },
-        select: { name: true, cpf: true },
-      })
-      const playerDisplayName = input.playerName?.trim() || player?.name || 'Jogador'
-      const playerCpf = player?.cpf ? String(player.cpf).replace(/\D/g, '') : null
-
-      const cobResult = await AnnapayService.createNormalizedCob({
-        calendario: { expiracao: 3600 },
-        devedor: {
-          nome: playerDisplayName,
-          ...(playerCpf ? { cpf: playerCpf } : {}),
-        },
-        valor: { original: amount.toFixed(2) },
-        solicitacaoPagador: `Torneio SANGEUR - ${input.actionType}`,
-      })
-
-      pixQrData = cobResult
-      if (typeof cobResult === 'object' && cobResult !== null) {
-        const normalized = cobResult as Record<string, unknown>
-        const chargeId =
-          typeof normalized.id === 'string' ? normalized.id
-          : typeof normalized.identificador === 'string' ? normalized.identificador
-          : null
-        if (chargeId) paymentReference = chargeId
-      }
-    } catch (error) {
-      logger.warn({ err: error }, '[sangeur.registerTournamentSale] failed to create PIX charge')
-      throw new Error('Falha ao criar cobrança PIX. Tente novamente.')
-    }
-  }
-
-  const sale = await prisma.sangeurSale.create({
-    data: {
-      shiftId: input.shiftId,
-      chips: 0,
-      chipValue: 0,
-      amount,
-      paymentMethod: input.paymentMethod,
-      paymentStatus,
-      paymentReference,
-      playerName: input.playerName?.trim() || null,
-      note: input.note?.trim() || null,
-      tournamentId,
-      tournamentPlayerId,
-      actionType: input.actionType,
-      createdByUserId: input.userId,
-    },
-  })
-
-  return { sale, pixQrData, amount, actionType: input.actionType, tournamentPlayerId }
-}
-
-export async function closeTournamentShift(input: {
-  shiftId: string
-  userId: string
-  note?: string
-}) {
-  const shift = await getEventShiftById(input.shiftId, input.userId)
-  if (shift.status !== SangeurShiftStatus.OPEN) throw new Error('Turno SANGEUR já encerrado')
-
-  await prisma.sangeurShift.update({
-    where: { id: input.shiftId },
-    data: {
-      status: SangeurShiftStatus.CLOSED,
-      closedAt: new Date(),
-      note: input.note?.trim() || shift.note,
-    },
-  })
-
-  return getEventShiftById(input.shiftId, input.userId)
 }

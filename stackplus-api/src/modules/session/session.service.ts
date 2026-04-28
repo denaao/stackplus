@@ -174,10 +174,11 @@ async function getSessionAccessContext(sessionId: string) {
 }
 
 async function canAccessPrivateSession(
-  session: { cashierId: string | null; homeGameId: string },
+  session: { cashierId: string | null; homeGameId: string | null },
   userId: string,
 ) {
   if (session.cashierId === userId) return true
+  if (!session.homeGameId) return false
   return isHomeGameHost(userId, session.homeGameId)
 }
 
@@ -251,7 +252,7 @@ export async function startSession(sessionId: string, hostId: string, cashierId?
       participantAssignments: { select: { userId: true } },
     },
   })
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) throw new Error('Acesso negado')
   if (session.status !== 'WAITING') throw new Error('Sessão já iniciada')
   if (session.gameType === 'CASH_GAME' && session.participantAssignments.length < 2) {
     throw new Error('Selecione pelo menos 2 participantes para iniciar a partida')
@@ -306,7 +307,7 @@ export async function finishSession(
       },
     },
   })
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) throw new Error('Acesso negado')
   if (session.status !== 'ACTIVE') throw new Error('Sessão não está ativa')
 
   const caixinhaMode = (session as unknown as { caixinhaMode?: string }).caixinhaMode === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'SPLIT'
@@ -315,7 +316,7 @@ export async function finishSession(
   const jackpotDistribuido = session.transactions
     .filter((transaction) => transaction.type === 'JACKPOT')
     .reduce((sum, transaction) => sum + Number(transaction.amount), 0)
-  const jackpotAtual = Number((session as unknown as { jackpotAccumulated?: string | number }).jackpotAccumulated ?? session.homeGame.jackpotAccumulated ?? 0)
+  const jackpotAtual = Number((session as unknown as { jackpotAccumulated?: string | number }).jackpotAccumulated ?? session.homeGame!.jackpotAccumulated ?? 0)
   const jackpotNovo = amountToFixed(Math.max(0, jackpotAtual + jackpotArrecadado - jackpotDistribuido))
 
   const rakebackPercentTotal = session.rakebackAssignments.reduce((sum, assignment) => {
@@ -378,7 +379,7 @@ export async function finishSession(
     }
 
     await tx.homeGame.update({
-      where: { id: session.homeGameId },
+      where: { id: session.homeGameId! },
       data: { jackpotAccumulated: jackpotNovo },
     })
 
@@ -418,14 +419,14 @@ export async function finishSession(
     for (const [userId, amount] of staffCaixinhaPerUser) {
       const comanda = await findOrOpenComandaWithTx(tx, {
         playerId: userId,
-        homeGameId: session.homeGameId,
+        homeGameId: session.homeGameId!,
         openedByUserId: hostId,
       })
       await addComandaItemWithTx(tx, {
         comandaId: comanda.id,
         type: ComandaItemType.STAFF_CAIXINHA,
         amount,
-        description: `Caixinha — ${session.homeGame.name}`,
+        description: `Caixinha — ${session.homeGame!.name}`,
         sessionId,
         createdByUserId: hostId,
       })
@@ -436,14 +437,14 @@ export async function finishSession(
       if (value <= 0) continue
       const comanda = await findOrOpenComandaWithTx(tx, {
         playerId: userId,
-        homeGameId: session.homeGameId,
+        homeGameId: session.homeGameId!,
         openedByUserId: hostId,
       })
       await addComandaItemWithTx(tx, {
         comandaId: comanda.id,
         type: ComandaItemType.STAFF_RAKEBACK,
         amount: amountToFixed(value),
-        description: `Rakeback — ${session.homeGame.name}`,
+        description: `Rakeback — ${session.homeGame!.name}`,
         sessionId,
         createdByUserId: hostId,
       })
@@ -496,7 +497,7 @@ export async function getSessionByIdForOperator(sessionId: string, userId: strin
 
   if (!(await canAccessPrivateSession({
     cashierId: session.cashierId,
-    homeGameId: session.homeGameId,
+    homeGameId: session.homeGameId!,
   }, userId))) {
     throw new Error('Acesso negado')
   }
@@ -544,13 +545,13 @@ export async function getSessionStaffOptions(sessionId: string, hostId: string) 
     },
   })
 
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) {
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) {
     throw new Error('Acesso negado')
   }
 
   const map = new Map<string, { id: string; name: string; email: string | null; pixType: string | null; pixKey: string | null }>()
-  map.set(session.homeGame.host.id, session.homeGame.host)
-  for (const member of session.homeGame.members) {
+  map.set(session.homeGame!.host.id, session.homeGame!.host)
+  for (const member of session.homeGame!.members) {
     map.set(member.user.id, member.user)
   }
 
@@ -573,13 +574,13 @@ export async function getSessionParticipantOptions(sessionId: string, hostId: st
     },
   })
 
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) {
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) {
     throw new Error('Acesso negado')
   }
 
   const map = new Map<string, { id: string; name: string; email: string | null; pixType: string | null; pixKey: string | null }>()
-  map.set(session.homeGame.host.id, session.homeGame.host)
-  for (const member of session.homeGame.members) {
+  map.set(session.homeGame!.host.id, session.homeGame!.host)
+  for (const member of session.homeGame!.members) {
     map.set(member.user.id, member.user)
   }
 
@@ -604,11 +605,11 @@ export async function updateSessionStaff(
     },
   })
 
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) throw new Error('Acesso negado')
 
   const allowedIds = new Set<string>([
-    session.homeGame.host.id,
-    ...session.homeGame.members.map((member) => member.userId),
+    session.homeGame!.host.id,
+    ...session.homeGame!.members.map((member) => member.userId),
   ])
 
   for (const userId of userIds) {
@@ -649,11 +650,11 @@ export async function updateSessionRakeback(
     },
   })
 
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) throw new Error('Acesso negado')
 
   const allowedIds = new Set<string>([
-    session.homeGame.host.id,
-    ...session.homeGame.members.map((member) => member.userId),
+    session.homeGame!.host.id,
+    ...session.homeGame!.members.map((member) => member.userId),
   ])
 
   for (const assignment of assignments) {
@@ -702,12 +703,12 @@ export async function updateSessionParticipants(sessionId: string, hostId: strin
     },
   })
 
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) throw new Error('Acesso negado')
   if (session.status === 'FINISHED') throw new Error('Sessão já finalizada')
 
   const allowedIds = new Set<string>([
-    session.homeGame.host.id,
-    ...session.homeGame.members.map((member) => member.userId),
+    session.homeGame!.host.id,
+    ...session.homeGame!.members.map((member) => member.userId),
   ])
 
   for (const userId of userIds) {
@@ -763,7 +764,7 @@ export async function deleteSession(sessionId: string, hostId: string) {
     include: { homeGame: true },
   })
 
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) throw new Error('Acesso negado')
 
   await prisma.$transaction(async (tx) => {
     await tx.prepaidChargePending.deleteMany({ where: { sessionId } })

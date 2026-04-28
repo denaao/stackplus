@@ -119,7 +119,7 @@ router.post('/shifts/:shiftId/sales', async (req: AuthRequest, res: Response) =>
   // para o painel lateral específico do sangeur.
   try {
     const io = getIO()
-    const sessionId = result.shift.session.id
+    const sessionId = result.shift.session!.id
     const room = getPrivateSessionRoom(sessionId)
     const socketsInRoom = await io.in(room).fetchSockets()
     req.log?.debug({ room, clients: socketsInRoom.length }, '[sangeur] emitting transaction:new')
@@ -216,13 +216,10 @@ router.post('/shifts/:shiftId/close', async (req: AuthRequest, res: Response) =>
   res.json(shift)
 })
 
-// ── Tournament Sangeur ────────────────────────────────────────────────────────
+// ── Tournament Sangeur Routes ─────────────────────────────────────────────────
 
 router.get('/events/:eventId/tournaments', async (req: AuthRequest, res: Response) => {
-  const data = await SangeurService.listEventTournamentsForSangeur(
-    req.params.eventId,
-    req.user!.userId,
-  )
+  const data = await SangeurService.listEventTournamentsForSangeur(req.params.eventId, req.user!.userId)
   res.json(data)
 })
 
@@ -231,13 +228,7 @@ router.post('/tournament-shifts/open', async (req: AuthRequest, res: Response) =
     eventId: z.string().uuid(),
     note: z.string().trim().max(300).optional(),
   }).parse(req.body)
-
-  const shift = await SangeurService.openTournamentShift({
-    eventId: data.eventId,
-    userId: req.user!.userId,
-    note: data.note,
-  })
-
+  const shift = await SangeurService.openTournamentShift({ eventId: data.eventId, userId: req.user!.userId, note: data.note })
   res.status(201).json(shift)
 })
 
@@ -256,15 +247,15 @@ router.get('/tournament-shifts/:shiftId/tournaments/:tournamentId/players', asyn
 })
 
 router.post('/tournament-shifts/:shiftId/sales', async (req: AuthRequest, res: Response) => {
-  const data = z.object({
+  const body = z.object({
     actionType: z.enum(['BUYIN', 'REBUY', 'ADDON']),
-    playerId: z.string().uuid().optional(),
+    paymentMethod: z.enum(['PIX_QR', 'CASH', 'CARD', 'VOUCHER']),
     tournamentId: z.string().uuid().optional(),
-    tournamentPlayerId: z.string().uuid().optional(),
+    playerId: z.string().uuid().optional(),
     buyInType: z.enum(['NORMAL', 'NORMAL_WITH_TAX', 'DOUBLE']).optional(),
+    tournamentPlayerId: z.string().uuid().optional(),
     rebuyType: z.enum(['NORMAL', 'NORMAL_WITH_TAX', 'DOUBLE']).optional(),
     withAddonTax: z.boolean().optional(),
-    paymentMethod: z.enum(['PIX_QR', 'VOUCHER', 'CASH', 'CARD']),
     playerName: z.string().trim().max(120).optional(),
     note: z.string().trim().max(300).optional(),
     paymentReference: z.string().trim().max(200).optional(),
@@ -273,24 +264,15 @@ router.post('/tournament-shifts/:shiftId/sales', async (req: AuthRequest, res: R
   const result = await SangeurService.registerTournamentSale({
     shiftId: req.params.shiftId,
     userId: req.user!.userId,
-    ...data,
+    ...body,
   })
-
   res.status(201).json(result)
 })
 
 router.post('/tournament-shifts/:shiftId/close', async (req: AuthRequest, res: Response) => {
-  const data = z.object({
-    note: z.string().trim().max(300).optional(),
-  }).parse(req.body)
-
-  const shift = await SangeurService.closeTournamentShift({
-    shiftId: req.params.shiftId,
-    userId: req.user!.userId,
-    note: data.note,
-  })
-
-  res.json(shift)
+  const { note } = z.object({ note: z.string().trim().max(300).optional() }).parse(req.body)
+  const result = await SangeurService.closeTournamentShift({ shiftId: req.params.shiftId, userId: req.user!.userId, note })
+  res.json(result)
 })
 
 export default router

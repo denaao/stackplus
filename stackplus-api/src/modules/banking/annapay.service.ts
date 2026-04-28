@@ -1043,7 +1043,7 @@ export async function generatePrepaidPurchaseCharge(input: {
     prisma.homeGameMember.findUnique({
       where: {
         homeGameId_userId: {
-          homeGameId: session.homeGameId,
+          homeGameId: session.homeGameId!,
           userId: input.userId,
         },
       },
@@ -1058,9 +1058,9 @@ export async function generatePrepaidPurchaseCharge(input: {
 
   if (!member) throw new Error('Jogador não é membro deste Home Game')
 
-  const memberModes = await getHomeGameMemberModes(session.homeGameId)
+  const memberModes = await getHomeGameMemberModes(session.homeGameId!)
   const playerMode = resolvePlayerMode(financialModule, memberModes.get(input.userId) || null)
-  const chipValue = Number(session.chipValue ?? session.homeGame.chipValue)
+  const chipValue = Number(session.chipValue ?? session.homeGame!.chipValue)
   const amount = amountToFixed(input.chips * chipValue)
 
   if (playerMode !== 'PREPAID') {
@@ -1661,7 +1661,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
     },
   })
 
-  if (!(await isHomeGameHost(hostId, session.homeGameId))) throw new Error('Acesso negado')
+  if (!(await isHomeGameHost(hostId, session.homeGameId!))) throw new Error('Acesso negado')
   if (session.status !== 'FINISHED') throw new Error('A sessão precisa estar finalizada para gerar o relatório financeiro')
 
   const virtualAccount = resolveVirtualAccount()
@@ -1931,7 +1931,7 @@ export async function generateSessionFinancialReport(sessionId: string, hostId: 
 
   return {
     sessionId: session.id,
-    homeGameId: session.homeGameId,
+    homeGameId: session.homeGameId!,
     financialModule,
     generatedAt: new Date().toISOString(),
     summary: {
