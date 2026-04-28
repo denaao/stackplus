@@ -5,6 +5,7 @@ import * as EventSangeurService from './event-sangeur.service'
 import * as SessionService from '../session/session.service'
 import * as TournamentService from '../tournament/tournament.service'
 import { z } from 'zod'
+import { prisma } from '../../lib/prisma'
 
 const router = Router()
 
@@ -165,7 +166,7 @@ router.post('/:id/rotate-access-code', authenticate, async (req: AuthRequest, re
 // ─── Sangeur do evento ────────────────────────────────────────────────────────
 
 const enableSangeurSchema = z.object({
-  userId: z.string().uuid(),
+  cpf: z.string().min(11).max(14),
   username: z.string().trim().min(3).max(40).optional(),
 })
 
@@ -176,13 +177,21 @@ router.get('/:id/sangeurs', authenticate, async (req: AuthRequest, res: Response
 
 router.post('/:id/sangeurs', authenticate, async (req: AuthRequest, res: Response) => {
   const data = enableSangeurSchema.parse(req.body)
+  const cpfDigits = data.cpf.replace(/\D/g, '')
+  const user = await prisma.user.findFirst({ where: { cpf: cpfDigits }, select: { id: true } })
+  if (!user) throw Object.assign(new Error('Usuário com este CPF não encontrado.'), { statusCode: 404 })
   const result = await EventSangeurService.enableEventSangeurAccess({
     eventId: req.params.id,
     hostId: req.user!.userId,
-    memberUserId: data.userId,
+    memberUserId: user.id,
     username: data.username,
   })
   res.status(201).json(result)
+})
+
+router.get('/:id/sangeurs/:userId/login-qr', authenticate, async (req: AuthRequest, res: Response) => {
+  const result = await EventSangeurService.getLoginQr(req.params.id, req.user!.userId, req.params.userId)
+  res.json(result)
 })
 
 router.patch('/:id/sangeurs/:userId/enable', authenticate, async (req: AuthRequest, res: Response) => {
@@ -220,22 +229,4 @@ router.post('/:id/sessions', authenticate, async (req: AuthRequest, res: Respons
 // ─── Torneios do evento ───────────────────────────────────────────────────────
 
 router.get('/:id/tournaments', authenticate, async (req: AuthRequest, res: Response) => {
-  const status = req.query.status as string | undefined
-  const tournaments = await TournamentService.listTournamentsByEvent(
-    req.params.id,
-    status as any,
-  )
-  res.json(tournaments)
-})
-
-router.post('/:id/tournaments', authenticate, async (req: AuthRequest, res: Response) => {
-  const data = createTournamentSchema.parse(req.body)
-  const tournament = await TournamentService.createEventTournament({
-    eventId: req.params.id,
-    requesterId: req.user!.userId,
-    ...data,
-  })
-  res.status(201).json(tournament)
-})
-
-export default router
+  const status = req.que

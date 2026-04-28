@@ -1,16 +1,18 @@
 import { Router, Response } from 'express'
 import { authenticate, AuthRequest } from '../../middlewares/auth.middleware'
 import * as EventStaffService from './event-staff.service'
+import * as EventSangeurService from '../event/event-sangeur.service'
 import { assertEventHost, getEventPermissionMatrix, setEventPermission } from '../../lib/event-auth'
 import { z } from 'zod'
 import { EventPermissionKey, EventStaffRole } from '@prisma/client'
+import { prisma } from '../../lib/prisma'
 
 const router = Router({ mergeParams: true })
 
 const STAFF_ROLES = ['HOST', 'CASHIER', 'DEALER', 'SANGEUR', 'TOURNAMENT_DIRECTOR', 'CASH_DIRECTOR'] as const
 
 const addStaffSchema = z.object({
-  userId: z.string().uuid(),
+  cpf: z.string().min(11).max(14),
   role: z.enum(STAFF_ROLES),
 })
 
@@ -37,7 +39,21 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   const { eventId } = req.params
   const data = addStaffSchema.parse(req.body)
-  const staff = await EventStaffService.addStaff(eventId, req.user!.userId, data)
+  const cpfDigits = data.cpf.replace(/\D/g, '')
+  const user = await prisma.user.findFirst({ where: { cpf: cpfDigits }, select: { id: true } })
+  if (!user) throw Object.assign(new Error('Usuário com este CPF não encontrado.'), { statusCode: 404 })
+  const staff = await EventStaffService.addStaff(eventId, req.user!.userId, { userId: user.id, role: data.role })
+
+  // Ao adicionar como SANGEUR, cria/ativa o acesso de sangeur automaticamente
+  if (data.role === 'SANGEUR') {
+    const sangeurResult = await EventSangeurService.enableEventSangeurAccess({
+      eventId,
+      hostId: req.user!.userId,
+      memberUserId: user.id,
+    })
+    return res.status(201).json({ ...staff, activationQrCode: sangeurResult.activationQrCode })
+  }
+
   res.status(201).json(staff)
 })
 
@@ -57,22 +73,3 @@ router.delete('/:staffId', authenticate, async (req: AuthRequest, res: Response)
 })
 
 // ─── Permission config (HOST only) ───────────────────────────────────────────
-
-// GET /events/:eventId/staff/permissions — retorna matriz completa
-router.get('/permissions', authenticate, async (req: AuthRequest, res: Response) => {
-  const { eventId } = req.params
-  await assertEventHost(req.user!.userId, eventId)
-  const matrix = await getEventPermissionMatrix(eventId)
-  res.json(matrix)
-})
-
-// PUT /events/:eventId/staff/permissions — atualiza uma célula da matriz
-router.put('/permissions', authenticate, async (req: AuthRequest, res: Response) => {
-  const { eventId } = req.params
-  await assertEventHost(req.user!.userId, eventId)
-  const { role, permission, allowed } = setPermissionSchema.parse(req.body)
-  await setEventPermission(eventId, role as EventStaffRole, permission, allowed)
-  res.json({ ok: true })
-})
-
-export default router

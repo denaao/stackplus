@@ -65,9 +65,8 @@ export async function removeStaff(eventId: string, staffId: string, requesterId:
 
   const staff = await prisma.eventStaff.findUnique({
     where: { id: staffId },
-    select: { id: true, eventId: true },
+    select: { id: true, eventId: true, userId: true, role: true },
   })
   if (!staff || staff.eventId !== eventId) throw new Error('Staff nao encontrado neste evento')
 
-  await prisma.eventStaff.delete({ where: { id: staffId } })
-}
+  // Se era SANGEUR, desativa o acess

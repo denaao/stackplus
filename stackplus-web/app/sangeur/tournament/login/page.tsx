@@ -13,6 +13,8 @@ export default function SangeurTournamentLoginPage() {
   const token = useSangeurAuthStore((s) => s.token)
   const sangeur = useSangeurAuthStore((s) => s.sangeur)
 
+  const usernameHint = searchParams.get('username') || ''
+
   const [form, setForm] = useState({
     eventId: searchParams.get('eventId') || '',
     cpf: '',
@@ -58,6 +60,13 @@ export default function SangeurTournamentLoginPage() {
         <div className="mb-8 text-center">
           <h1 className="text-4xl font-black tracking-tight text-sx-cyan">SANGEUR POS</h1>
           <p className="mt-2 text-sm text-sx-muted">Acesso operacional para torneios do evento</p>
+          {usernameHint && (
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-1.5"
+              style={{ background: 'rgba(0,200,224,0.08)', border: '1px solid rgba(0,200,224,0.2)' }}>
+              <span className="text-xs text-sx-muted">Fazendo login como</span>
+              <span className="text-xs font-bold text-sx-cyan">@{usernameHint}</span>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-sx-border bg-sx-card p-6">
@@ -102,19 +111,4 @@ export default function SangeurTournamentLoginPage() {
               value={form.password}
               onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
               placeholder="••••••"
-              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-sx-primary w-full text-sx-bg font-black py-3 rounded-xl text-sm tracking-widest uppercase"
-          >
-            {loading ? 'Entrando...' : 'Entrar na POS de Torneio'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
+              className="w-full

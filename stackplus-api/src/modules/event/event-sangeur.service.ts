@@ -15,8 +15,8 @@ function slugifyName(name: string): string {
 }
 
 async function buildLoginQrCode(eventId: string, username: string): Promise<string> {
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
-  const url = `${frontendUrl}/sangeur/login?eventId=${eventId}&username=${encodeURIComponent(username)}`
+  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').split(',')[0].trim()
+  const url = `${frontendUrl}/sangeur/tournament/login?eventId=${eventId}&username=${encodeURIComponent(username)}`
   return QRCode.toDataURL(url, { width: 300, margin: 2 })
 }
 
@@ -38,6 +38,18 @@ const ACCESS_SELECT = {
   updatedAt: true,
   user: { select: { id: true, name: true, email: true } },
 } as const
+
+export async function getLoginQr(eventId: string, requesterId: string, memberUserId: string) {
+  await assertEventHost(requesterId, eventId)
+  const access = await prisma.eventSangeurAccess.findUniqueOrThrow({
+    where: { eventId_userId: { eventId, userId: memberUserId } },
+    select: { username: true },
+  })
+  const qrCode = await buildLoginQrCode(eventId, access.username)
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+  const loginUrl = `${frontendUrl}/sangeur/tournament/login?eventId=${eventId}&username=${encodeURIComponent(access.username)}`
+  return { qrCode, loginUrl, username: access.username }
+}
 
 export async function listEventSangeurAccesses(eventId: string, requesterId: string) {
   await assertEventHost(requesterId, eventId)
@@ -128,23 +140,4 @@ export async function resetEventSangeurPassword(input: {
 }) {
   await assertEventHost(input.hostId, input.eventId)
 
-  const activationToken = randomBytes(32).toString('hex')
-  const activationTokenExpiresAt = new Date(Date.now() + 30 * 60 * 1000)
-  const placeholderHash = await hashPassword(randomBytes(32).toString('hex'))
-
-  const access = await prisma.eventSangeurAccess.update({
-    where: { eventId_userId: { eventId: input.eventId, userId: input.memberUserId } },
-    data: {
-      passwordHash: placeholderHash,
-      mustChangePassword: true,
-      isActive: false,
-      lastLoginAt: null,
-      activationToken,
-      activationTokenExpiresAt,
-    },
-    select: ACCESS_SELECT,
-  })
-
-  const activationQrCode = await buildActivationQrCode(activationToken)
-  return { access, activationToken, activationQrCode }
-}
+  const activationToken = randomB
