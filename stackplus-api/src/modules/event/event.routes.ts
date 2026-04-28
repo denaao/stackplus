@@ -229,4 +229,22 @@ router.post('/:id/sessions', authenticate, async (req: AuthRequest, res: Respons
 // ─── Torneios do evento ───────────────────────────────────────────────────────
 
 router.get('/:id/tournaments', authenticate, async (req: AuthRequest, res: Response) => {
-  const status = req.que
+  const status = (req.query.status as string | undefined)
+  const tournaments = await TournamentService.listTournamentsByEvent(
+    req.params.id,
+    status as any,
+  )
+  res.json(tournaments)
+})
+
+router.post('/:id/tournaments', authenticate, async (req: AuthRequest, res: Response) => {
+  const data = createTournamentSchema.parse(req.body)
+  const tournament = await TournamentService.createEventTournament({
+    eventId: req.params.id,
+    requesterId: req.user!.userId,
+    ...data,
+  })
+  res.status(201).json(tournament)
+})
+
+export default router

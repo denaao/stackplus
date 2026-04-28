@@ -140,4 +140,23 @@ export async function resetEventSangeurPassword(input: {
 }) {
   await assertEventHost(input.hostId, input.eventId)
 
-  const activationToken = randomB
+  const activationToken = randomBytes(32).toString('hex') // reset token
+  const activationTokenExpiresAt = new Date(Date.now() + 30 * 60 * 1000)
+  const placeholderHash = await hashPassword(randomBytes(32).toString('hex'))
+
+  const access = await prisma.eventSangeurAccess.update({
+    where: { eventId_userId: { eventId: input.eventId, userId: input.memberUserId } },
+    data: {
+      passwordHash: placeholderHash,
+      mustChangePassword: true,
+      isActive: false,
+      lastLoginAt: null,
+      activationToken,
+      activationTokenExpiresAt,
+    },
+    select: ACCESS_SELECT,
+  })
+
+  const activationQrCode = await buildActivationQrCode(activationToken)
+  return { access, activationToken, activationQrCode }
+}
