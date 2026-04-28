@@ -100,7 +100,7 @@ function refinePixAndPhone(
 // Usamos z.object flat + superRefine, igual ao loginSchema.
 
 const registerSchema = z.object({
-  documentType: z.enum(['CPF', 'PASSPORT']),
+  documentType: z.enum(['CPF', 'PASSPORT']).default('CPF'),
   // campos CPF
   cpf: z.string().trim().optional(),
   // campos PASSPORT
