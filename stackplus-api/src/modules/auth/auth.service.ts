@@ -335,4 +335,48 @@ export async function changeUserPassword(input: {
   const ok = await comparePassword(input.currentPassword, user.passwordHash)
   if (!ok) throw new Error('Senha atual inválida')
 
-  const newHash = await hashPassword(input.newPa
+  const newHash = await hashPassword(input.newPassword)
+  await prisma.user.update({
+    where: { id: input.userId },
+    data: { passwordHash: newHash },
+  })
+  return { success: true }
+}
+
+// changeSangeurPassword
+export async function changeSangeurPassword(input: {
+  userId: string
+  homeGameId: string
+  currentPassword: string
+  newPassword: string
+}) {
+  const access = await prisma.homeGameSangeurAccess.findUnique({
+    where: {
+      homeGameId_userId: {
+        homeGameId: input.homeGameId,
+        userId: input.userId,
+      },
+    },
+  })
+
+  if (!access || !access.isActive) throw new Error('Acesso SANGEUR não encontrado')
+
+  const valid = await comparePassword(input.currentPassword, access.passwordHash)
+  if (!valid) throw new Error('Senha atual inválida')
+
+  const newPasswordHash = await hashPassword(input.newPassword)
+  await prisma.homeGameSangeurAccess.update({
+    where: {
+      homeGameId_userId: {
+        homeGameId: input.homeGameId,
+        userId: input.userId,
+      },
+    },
+    data: {
+      passwordHash: newPasswordHash,
+      mustChangePassword: false,
+    },
+  })
+
+  return { success: true }
+}

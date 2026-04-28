@@ -14,4 +14,7 @@ router.post('/sangeur/event-login', loginLimiter, AuthController.loginEventSange
 router.get('/me', authenticate, AuthController.me)
 router.put('/me', authenticate, AuthController.updateMe)
 router.put('/password', passwordChangeLimiter, authenticate, AuthController.changePassword)
-router.put('/sangeur/password', passwordChangeLi
+router.put('/sangeur/password', passwordChangeLimiter, authenticate, AuthController.changeSangeurPassword)
+
+export default router
+
