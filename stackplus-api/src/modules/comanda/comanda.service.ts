@@ -1610,4 +1610,26 @@ export async function addComandaAdjustment({
   })
 }
 
-// ─── Helpers ───────────────────────────────────────�
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function isDebitType(type: ComandaItemType): boolean {
+  return [
+    'CASH_BUYIN',
+    'CASH_REBUY',
+    'CASH_ADDON',
+    'TOURNAMENT_BUYIN',
+    'TOURNAMENT_REBUY',
+    'TOURNAMENT_ADDON',
+    'TRANSFER_OUT',
+  ].includes(type)
+}
+
+function isPaymentType(type: ComandaItemType): boolean {
+  return [
+    'PAYMENT_PIX_SPOT',
+    'PAYMENT_PIX_TERM',
+    'PAYMENT_CASH',
+    'PAYMENT_CARD',
+  ].includes(type)
+}
