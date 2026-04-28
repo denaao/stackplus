@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import api from '@/services/api'
 import { useAuthStore } from '@/store/useStore'
@@ -85,6 +85,7 @@ export default function EventPage() {
   const [loading, setLoading] = useState(true)
   const [feedback, setFeedback] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const [transitioning, setTransitioning] = useState(false)
+  const [sangeurReloadKey, setSangeurReloadKey] = useState(0)
 
   useEffect(() => {
     async function load() {
@@ -302,10 +303,13 @@ export default function EventPage() {
         </div>
 
         {/* ── Staff ── */}
-        <StaffTab eventId={id} event={event} isHost={isHost} onUpdate={setEvent} />
+        <StaffTab
+          eventId={id} event={event} isHost={isHost} onUpdate={setEvent}
+          onSangeurAdded={() => setSangeurReloadKey((k) => k + 1)}
+        />
 
         {/* ── Sangeurs ── */}
-        {isHost && <SangeurSection eventId={id} />}
+        {isHost && <SangeurSection eventId={id} reloadKey={sangeurReloadKey} />}
       </main>
     </div>
   )
@@ -323,52 +327,105 @@ interface SangeurAccess {
   user: { id: string; name: string; email: string | null }
 }
 
-function SangeurSection({ eventId }: { eventId: string }) {
+function formatCpf(v: string) {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+}
+
+function useCpfLookup() {
+  const [cpf, setCpfRaw] = useState('')
+  const [foundUser, setFoundUser] = useState<{ id: string; name: string } | null>(null)
+  const [lookupState, setLookupState] = useState<'idle' | 'loading' | 'found' | 'not_found'>('idle')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const setCpf = useCallback((raw: string) => {
+    const formatted = formatCpf(raw)
+    setCpfRaw(formatted)
+    const digits = formatted.replace(/\D/g, '')
+
+    if (digits.length < 11) {
+      setFoundUser(null)
+      setLookupState('idle')
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      return
+    }
+
+    setLookupState('loading')
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get<{ id: string; name: string; cpf: string }[]>(
+          `/users/search?q=${digits}`
+        )
+        const exact = data.find((u) => u.cpf?.replace(/\D/g, '') === digits) ?? null
+        setFoundUser(exact)
+        setLookupState(exact ? 'found' : 'not_found')
+      } catch {
+        setFoundUser(null)
+        setLookupState('not_found')
+      }
+    }, 300)
+  }, [])
+
+  const reset = useCallback(() => {
+    setCpfRaw('')
+    setFoundUser(null)
+    setLookupState('idle')
+  }, [])
+
+  return { cpf, setCpf, foundUser, lookupState, reset }
+}
+
+function CpfLookupField({
+  cpf, setCpf, foundUser, lookupState, accentColor = '#00C8E0', borderFocus = 'focus:border-sx-cyan',
+}: {
+  cpf: string
+  setCpf: (v: string) => void
+  foundUser: { id: string; name: string } | null
+  lookupState: 'idle' | 'loading' | 'found' | 'not_found'
+  accentColor?: string
+  borderFocus?: string
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs text-sx-muted">CPF</label>
+      <input
+        type="text"
+        inputMode="numeric"
+        placeholder="000.000.000-00"
+        value={cpf}
+        onChange={(e) => setCpf(e.target.value)}
+        className={`w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm ${borderFocus} focus:outline-none`}
+      />
+      {lookupState === 'loading' && (
+        <p className="text-xs text-sx-muted">Buscando...</p>
+      )}
+      {lookupState === 'found' && foundUser && (
+        <p className="text-xs font-bold" style={{ color: accentColor }}>
+          ✓ {foundUser.name}
+        </p>
+      )}
+      {lookupState === 'not_found' && (
+        <p className="text-xs text-red-400">Nenhum usuário encontrado com este CPF.</p>
+      )}
+    </div>
+  )
+}
+
+function SangeurSection({ eventId, reloadKey }: { eventId: string; reloadKey?: number }) {
   const [accesses, setAccesses] = useState<SangeurAccess[]>([])
   const [loading, setLoading] = useState(true)
-  const [userId, setUserId] = useState('')
-  const [username, setUsername] = useState('')
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
   const [qrModal, setQrModal] = useState<{ title: string; qrCode: string; info?: string } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   useEffect(() => {
+    setLoading(true)
     api.get(`/events/${eventId}/sangeurs`)
       .then((r) => setAccesses(r.data))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [eventId])
-
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault()
-    if (!userId.trim()) { setError('Informe o ID do usuário.'); return }
-    setSaving(true); setError(null); setSuccess(null)
-    try {
-      const { data } = await api.post(`/events/${eventId}/sangeurs`, {
-        memberUserId: userId.trim(),
-        username: username.trim() || undefined,
-      })
-      setAccesses((prev) => {
-        const filtered = prev.filter((a) => a.userId !== data.access.userId)
-        return [data.access, ...filtered]
-      })
-      setUserId(''); setUsername('')
-      setSuccess(`${data.access.user.name} cadastrado como sangeur.`)
-      if (data.activationQrCode) {
-        setQrModal({
-          title: `Acesso: ${data.access.user.name}`,
-          qrCode: data.activationQrCode,
-          info: `Login: /sangeur/tournament/login?eventId=${eventId}`,
-        })
-      }
-    } catch (err) {
-      setError(getErrorMessage(err, 'Erro ao cadastrar sangeur.'))
-    } finally {
-      setSaving(false)
-    }
-  }
+  }, [eventId, reloadKey])
 
   async function handleToggle(access: SangeurAccess) {
     setActionLoading(access.userId)
@@ -380,6 +437,22 @@ function SangeurSection({ eventId }: { eventId: string }) {
       setAccesses((prev) => prev.map((a) => a.userId === access.userId ? data : a))
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao atualizar acesso.'))
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleShowLoginQr(access: SangeurAccess) {
+    setActionLoading(`qr-${access.userId}`)
+    try {
+      const { data } = await api.get(`/events/${eventId}/sangeurs/${access.userId}/login-qr`)
+      setQrModal({
+        title: `QR de login — ${access.user.name}`,
+        qrCode: data.qrCode,
+        info: `@${access.username}`,
+      })
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao gerar QR.'))
     } finally {
       setActionLoading(null)
     }
@@ -421,7 +494,6 @@ function SangeurSection({ eventId }: { eventId: string }) {
       </div>
 
       {error && <p className="text-xs text-red-300">{error}</p>}
-      {success && <p className="text-xs text-sx-cyan">{success}</p>}
 
       {/* List */}
       {loading ? (
@@ -452,6 +524,14 @@ function SangeurSection({ eventId }: { eventId: string }) {
                   {a.isActive ? 'Ativo' : 'Inativo'}
                 </span>
                 <button
+                  onClick={() => handleShowLoginQr(a)}
+                  disabled={actionLoading === `qr-${a.userId}`}
+                  className="text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40"
+                  style={{ background: 'rgba(0,200,224,0.06)', border: '1px solid rgba(0,200,224,0.15)', color: '#00C8E0' }}
+                >
+                  {actionLoading === `qr-${a.userId}` ? '...' : '📋 QR'}
+                </button>
+                <button
                   onClick={() => handleToggle(a)}
                   disabled={actionLoading === a.userId}
                   className="text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40"
@@ -463,7 +543,7 @@ function SangeurSection({ eventId }: { eventId: string }) {
                   onClick={() => handleResetPassword(a)}
                   disabled={actionLoading === `reset-${a.userId}`}
                   className="text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40"
-                  style={{ background: 'rgba(0,200,224,0.06)', border: '1px solid rgba(0,200,224,0.15)', color: '#00C8E0' }}
+                  style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)', color: '#93c5fd' }}
                 >
                   {actionLoading === `reset-${a.userId}` ? '...' : '🔑 Reset'}
                 </button>
@@ -472,44 +552,6 @@ function SangeurSection({ eventId }: { eventId: string }) {
           ))}
         </div>
       )}
-
-      {/* Add form */}
-      <form onSubmit={handleAdd} className="rounded-xl p-4 space-y-3"
-        style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,200,224,0.1)' }}>
-        <p className="text-xs uppercase tracking-widest text-sx-muted">Cadastrar sangeur</p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-xs text-sx-muted">ID do usuário</label>
-            <input
-              type="text"
-              placeholder="UUID do usuário"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none font-mono"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-sx-muted">Username (opcional)</label>
-            <input
-              type="text"
-              placeholder="Gerado automaticamente"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-cyan focus:outline-none"
-            />
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full rounded-xl py-2.5 text-sm font-black text-sx-bg disabled:opacity-50 transition-opacity"
-          style={{ background: 'linear-gradient(135deg, #00C8E0, #0077A8)' }}
-        >
-          {saving ? 'Cadastrando...' : 'Cadastrar Sangeur'}
-        </button>
-      </form>
 
       {/* QR Modal */}
       {qrModal && (
@@ -545,18 +587,20 @@ function SangeurSection({ eventId }: { eventId: string }) {
 
 // ─── Staff Tab ────────────────────────────────────────────────────────────────
 
-function StaffTab({ eventId, event, isHost, onUpdate }: {
+function StaffTab({ eventId, event, isHost, onUpdate, onSangeurAdded }: {
   eventId: string
   event: Event
   isHost: boolean
   onUpdate: (e: Event) => void
+  onSangeurAdded?: () => void
 }) {
-  const [userId, setUserId] = useState('')
+  const { cpf, setCpf, foundUser, lookupState, reset: resetCpf } = useCpfLookup()
   const [role, setRole] = useState<'HOST' | 'CASHIER' | 'DEALER' | 'SANGEUR' | 'TOURNAMENT_DIRECTOR' | 'CASH_DIRECTOR'>('CASHIER')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [qrModal, setQrModal] = useState<{ title: string; qrCode: string } | null>(null)
   const router = useRouter()
 
   const ROLE_LABEL: Record<string, string> = {
@@ -566,13 +610,17 @@ function StaffTab({ eventId, event, isHost, onUpdate }: {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-    if (!userId.trim()) { setError('Informe o ID do usuário.'); return }
+    if (!foundUser) { setError('Confirme o usuário pelo CPF antes de adicionar.'); return }
     setSaving(true); setError(null); setSuccess(null)
     try {
-      const { data } = await api.post(`/events/${eventId}/staff`, { userId: userId.trim(), role })
+      const { data } = await api.post(`/events/${eventId}/staff`, { cpf: cpf.replace(/\D/g, ''), role })
       onUpdate({ ...event, staff: [...event.staff, data] })
-      setUserId('')
+      resetCpf()
       setSuccess(`${data.user.name} adicionado como ${ROLE_LABEL[role]}.`)
+      if (data.activationQrCode) {
+        setQrModal({ title: `Acesso sangeur — ${data.user.name}`, qrCode: data.activationQrCode })
+        onSangeurAdded?.()
+      }
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao adicionar staff.'))
     } finally {
@@ -653,16 +701,11 @@ function StaffTab({ eventId, event, isHost, onUpdate }: {
           {error && <p className="text-xs text-red-300">{error}</p>}
           {success && <p className="text-xs text-sx-amber">{success}</p>}
 
-          <div className="space-y-1">
-            <label className="text-xs text-sx-muted">ID do usuário</label>
-            <input
-              type="text"
-              placeholder="UUID do usuário"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-3 py-2 text-sm focus:border-sx-amber focus:outline-none font-mono"
-            />
-          </div>
+          <CpfLookupField
+            cpf={cpf} setCpf={setCpf}
+            foundUser={foundUser} lookupState={lookupState}
+            accentColor="#F59E0B" borderFocus="focus:border-sx-amber"
+          />
 
           <div className="space-y-1">
             <label className="text-xs text-sx-muted">Cargo</label>
@@ -682,12 +725,41 @@ function StaffTab({ eventId, event, isHost, onUpdate }: {
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || !foundUser}
             className="w-full btn-event-primary rounded-xl py-2.5 text-sm font-black text-sx-bg disabled:opacity-50"
           >
-            {saving ? 'Adicionando...' : 'Adicionar'}
+            {saving ? 'Adicionando...' : `Adicionar${foundUser ? ` ${foundUser.name.split(' ')[0]}` : ''}`}
           </button>
         </form>
+      )}
+
+      {/* QR Modal — aparece ao adicionar sangeur */}
+      {qrModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.75)' }}
+          onClick={() => setQrModal(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-6 space-y-4"
+            style={{ background: 'linear-gradient(135deg, #1C1000 0%, #0F0800 100%)', border: '1px solid rgba(0,200,224,0.2)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-white text-center">{qrModal.title}</h3>
+            <div className="flex justify-center">
+              <img src={qrModal.qrCode} alt="QR Code" className="w-56 h-56 rounded-xl" />
+            </div>
+            <p className="text-xs text-sx-muted text-center">
+              Compartilhe este QR para que o sangeur acesse o sistema de torneio.
+            </p>
+            <button
+              onClick={() => setQrModal(null)}
+              className="w-full rounded-xl py-2.5 text-sm font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
