@@ -374,6 +374,128 @@ export default function SangeurTournamentPage() {
 
   if (!token || !sangeur?.eventId) return null
 
+  // ── Assinatura Modal (early return — funciona em qualquer view) ────────────
+  if (signatureModal && pendingVoucherBody) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-sx-bg">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-sx-border px-4 py-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-sx-muted">Autorização de compra — Voucher</p>
+            <p className="text-base font-black text-white">
+              {selectedCandidate?.name ?? selectedPlayer?.player.name ?? ''}
+            </p>
+            <p className="text-sm text-sx-cyan font-bold">{actionLabel(actionType)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setSignatureModal(false); setPendingVoucherBody(null) }}
+            className="rounded-lg border border-sx-border2 px-3 py-2 text-xs font-bold text-white/60"
+          >
+            Cancelar
+          </button>
+        </div>
+
+        {/* Instrução */}
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center">
+          <p className="text-sm font-bold text-amber-300">Assine abaixo para autorizar a transação</p>
+          <p className="text-xs text-amber-400/70 mt-0.5">Voucher</p>
+        </div>
+
+        {/* Canvas */}
+        <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-4">
+          <div
+            className="relative w-full max-w-[430px] rounded-xl border-2 border-dashed border-sx-border2 bg-sx-card overflow-hidden"
+            style={{ height: 220 }}
+          >
+            <canvas
+              ref={signatureCanvasRef}
+              width={800}
+              height={440}
+              style={{ width: '100%', height: '100%', touchAction: 'none', cursor: 'crosshair' }}
+              onPointerDown={(e) => {
+                const canvas = signatureCanvasRef.current
+                if (!canvas) return
+                isDrawingRef.current = true
+                const rect = canvas.getBoundingClientRect()
+                const scaleX = canvas.width / rect.width
+                const scaleY = canvas.height / rect.height
+                lastPosRef.current = {
+                  x: (e.clientX - rect.left) * scaleX,
+                  y: (e.clientY - rect.top) * scaleY,
+                }
+                canvas.setPointerCapture(e.pointerId)
+              }}
+              onPointerMove={(e) => {
+                if (!isDrawingRef.current) return
+                const canvas = signatureCanvasRef.current
+                if (!canvas || !lastPosRef.current) return
+                const ctx = canvas.getContext('2d')
+                if (!ctx) return
+                const rect = canvas.getBoundingClientRect()
+                const scaleX = canvas.width / rect.width
+                const scaleY = canvas.height / rect.height
+                const x = (e.clientX - rect.left) * scaleX
+                const y = (e.clientY - rect.top) * scaleY
+                ctx.beginPath()
+                ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y)
+                ctx.lineTo(x, y)
+                ctx.strokeStyle = '#00C8E0'
+                ctx.lineWidth = 3
+                ctx.lineCap = 'round'
+                ctx.lineJoin = 'round'
+                ctx.stroke()
+                lastPosRef.current = { x, y }
+                setHasSignature(true)
+              }}
+              onPointerUp={() => { isDrawingRef.current = false; lastPosRef.current = null }}
+            />
+            {!hasSignature && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <p className="text-sm text-sx-muted/50 select-none">Assine aqui</p>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const canvas = signatureCanvasRef.current
+              if (canvas) {
+                const ctx = canvas.getContext('2d')
+                ctx?.clearRect(0, 0, canvas.width, canvas.height)
+                setHasSignature(false)
+              }
+            }}
+            className="text-xs text-sx-muted hover:text-white/60 underline"
+          >
+            Limpar assinatura
+          </button>
+        </div>
+
+        {/* Confirmar */}
+        <div className="border-t border-sx-border px-4 py-4">
+          <button
+            type="button"
+            disabled={!hasSignature || loading}
+            onClick={async () => {
+              const canvas = signatureCanvasRef.current
+              if (!canvas) return
+              const signatureData = canvas.toDataURL('image/png')
+              const bodyWithSig = { ...pendingVoucherBody, signatureData }
+              setSignatureModal(false)
+              setPendingVoucherBody(null)
+              setHasSignature(false)
+              await submitTournamentSale(bodyWithSig)
+            }}
+            className="w-full rounded-xl bg-sx-cyan py-4 text-lg font-black text-sx-bg disabled:opacity-40"
+          >
+            {loading ? 'Registrando...' : 'Confirmar e registrar'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ── PIX Modal ──────────────────────────────────────────────────────────────
   if (pixModal) {
     const qr = (pixModal.qrCodeBase64 as string | undefined)
@@ -888,125 +1010,6 @@ export default function SangeurTournamentPage() {
         )}
       </div>
 
-      {/* ── Modal Assinatura — Voucher ─────────────────────────────────── */}
-      {signatureModal && pendingVoucherBody && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-sx-bg">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-sx-border px-4 py-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-sx-muted">Autorização de compra — Voucher</p>
-              <p className="text-base font-black text-white">
-                {selectedCandidate?.name ?? selectedPlayer?.player.name ?? ''}
-              </p>
-              <p className="text-sm text-sx-cyan font-bold">{actionLabel(actionType)}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => { setSignatureModal(false); setPendingVoucherBody(null) }}
-              className="rounded-lg border border-sx-border2 px-3 py-2 text-xs font-bold text-white/60"
-            >
-              Cancelar
-            </button>
-          </div>
-
-          {/* Instrução */}
-          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center">
-            <p className="text-sm font-bold text-amber-300">Assine abaixo para autorizar a transação</p>
-            <p className="text-xs text-amber-400/70 mt-0.5">Voucher</p>
-          </div>
-
-          {/* Canvas */}
-          <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-4">
-            <div
-              className="relative w-full max-w-[430px] rounded-xl border-2 border-dashed border-sx-border2 bg-sx-card overflow-hidden"
-              style={{ height: 220 }}
-            >
-              <canvas
-                ref={signatureCanvasRef}
-                width={800}
-                height={440}
-                style={{ width: '100%', height: '100%', touchAction: 'none', cursor: 'crosshair' }}
-                onPointerDown={(e) => {
-                  const canvas = signatureCanvasRef.current
-                  if (!canvas) return
-                  isDrawingRef.current = true
-                  const rect = canvas.getBoundingClientRect()
-                  const scaleX = canvas.width / rect.width
-                  const scaleY = canvas.height / rect.height
-                  lastPosRef.current = {
-                    x: (e.clientX - rect.left) * scaleX,
-                    y: (e.clientY - rect.top) * scaleY,
-                  }
-                  canvas.setPointerCapture(e.pointerId)
-                }}
-                onPointerMove={(e) => {
-                  if (!isDrawingRef.current) return
-                  const canvas = signatureCanvasRef.current
-                  if (!canvas || !lastPosRef.current) return
-                  const ctx = canvas.getContext('2d')
-                  if (!ctx) return
-                  const rect = canvas.getBoundingClientRect()
-                  const scaleX = canvas.width / rect.width
-                  const scaleY = canvas.height / rect.height
-                  const x = (e.clientX - rect.left) * scaleX
-                  const y = (e.clientY - rect.top) * scaleY
-                  ctx.beginPath()
-                  ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y)
-                  ctx.lineTo(x, y)
-                  ctx.strokeStyle = '#00C8E0'
-                  ctx.lineWidth = 3
-                  ctx.lineCap = 'round'
-                  ctx.lineJoin = 'round'
-                  ctx.stroke()
-                  lastPosRef.current = { x, y }
-                  setHasSignature(true)
-                }}
-                onPointerUp={() => { isDrawingRef.current = false; lastPosRef.current = null }}
-              />
-              {!hasSignature && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <p className="text-sm text-sx-muted/50 select-none">Assine aqui</p>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const canvas = signatureCanvasRef.current
-                if (canvas) {
-                  const ctx = canvas.getContext('2d')
-                  ctx?.clearRect(0, 0, canvas.width, canvas.height)
-                  setHasSignature(false)
-                }
-              }}
-              className="text-xs text-sx-muted hover:text-white/60 underline"
-            >
-              Limpar assinatura
-            </button>
-          </div>
-
-          {/* Confirmar */}
-          <div className="border-t border-sx-border px-4 py-4">
-            <button
-              type="button"
-              disabled={!hasSignature || loading}
-              onClick={async () => {
-                const canvas = signatureCanvasRef.current
-                if (!canvas || !pendingVoucherBody) return
-                const signatureData = canvas.toDataURL('image/png')
-                const bodyWithSig = { ...pendingVoucherBody, signatureData }
-                setSignatureModal(false)
-                setPendingVoucherBody(null)
-                setHasSignature(false)
-                await submitTournamentSale(bodyWithSig)
-              }}
-              className="w-full rounded-xl bg-sx-cyan py-4 text-lg font-black text-sx-bg disabled:opacity-40"
-            >
-              {loading ? 'Registrando...' : 'Confirmar e registrar'}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Confirm close modal */}
       {confirmClose && (
