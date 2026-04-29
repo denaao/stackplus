@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/services/api'
 import { useSangeurAuthStore } from '@/store/useStore'
@@ -142,6 +142,14 @@ export default function SangeurTournamentPage() {
   } | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
 
+  // ── Assinatura (voucher) ────────────────────────────────────────────────────
+  const [signatureModal, setSignatureModal] = useState(false)
+  const [pendingVoucherBody, setPendingVoucherBody] = useState<Record<string, unknown> | null>(null)
+  const [hasSignature, setHasSignature] = useState(false)
+  const signatureCanvasRef = useRef<HTMLCanvasElement>(null)
+  const isDrawingRef = useRef(false)
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null)
+
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!token || !sangeur?.eventId) {
@@ -227,28 +235,10 @@ export default function SangeurTournamentPage() {
     setView('action')
   }
 
-  async function handleRegisterSale() {
+  async function submitTournamentSale(body: Record<string, unknown>) {
     if (!shiftDetail || !tournamentDetail) return
-    clearMsg()
     setLoading(true)
     try {
-      const body: Record<string, unknown> = {
-        actionType,
-        paymentMethod,
-      }
-      if (actionType === 'BUYIN') {
-        const candidateId = selectedCandidate?.userId
-        if (!candidateId) { setError('Selecione o jogador'); setLoading(false); return }
-        body.playerId = candidateId
-        body.tournamentId = tournamentDetail.tournament.id
-        body.buyInType = buyInType
-      } else {
-        if (!selectedPlayer) { setError('Selecione o jogador'); setLoading(false); return }
-        body.tournamentPlayerId = selectedPlayer.id
-        if (actionType === 'REBUY') body.rebuyType = rebuyType
-        if (actionType === 'ADDON') body.withAddonTax = withAddonTax
-      }
-
       const { data } = await api.post(
         `/sangeur/tournament-shifts/${shiftDetail.id}/sales`,
         body,
@@ -259,13 +249,11 @@ export default function SangeurTournamentPage() {
       } else {
         setSuccess(`${actionLabel(actionType)} registrado — ${fmt(data.amount)}`)
         setView('tournament')
-        // Reload tournament players
         const { data: updated } = await api.get<TournamentDetail>(
           `/sangeur/tournament-shifts/${shiftDetail.id}/tournaments/${tournamentDetail.tournament.id}/players`
         )
         setTournamentDetail(updated)
       }
-      // Refresh shift totals
       const { data: updatedShift } = await api.get<ShiftDetail>(`/sangeur/tournament-shifts/${shiftDetail.id}`)
       setShiftDetail(updatedShift)
     } catch (err) {
@@ -273,6 +261,45 @@ export default function SangeurTournamentPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleRegisterSale() {
+    if (!shiftDetail || !tournamentDetail) return
+    clearMsg()
+
+    const body: Record<string, unknown> = {
+      actionType,
+      paymentMethod,
+    }
+    if (actionType === 'BUYIN') {
+      const candidateId = selectedCandidate?.userId
+      if (!candidateId) { setError('Selecione o jogador'); return }
+      body.playerId = candidateId
+      body.tournamentId = tournamentDetail.tournament.id
+      body.buyInType = buyInType
+    } else {
+      if (!selectedPlayer) { setError('Selecione o jogador'); return }
+      body.tournamentPlayerId = selectedPlayer.id
+      if (actionType === 'REBUY') body.rebuyType = rebuyType
+      if (actionType === 'ADDON') body.withAddonTax = withAddonTax
+    }
+
+    // Voucher: exige assinatura antes de efetivar
+    if (paymentMethod === 'VOUCHER') {
+      setPendingVoucherBody(body)
+      setHasSignature(false)
+      setSignatureModal(true)
+      setTimeout(() => {
+        const canvas = signatureCanvasRef.current
+        if (canvas) {
+          const ctx = canvas.getContext('2d')
+          ctx?.clearRect(0, 0, canvas.width, canvas.height)
+        }
+      }, 50)
+      return
+    }
+
+    await submitTournamentSale(body)
   }
 
   async function handleConfirmPix(saleId?: string) {
@@ -860,6 +887,126 @@ export default function SangeurTournamentPage() {
           </>
         )}
       </div>
+
+      {/* ── Modal Assinatura — Voucher ─────────────────────────────────── */}
+      {signatureModal && pendingVoucherBody && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-sx-bg">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-sx-border px-4 py-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-sx-muted">Autorização de compra — Voucher</p>
+              <p className="text-base font-black text-white">
+                {selectedCandidate?.name ?? selectedPlayer?.player.name ?? ''}
+              </p>
+              <p className="text-sm text-sx-cyan font-bold">{actionLabel(actionType)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setSignatureModal(false); setPendingVoucherBody(null) }}
+              className="rounded-lg border border-sx-border2 px-3 py-2 text-xs font-bold text-white/60"
+            >
+              Cancelar
+            </button>
+          </div>
+
+          {/* Instrução */}
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center">
+            <p className="text-sm font-bold text-amber-300">Assine abaixo para autorizar a transação</p>
+            <p className="text-xs text-amber-400/70 mt-0.5">Voucher</p>
+          </div>
+
+          {/* Canvas */}
+          <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 gap-4">
+            <div
+              className="relative w-full max-w-[430px] rounded-xl border-2 border-dashed border-sx-border2 bg-sx-card overflow-hidden"
+              style={{ height: 220 }}
+            >
+              <canvas
+                ref={signatureCanvasRef}
+                width={800}
+                height={440}
+                style={{ width: '100%', height: '100%', touchAction: 'none', cursor: 'crosshair' }}
+                onPointerDown={(e) => {
+                  const canvas = signatureCanvasRef.current
+                  if (!canvas) return
+                  isDrawingRef.current = true
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  lastPosRef.current = {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY,
+                  }
+                  canvas.setPointerCapture(e.pointerId)
+                }}
+                onPointerMove={(e) => {
+                  if (!isDrawingRef.current) return
+                  const canvas = signatureCanvasRef.current
+                  if (!canvas || !lastPosRef.current) return
+                  const ctx = canvas.getContext('2d')
+                  if (!ctx) return
+                  const rect = canvas.getBoundingClientRect()
+                  const scaleX = canvas.width / rect.width
+                  const scaleY = canvas.height / rect.height
+                  const x = (e.clientX - rect.left) * scaleX
+                  const y = (e.clientY - rect.top) * scaleY
+                  ctx.beginPath()
+                  ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y)
+                  ctx.lineTo(x, y)
+                  ctx.strokeStyle = '#00C8E0'
+                  ctx.lineWidth = 3
+                  ctx.lineCap = 'round'
+                  ctx.lineJoin = 'round'
+                  ctx.stroke()
+                  lastPosRef.current = { x, y }
+                  setHasSignature(true)
+                }}
+                onPointerUp={() => { isDrawingRef.current = false; lastPosRef.current = null }}
+              />
+              {!hasSignature && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <p className="text-sm text-sx-muted/50 select-none">Assine aqui</p>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const canvas = signatureCanvasRef.current
+                if (canvas) {
+                  const ctx = canvas.getContext('2d')
+                  ctx?.clearRect(0, 0, canvas.width, canvas.height)
+                  setHasSignature(false)
+                }
+              }}
+              className="text-xs text-sx-muted hover:text-white/60 underline"
+            >
+              Limpar assinatura
+            </button>
+          </div>
+
+          {/* Confirmar */}
+          <div className="border-t border-sx-border px-4 py-4">
+            <button
+              type="button"
+              disabled={!hasSignature || loading}
+              onClick={async () => {
+                const canvas = signatureCanvasRef.current
+                if (!canvas || !pendingVoucherBody) return
+                const signatureData = canvas.toDataURL('image/png')
+                const bodyWithSig = { ...pendingVoucherBody, signatureData }
+                setSignatureModal(false)
+                setPendingVoucherBody(null)
+                setHasSignature(false)
+                await submitTournamentSale(bodyWithSig)
+              }}
+              className="w-full rounded-xl bg-sx-cyan py-4 text-lg font-black text-sx-bg disabled:opacity-40"
+            >
+              {loading ? 'Registrando...' : 'Confirmar e registrar'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Confirm close modal */}
       {confirmClose && (
