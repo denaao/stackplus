@@ -588,8 +588,8 @@ export default function SangeurTournamentPage() {
             <div className="space-y-2">
               <div className="text-xs text-white/40 uppercase tracking-widest">Inscritos</div>
               {filteredPlayers.map((p) => {
-                const hasActions = (t.canRebuy && p.status === 'ACTIVE') ||
-                  (t.canAddon && !p.hasAddon && p.status !== 'ELIMINATED' && p.status !== 'WINNER')
+                const isOut = p.status === 'ELIMINATED' || p.status === 'WINNER'
+                const hasActions = (t.canRebuy && !isOut) || (t.canAddon && !p.hasAddon && !isOut)
                 return (
                   <button
                     key={p.id}
@@ -676,30 +676,36 @@ export default function SangeurTournamentPage() {
                   </button>
                 )}
 
-                {actionSheet.player && t.canRebuy && actionSheet.player.status === 'ACTIVE' && (
-                  <button
-                    onClick={() => { setActionSheet(null); startAction('REBUY', actionSheet.player!) }}
-                    className="w-full rounded-xl py-3.5 text-sm font-bold bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 transition-colors"
-                  >
-                    Rebuy
-                  </button>
-                )}
-
-                {actionSheet.player && t.canAddon && !actionSheet.player.hasAddon &&
-                  actionSheet.player.status !== 'ELIMINATED' && actionSheet.player.status !== 'WINNER' && (
-                  <button
-                    onClick={() => { setActionSheet(null); startAction('ADDON', actionSheet.player!) }}
-                    className="w-full rounded-xl py-3.5 text-sm font-bold bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-colors"
-                  >
-                    Add-on
-                  </button>
-                )}
-
-                {actionSheet.player &&
-                  !t.canRebuy &&
-                  !(t.canAddon && !actionSheet.player.hasAddon && actionSheet.player.status !== 'ELIMINATED' && actionSheet.player.status !== 'WINNER') && (
-                  <p className="text-center text-sm text-white/30 py-2">Sem ações disponíveis para este jogador</p>
-                )}
+                {actionSheet.player && (() => {
+                  const p = actionSheet.player
+                  const isOut = p.status === 'ELIMINATED' || p.status === 'WINNER'
+                  const showRebuy = t.canRebuy && !isOut
+                  const showAddon = t.canAddon && !p.hasAddon && !isOut
+                  const hasAny = showRebuy || showAddon
+                  return (
+                    <>
+                      {showRebuy && (
+                        <button
+                          onClick={() => { setActionSheet(null); startAction('REBUY', p) }}
+                          className="w-full rounded-xl py-3.5 text-sm font-bold bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 transition-colors"
+                        >
+                          Rebuy
+                        </button>
+                      )}
+                      {showAddon && (
+                        <button
+                          onClick={() => { setActionSheet(null); startAction('ADDON', p) }}
+                          className="w-full rounded-xl py-3.5 text-sm font-bold bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-colors"
+                        >
+                          Add-on
+                        </button>
+                      )}
+                      {!hasAny && (
+                        <p className="text-center text-sm text-white/30 py-2">Sem ações disponíveis para este jogador</p>
+                      )}
+                    </>
+                  )
+                })()}
 
                 <button
                   onClick={() => setActionSheet(null)}
