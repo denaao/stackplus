@@ -111,4 +111,19 @@ export default function SangeurTournamentLoginPage() {
               value={form.password}
               onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
               placeholder="••••••"
-              className="w-full
+              className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-3 text-sm focus:border-sx-cyan focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-sx-primary w-full text-sx-bg font-black py-3 rounded-xl text-sm tracking-widest uppercase"
+          >
+            {loading ? 'Entrando...' : 'Entrar na POS de Torneio'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
