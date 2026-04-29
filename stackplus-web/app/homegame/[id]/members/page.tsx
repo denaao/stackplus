@@ -110,6 +110,7 @@ export default function HomeGameMembersPage() {
     <div className="min-h-screen bg-sx-bg text-white">
       {confirmDialog}
       <AppHeader
+        module="Home Game"
         title="Membros do Home Game"
         onBack={() => router.push(`/homegame/${id}/select`)}
         userName={user?.name}

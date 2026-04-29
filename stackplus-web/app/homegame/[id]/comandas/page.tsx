@@ -71,6 +71,7 @@ export default function ComandasPage() {
   return (
     <div className="min-h-screen bg-sx-bg text-white">
       <AppHeader
+        module="Home Game"
         title="Comandas"
         onBack={() => router.back()}
         userName={user?.name}

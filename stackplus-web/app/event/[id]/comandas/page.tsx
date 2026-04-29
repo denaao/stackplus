@@ -74,6 +74,7 @@ export default function EventComandasPage() {
   return (
     <div className="min-h-screen bg-sx-bg text-white">
       <AppHeader
+        module="Eventos"
         title="Comandas"
         onBack={() => router.push(`/event/${eventId}`)}
         userName={user?.name}

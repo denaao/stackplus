@@ -412,6 +412,7 @@ export default function ManualPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#050D15', color: '#fff' }}>
       <AppHeader
+        module="Home Game"
         title="Manual de Uso"
         onBack={() => router.push(`/homegame/${id}/select`)}
         userName={user?.name}

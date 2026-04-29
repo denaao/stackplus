@@ -235,6 +235,7 @@ export default function DailyClosePage() {
     return (
       <div className="min-h-screen bg-sx-bg">
         <AppHeader
+          module="Eventos"
           title="Fechamento Diário"
           onBack={() => setViewingClose(null)}
           userName={user?.name}
@@ -321,6 +322,7 @@ export default function DailyClosePage() {
   return (
     <div className="min-h-screen bg-sx-bg">
       <AppHeader
+        module="Eventos"
         title="Fechamento Diário"
         onBack={() => router.push(`/event/${eventId}`)}
         userName={user?.name}

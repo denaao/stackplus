@@ -102,6 +102,7 @@ export default function EventPermissionsPage() {
   return (
     <div className="min-h-screen bg-sx-bg text-white">
       <AppHeader
+        module="Eventos"
         title="Permissões"
         onBack={() => router.push(`/event/${eventId}`)}
         userName={user?.name}

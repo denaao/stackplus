@@ -79,6 +79,7 @@ export default function TournamentsListPage() {
   return (
     <div className="min-h-screen">
       <AppHeader
+        module="Home Game"
         onBack={() => router.push(`/homegame/${id}/select`)}
         userName={user?.name}
         onLogout={handleLogout}

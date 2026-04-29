@@ -53,6 +53,7 @@ export default function HomeGameSelectPage() {
   return (
     <div className="min-h-screen">
       <AppHeader
+        module="Home Game"
         onBack={() => router.push('/dashboard')}
         userName={user?.name}
         onLogout={handleLogout}

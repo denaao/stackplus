@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 
 interface AppHeaderProps {
   title?: string
+  module?: string
   onBack?: () => void
   rightSlot?: React.ReactNode
   userName?: string
@@ -14,6 +15,7 @@ interface AppHeaderProps {
 
 export default function AppHeader({
   title,
+  module: moduleName,
   onBack,
   rightSlot,
   userName,
@@ -49,15 +51,36 @@ export default function AppHeader({
           >
             STACK+
           </span>
-          <Image
-            src="/sx-poker-logo.png"
-            alt="SX Poker"
-            width={54}
-            height={12}
-            className="object-contain hidden sm:block"
-            style={{ opacity: 0.75 }}
-            priority
-          />
+          <div className="hidden sm:flex items-center gap-1.5">
+            {moduleName && (
+              <span className="text-[10px] font-semibold text-white/50 uppercase tracking-widest leading-none">
+                {moduleName}
+              </span>
+            )}
+            {moduleName && (
+              <span className="text-white/20 text-[10px] leading-none">·</span>
+            )}
+            <Image
+              src="/sx-poker-logo.png"
+              alt="SX Poker"
+              width={54}
+              height={12}
+              className="object-contain"
+              style={{ opacity: 0.75 }}
+              priority
+            />
+          </div>
+          {!moduleName && (
+            <Image
+              src="/sx-poker-logo.png"
+              alt="SX Poker"
+              width={54}
+              height={12}
+              className="object-contain hidden sm:block"
+              style={{ opacity: 0.75 }}
+              priority
+            />
+          )}
         </div>
 
         {/* Separator + Title */}

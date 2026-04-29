@@ -52,6 +52,7 @@ export default function CreateEventPage() {
   return (
     <div className="min-h-screen bg-sx-bg">
       <AppHeader
+        module="Eventos"
         title="Novo Evento"
         onBack={() => router.push('/dashboard')}
         userName={user?.name}

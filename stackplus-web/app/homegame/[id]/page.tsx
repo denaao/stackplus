@@ -315,6 +315,7 @@ export default function HomeGamePage() {
   return (
     <div className="min-h-screen bg-sx-bg">
       <AppHeader
+        module="Home Game"
         title={game.name}
         onBack={() => router.push(`/homegame/${id}/select`)}
         userName={user?.name}
