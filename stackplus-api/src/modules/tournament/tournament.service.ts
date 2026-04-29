@@ -324,6 +324,7 @@ export async function registerPlayer({
   eventId,
   registeredByUserId,
   buyInType = 'NORMAL',
+  paymentMethod,
 }: {
   tournamentId: string
   playerId: string
@@ -331,6 +332,7 @@ export async function registerPlayer({
   eventId?: string
   registeredByUserId: string
   buyInType?: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
+  paymentMethod?: 'CASH' | 'CARD' | 'PIX' | 'VOUCHER'
 }) {
   if (!homeGameId && !eventId) throw new Error('homeGameId ou eventId e obrigatorio')
   const tournament = await db.tournament.findUniqueOrThrow({
@@ -439,6 +441,35 @@ export async function registerPlayer({
       where: { id: comanda!.id },
       data: { balance: { decrement: totalCharge } },
     })
+
+    // Se o método de pagamento foi informado, registra o crédito na comanda imediatamente.
+    // Isso zera o saldo do jogador (débito buy-in + crédito pagamento = 0).
+    if (paymentMethod) {
+      const paymentItemType =
+        paymentMethod === 'PIX' ? 'PAYMENT_PIX_SPOT'
+        : paymentMethod === 'CARD' ? 'PAYMENT_CARD'
+        : 'PAYMENT_CASH'  // CASH e VOUCHER usam PAYMENT_CASH
+      const paymentDesc =
+        paymentMethod === 'VOUCHER' ? 'Vale'
+        : paymentMethod === 'PIX' ? null
+        : null
+
+      await tx.comandaItem.create({
+        data: {
+          comandaId: comanda!.id,
+          type: paymentItemType,
+          amount: totalCharge,
+          description: paymentDesc,
+          paymentStatus: 'PAID',  // sempre PAID — o operador está confirmando recebimento
+          createdByUserId: registeredByUserId,
+        },
+      })
+
+      await tx.comanda.update({
+        where: { id: comanda!.id },
+        data: { balance: { increment: totalCharge } },
+      })
+    }
 
     await tx.tournament.update({
       where: { id: tournamentId },

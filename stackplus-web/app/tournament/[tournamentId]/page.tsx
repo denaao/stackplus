@@ -182,6 +182,8 @@ export default function TournamentPage() {
   const [showRegister, setShowRegister] = useState(false)
   const [registerBuyInType, setRegisterBuyInType] = useState<'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE' | null>(null)
   const [registerSelectedPlayer, setRegisterSelectedPlayer] = useState<{id: string, name: string} | null>(null)
+  const [registerPaymentStep, setRegisterPaymentStep] = useState(false)
+  const [registerPaymentMethod, setRegisterPaymentMethod] = useState<'PIX' | 'CASH' | 'CARD' | 'VOUCHER' | null>(null)
   const [editingBlinds, setEditingBlinds] = useState(false)
   const [editLevels, setEditLevels] = useState<{ level: number; smallBlind: number; bigBlind: number; ante: number }[]>([])
   const [editBreaks, setEditBreaks] = useState<{ id: string; afterLevel: string; durationMinutes: string }[]>([])
@@ -248,15 +250,21 @@ export default function TournamentPage() {
   }
 
   const registerPlayer = async () => {
-    if (!registerSelectedPlayer) return
+    if (!registerSelectedPlayer || !registerPaymentMethod) return
     setRegisteringPlayerId(registerSelectedPlayer.id)
     await action(async () => {
       const name = registerSelectedPlayer.name
       await api.post(`/tournaments/${tournamentId}/players`, {
         playerId: registerSelectedPlayer.id,
         buyInType: registerBuyInType ?? 'NORMAL',
+        paymentMethod: registerPaymentMethod,
       })
-      setRegisterSelectedPlayer(null); setRegisterBuyInType(null); setCpfInput(''); setCpfSearchResults([])
+      setRegisterSelectedPlayer(null)
+      setRegisterBuyInType(null)
+      setRegisterPaymentStep(false)
+      setRegisterPaymentMethod(null)
+      setCpfInput('')
+      setCpfSearchResults([])
       setRegisterSuccess(`${name} inscrito`)
       setTimeout(() => setRegisterSuccess(null), 3000)
     }, 'register')
@@ -312,6 +320,8 @@ export default function TournamentPage() {
     setCpfSearching(false)
     setRegisterSelectedPlayer(null)
     setRegisterBuyInType(null)
+    setRegisterPaymentStep(false)
+    setRegisterPaymentMethod(null)
     setReEntrySelectedPlayer(null)
     setReEntryType('NORMAL')
     setReEntryWithAddon(false); setReEntryAddonWithTax(false)
@@ -790,6 +800,8 @@ export default function TournamentPage() {
                     onClick={() => {
                       setRegisterSelectedPlayer(null)
                       setRegisterBuyInType(null)
+                      setRegisterPaymentStep(false)
+                      setRegisterPaymentMethod(null)
                       setReEntrySelectedPlayer(null)
                       setReEntryType('NORMAL')
                       setReEntryWithAddon(false); setReEntryAddonWithTax(false)
@@ -1155,22 +1167,67 @@ export default function TournamentPage() {
                   </div>
                 )}
 
-                {/* Confirmar */}
-                <button
-                  onClick={registerPlayer}
-                  disabled={!!actionLoading}
-                  className="w-full py-3 rounded-xl font-semibold text-sm disabled:opacity-50 btn-sx-primary"
-                >
-                  {actionLoading === 'register' ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                      </svg>
-                      Inscrevendo...
-                    </span>
-                  ) : 'Confirmar Inscrição'}
-                </button>
+                {!registerPaymentStep ? (
+                  /* Step 2 → ir para pagamento */
+                  <button
+                    onClick={() => { setRegisterPaymentStep(true); setRegisterPaymentMethod(null) }}
+                    disabled={!!actionLoading}
+                    className="w-full py-3 rounded-xl font-semibold text-sm disabled:opacity-50 btn-sx-primary"
+                  >
+                    Escolher Pagamento →
+                  </button>
+                ) : (
+                  /* Step 3: selecionar forma de pagamento */
+                  <div className="space-y-3">
+                    <p className="text-xs text-sx-muted uppercase tracking-widest">Forma de pagamento</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { key: 'PIX',     label: 'PIX' },
+                        { key: 'CASH',    label: 'Dinheiro' },
+                        { key: 'CARD',    label: 'Cartão' },
+                        { key: 'VOUCHER', label: 'Vale' },
+                      ] as { key: 'PIX' | 'CASH' | 'CARD' | 'VOUCHER'; label: string }[]).map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setRegisterPaymentMethod(key)}
+                          className="py-3 rounded-xl text-sm font-semibold border transition-colors"
+                          style={registerPaymentMethod === key
+                            ? { background: 'rgba(0,200,224,0.18)', border: '1px solid rgba(0,200,224,0.6)', color: '#00C8E0' }
+                            : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }
+                          }
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => { setRegisterPaymentStep(false); setRegisterPaymentMethod(null) }}
+                        className="flex-1 py-3 rounded-xl text-sm font-semibold"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}
+                      >
+                        ← Voltar
+                      </button>
+                      <button
+                        onClick={registerPlayer}
+                        disabled={!registerPaymentMethod || !!actionLoading}
+                        className="flex-2 flex-1 py-3 rounded-xl font-semibold text-sm disabled:opacity-40 btn-sx-primary"
+                      >
+                        {actionLoading === 'register' ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                            </svg>
+                            Inscrevendo...
+                          </span>
+                        ) : 'Confirmar Inscrição'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

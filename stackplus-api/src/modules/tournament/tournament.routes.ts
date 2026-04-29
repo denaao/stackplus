@@ -237,6 +237,7 @@ router.post('/:tournamentId/players', async (req: AuthRequest, res: Response) =>
   const data = z.object({
     playerId: z.string().uuid(),
     buyInType: z.enum(['NORMAL', 'NORMAL_WITH_TAX', 'DOUBLE']).optional(),
+    paymentMethod: z.enum(['CASH', 'CARD', 'PIX', 'VOUCHER']).optional(),
     // homeGameId e eventId são opcionais — a rota resolve pelo torneio se ausentes
     homeGameId: z.string().uuid().optional(),
     eventId: z.string().uuid().optional(),
@@ -261,6 +262,7 @@ router.post('/:tournamentId/players', async (req: AuthRequest, res: Response) =>
     eventId,
     registeredByUserId: req.user!.userId,
     buyInType: data.buyInType ?? 'NORMAL',
+    paymentMethod: data.paymentMethod,
   })
   res.status(201).json(player)
 })
