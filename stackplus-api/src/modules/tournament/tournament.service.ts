@@ -526,14 +526,28 @@ export async function cancelRegistration({
   const prizeToRevert = baseCharged * (1 - rakeRate)
   const rakeToRevert = baseCharged * rakeRate
 
-  // Busca itens de pagamento vinculados ao tournamentPlayerId
-  // (CASH, CARD, PIX gerados no momento da inscrição ou via pix-charge)
-  const paymentItems = await db.comandaItem.findMany({
+  // Busca itens de pagamento vinculados a esta inscrição.
+  // Estratégia dupla:
+  //   1. Pelo tournamentPlayerId (registros novos, onde o vínculo foi salvo)
+  //   2. Fallback: mesma comanda + mesmo valor + sem tournamentPlayerId
+  //      (registros antigos criados antes do vínculo existir)
+  const paymentItemsByLink = await db.comandaItem.findMany({
     where: {
       tournamentPlayerId,
       type: { in: ['PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM'] },
     },
   })
+  const paymentItemsByFallback = paymentItemsByLink.length === 0
+    ? await db.comandaItem.findMany({
+        where: {
+          comandaId: tp.comandaId,
+          tournamentPlayerId: null,
+          type: { in: ['PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM'] },
+          amount: totalCharged,
+        },
+      })
+    : []
+  const paymentItems = [...paymentItemsByLink, ...paymentItemsByFallback]
   const paymentTotal = paymentItems.reduce((sum, i) => sum + Number(i.amount), 0)
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
