@@ -69,4 +69,13 @@ export async function removeStaff(eventId: string, staffId: string, requesterId:
   })
   if (!staff || staff.eventId !== eventId) throw new Error('Staff nao encontrado neste evento')
 
-  // Se era SANGEUR, desativa o acess
+  // Se era SANGEUR, desativa o acesso de sangeur automaticamente
+  if (staff.role === 'SANGEUR') {
+    await prisma.eventSangeurAccess.updateMany({
+      where: { eventId, userId: staff.userId },
+      data: { isActive: false },
+    })
+  }
+
+  await prisma.eventStaff.delete({ where: { id: staffId } })
+}
