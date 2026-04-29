@@ -229,11 +229,13 @@ export default function ComandaDetailPage() {
     return () => { cancelled = true; clearInterval(interval) }
   }, [pixChargeResult, pixPaidConfirmed, load])
 
-  // Abre a data mais recente por default quando a comanda carrega.
+  // Abre TODAS as datas por default quando a comanda carrega.
+  // Isso garante que o CARRY_IN/CARRY_OUT (criado na abertura, que pode ser de
+  // uma data anterior aos lançamentos) fique sempre visível.
   useEffect(() => {
     if (!comanda || comanda.items.length === 0) return
-    const firstDate = Object.keys(groupByDate(comanda.items))[0]
-    setOpenDates(prev => prev.size === 0 && firstDate ? new Set([firstDate]) : prev)
+    const allDates = new Set(Object.keys(groupByDate(comanda.items)))
+    setOpenDates(prev => prev.size === 0 ? allDates : prev)
   }, [comanda?.id])
 
   const toggleDate = (date: string) => {
