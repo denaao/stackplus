@@ -73,3 +73,22 @@ router.delete('/:staffId', authenticate, async (req: AuthRequest, res: Response)
 })
 
 // ─── Permission config (HOST only) ───────────────────────────────────────────
+
+// GET /events/:eventId/staff/permissions — retorna matriz completa
+router.get('/permissions', authenticate, async (req: AuthRequest, res: Response) => {
+  const { eventId } = req.params
+  await assertEventHost(req.user!.userId, eventId)
+  const matrix = await getEventPermissionMatrix(eventId)
+  res.json(matrix)
+})
+
+// PUT /events/:eventId/staff/permissions — atualiza uma célula da matriz
+router.put('/permissions', authenticate, async (req: AuthRequest, res: Response) => {
+  const { eventId } = req.params
+  await assertEventHost(req.user!.userId, eventId)
+  const { role, permission, allowed } = setPermissionSchema.parse(req.body)
+  await setEventPermission(eventId, role as EventStaffRole, permission, allowed)
+  res.json({ ok: true })
+})
+
+export default router
