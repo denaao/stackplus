@@ -130,6 +130,11 @@ export default function SangeurTournamentPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  const [actionSheet, setActionSheet] = useState<{
+    player?: TournamentPlayer
+    candidate?: Candidate
+  } | null>(null)
+
   const [pixModal, setPixModal] = useState<{
     qrCodeBase64?: string
     pixCopyPaste?: string
@@ -578,43 +583,37 @@ export default function SangeurTournamentPage() {
             className="w-full rounded-lg border border-sx-border2 bg-sx-input px-4 py-2.5 text-sm focus:border-sx-cyan focus:outline-none"
           />
 
-          {/* Registered players with actions */}
+          {/* Registered players — tap to open action sheet */}
           {filteredPlayers.length > 0 && (
             <div className="space-y-2">
               <div className="text-xs text-white/40 uppercase tracking-widest">Inscritos</div>
-              {filteredPlayers.map((p) => (
-                <div key={p.id} className="rounded-xl px-4 py-3" style={CARD_STYLE}>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-white truncate">{p.player.name}</div>
-                      <div className="text-xs text-sx-muted mt-0.5 space-x-2">
-                        {p.rebuysCount > 0 && <span>{p.rebuysCount} rebuy{p.rebuysCount > 1 ? 's' : ''}</span>}
-                        {p.hasAddon && <span>add-on ✓</span>}
-                        {p.status === 'ELIMINATED' && <span className="text-red-400">Eliminado</span>}
-                        {p.status === 'WINNER' && <span className="text-yellow-400">🏆 Vencedor</span>}
+              {filteredPlayers.map((p) => {
+                const hasActions = (t.canRebuy && p.status === 'ACTIVE') ||
+                  (t.canAddon && !p.hasAddon && p.status !== 'ELIMINATED' && p.status !== 'WINNER')
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setActionSheet({ player: p })}
+                    className="w-full text-left rounded-xl px-4 py-3 transition-all active:scale-[0.98]"
+                    style={{ ...CARD_STYLE, opacity: p.status === 'ELIMINATED' ? 0.55 : 1 }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-white truncate">{p.player.name}</div>
+                        <div className="text-xs text-sx-muted mt-0.5 flex flex-wrap gap-x-2">
+                          {p.rebuysCount > 0 && <span>{p.rebuysCount} rebuy{p.rebuysCount > 1 ? 's' : ''}</span>}
+                          {p.hasAddon && <span>add-on ✓</span>}
+                          {p.status === 'ELIMINATED' && <span className="text-red-400">Eliminado</span>}
+                          {p.status === 'WINNER' && <span className="text-yellow-400">🏆 Vencedor</span>}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      {t.canRebuy && p.status === 'ACTIVE' && (
-                        <button
-                          onClick={() => startAction('REBUY', p)}
-                          className="rounded-lg px-3 py-1.5 text-xs font-bold bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 transition-colors"
-                        >
-                          Rebuy
-                        </button>
-                      )}
-                      {t.canAddon && !p.hasAddon && p.status !== 'ELIMINATED' && p.status !== 'WINNER' && (
-                        <button
-                          onClick={() => startAction('ADDON', p)}
-                          className="rounded-lg px-3 py-1.5 text-xs font-bold bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-colors"
-                        >
-                          Add-on
-                        </button>
+                      {hasActions && (
+                        <span className="text-sx-cyan/50 text-lg shrink-0">›</span>
                       )}
                     </div>
-                  </div>
-                </div>
-              ))}
+                  </button>
+                )
+              })}
             </div>
           )}
 
@@ -623,21 +622,93 @@ export default function SangeurTournamentPage() {
             <div className="space-y-2">
               <div className="text-xs text-white/40 uppercase tracking-widest">Inscrever</div>
               {filteredCandidates.map((c) => (
-                <div key={c.userId} className="rounded-xl px-4 py-3 flex items-center justify-between" style={CARD_STYLE}>
+                <button
+                  key={c.userId}
+                  onClick={() => setActionSheet({ candidate: c })}
+                  className="w-full text-left rounded-xl px-4 py-3 flex items-center justify-between transition-all active:scale-[0.98]"
+                  style={CARD_STYLE}
+                >
                   <span className="text-sm text-white/70">{c.name}</span>
-                  <button
-                    onClick={() => startAction('BUYIN', undefined, c)}
-                    className="rounded-lg px-4 py-1.5 text-xs font-bold bg-sx-cyan/15 border border-sx-cyan/30 text-sx-cyan hover:bg-sx-cyan/25 transition-colors"
-                  >
-                    Buy-in
-                  </button>
-                </div>
+                  <span className="text-sx-cyan/50 text-lg">›</span>
+                </button>
               ))}
             </div>
           )}
 
           {filteredPlayers.length === 0 && filteredCandidates.length === 0 && (
             <p className="text-center text-sm text-white/30 py-8">Nenhum jogador encontrado</p>
+          )}
+
+          {/* ── Action Sheet ─────────────────────────────────────────────── */}
+          {actionSheet && tournamentDetail && (
+            <div
+              className="fixed inset-0 z-50 flex items-end justify-center"
+              style={{ background: 'rgba(0,0,0,0.6)' }}
+              onClick={() => setActionSheet(null)}
+            >
+              <div
+                className="w-full max-w-lg rounded-t-2xl p-5 space-y-3"
+                style={{ background: 'linear-gradient(180deg,#0C2438 0%,#071828 100%)', border: '1px solid rgba(0,200,224,0.2)', borderBottom: 'none' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Player name */}
+                <div className="pb-1">
+                  <p className="text-base font-bold text-white">
+                    {actionSheet.candidate?.name ?? actionSheet.player?.player.name}
+                  </p>
+                  {actionSheet.player && (
+                    <p className="text-xs text-sx-muted mt-0.5">
+                      {actionSheet.player.rebuysCount > 0 && `${actionSheet.player.rebuysCount} rebuy(s) · `}
+                      {actionSheet.player.hasAddon ? 'Add-on feito' : ''}
+                      {actionSheet.player.status === 'ELIMINATED' ? 'Eliminado' : ''}
+                      {actionSheet.player.status === 'WINNER' ? '🏆 Vencedor' : ''}
+                    </p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                {actionSheet.candidate && (
+                  <button
+                    onClick={() => { setActionSheet(null); startAction('BUYIN', undefined, actionSheet.candidate) }}
+                    className="w-full rounded-xl py-3.5 text-sm font-bold bg-sx-cyan/15 border border-sx-cyan/30 text-sx-cyan hover:bg-sx-cyan/25 transition-colors"
+                  >
+                    Buy-in
+                  </button>
+                )}
+
+                {actionSheet.player && t.canRebuy && actionSheet.player.status === 'ACTIVE' && (
+                  <button
+                    onClick={() => { setActionSheet(null); startAction('REBUY', actionSheet.player!) }}
+                    className="w-full rounded-xl py-3.5 text-sm font-bold bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 transition-colors"
+                  >
+                    Rebuy
+                  </button>
+                )}
+
+                {actionSheet.player && t.canAddon && !actionSheet.player.hasAddon &&
+                  actionSheet.player.status !== 'ELIMINATED' && actionSheet.player.status !== 'WINNER' && (
+                  <button
+                    onClick={() => { setActionSheet(null); startAction('ADDON', actionSheet.player!) }}
+                    className="w-full rounded-xl py-3.5 text-sm font-bold bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-colors"
+                  >
+                    Add-on
+                  </button>
+                )}
+
+                {actionSheet.player &&
+                  !t.canRebuy &&
+                  !(t.canAddon && !actionSheet.player.hasAddon && actionSheet.player.status !== 'ELIMINATED' && actionSheet.player.status !== 'WINNER') && (
+                  <p className="text-center text-sm text-white/30 py-2">Sem ações disponíveis para este jogador</p>
+                )}
+
+                <button
+                  onClick={() => setActionSheet(null)}
+                  className="w-full rounded-xl py-3 text-sm text-white/40 hover:text-white/60 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
