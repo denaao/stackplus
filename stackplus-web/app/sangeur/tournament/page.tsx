@@ -168,6 +168,13 @@ export default function SangeurTournamentPage() {
 
   useEffect(() => { loadHome() }, [loadHome])
 
+  // ── Auto-refresh: poll every 30s so novos torneios aparecem sem refresh manual
+  useEffect(() => {
+    if (!eventId) return
+    const interval = setInterval(() => { loadHome() }, 30_000)
+    return () => clearInterval(interval)
+  }, [eventId, loadHome])
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   function clearMsg() { setError(''); setSuccess('') }
 
@@ -655,12 +662,22 @@ export default function SangeurTournamentPage() {
               <div className="text-xs text-sx-muted truncate max-w-[200px]">{sangeur.eventName}</div>
             )}
           </div>
-          <button
-            onClick={() => { logoutSangeur(); router.push('/sangeur/tournament/login') }}
-            className="text-xs text-sx-muted hover:text-red-400 transition-colors"
-          >
-            Sair
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => loadHome()}
+              disabled={loadingHome}
+              className="text-xs text-sx-muted hover:text-sx-cyan transition-colors disabled:opacity-40"
+              title="Atualizar"
+            >
+              ↻
+            </button>
+            <button
+              onClick={() => { logoutSangeur(); router.push('/sangeur/tournament/login') }}
+              className="text-xs text-sx-muted hover:text-red-400 transition-colors"
+            >
+              Sair
+            </button>
+          </div>
         </div>
       </header>
 
@@ -752,7 +769,15 @@ export default function SangeurTournamentPage() {
               </div>
             ) : (
               !loadingHome && (
-                <p className="text-center text-sm text-white/30 py-8">Nenhum torneio ativo no momento</p>
+                <div className="text-center py-10 space-y-3">
+                  <p className="text-sm text-white/30">Nenhum torneio ativo no momento</p>
+                  <button
+                    onClick={() => loadHome()}
+                    className="text-xs text-sx-cyan/60 hover:text-sx-cyan transition-colors"
+                  >
+                    ↻ Atualizar
+                  </button>
+                </div>
               )
             )}
           </>
