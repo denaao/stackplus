@@ -775,10 +775,10 @@ export default function SangeurTournamentPage() {
             )}
           </div>
 
-          {/* Candidates (can buy-in) */}
-          {t.canLateReg && filteredCandidates.length > 0 && (
+          {/* Candidates (can buy-in) — só aparecem quando há busca ativa */}
+          {t.canLateReg && playerSearch.trim().length > 0 && filteredCandidates.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs text-white/40 uppercase tracking-widest">Disponíveis para buy-in</div>
+              <div className="text-xs text-white/40 uppercase tracking-widest">Buy-in</div>
               {filteredCandidates.map((c) => (
                 <button
                   key={c.userId}
