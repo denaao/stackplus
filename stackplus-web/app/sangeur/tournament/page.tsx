@@ -740,43 +740,45 @@ export default function SangeurTournamentPage() {
           />
 
           {/* Registered players — tap to open action sheet */}
-          {filteredPlayers.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs text-white/40 uppercase tracking-widest">Inscritos</div>
-              {filteredPlayers.map((p) => {
-                const isOut = p.status === 'ELIMINATED' || p.status === 'WINNER'
-                const hasActions = (t.canRebuy && !isOut) || (t.canAddon && !p.hasAddon && !isOut)
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => setActionSheet({ player: p })}
-                    className="w-full text-left rounded-xl px-4 py-3 transition-all active:scale-[0.98]"
-                    style={{ ...CARD_STYLE, opacity: p.status === 'ELIMINATED' ? 0.55 : 1 }}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-white truncate">{p.player.name}</div>
-                        <div className="text-xs text-sx-muted mt-0.5 flex flex-wrap gap-x-2">
-                          {p.rebuysCount > 0 && <span>{p.rebuysCount} rebuy{p.rebuysCount > 1 ? 's' : ''}</span>}
-                          {p.hasAddon && <span>add-on ✓</span>}
-                          {p.status === 'ELIMINATED' && <span className="text-red-400">Eliminado</span>}
-                          {p.status === 'WINNER' && <span className="text-yellow-400">🏆 Vencedor</span>}
-                        </div>
-                      </div>
-                      {hasActions && (
-                        <span className="text-sx-cyan/50 text-lg shrink-0">›</span>
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
+          <div className="space-y-2">
+            <div className="text-xs text-white/40 uppercase tracking-widest">
+              Inscritos{tournamentDetail.players.length > 0 ? ` · ${tournamentDetail.players.length}` : ''}
             </div>
-          )}
+            {filteredPlayers.length > 0 ? filteredPlayers.map((p) => {
+              const isOut = p.status === 'ELIMINATED' || p.status === 'WINNER'
+              const hasActions = (t.canRebuy && !isOut) || (t.canAddon && !p.hasAddon && !isOut)
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setActionSheet({ player: p })}
+                  className="w-full text-left rounded-xl px-4 py-3 transition-all active:scale-[0.98]"
+                  style={{ ...CARD_STYLE, opacity: p.status === 'ELIMINATED' ? 0.55 : 1 }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-white truncate">{p.player.name}</div>
+                      <div className="text-xs text-sx-muted mt-0.5 flex flex-wrap gap-x-2">
+                        {p.rebuysCount > 0 && <span>{p.rebuysCount} rebuy{p.rebuysCount > 1 ? 's' : ''}</span>}
+                        {p.hasAddon && <span>add-on ✓</span>}
+                        {p.status === 'ELIMINATED' && <span className="text-red-400">Eliminado</span>}
+                        {p.status === 'WINNER' && <span className="text-yellow-400">🏆 Vencedor</span>}
+                      </div>
+                    </div>
+                    {hasActions && (
+                      <span className="text-sx-cyan/50 text-lg shrink-0">›</span>
+                    )}
+                  </div>
+                </button>
+              )
+            }) : (
+              <p className="text-sm text-white/25 py-2 px-1">Nenhum jogador inscrito ainda</p>
+            )}
+          </div>
 
           {/* Candidates (can buy-in) */}
           {t.canLateReg && filteredCandidates.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs text-white/40 uppercase tracking-widest">Inscrever</div>
+              <div className="text-xs text-white/40 uppercase tracking-widest">Disponíveis para buy-in</div>
               {filteredCandidates.map((c) => (
                 <button
                   key={c.userId}
