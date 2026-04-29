@@ -184,6 +184,15 @@ export default function TournamentPage() {
   const [registerSelectedPlayer, setRegisterSelectedPlayer] = useState<{id: string, name: string} | null>(null)
   const [registerPaymentStep, setRegisterPaymentStep] = useState(false)
   const [registerPaymentMethod, setRegisterPaymentMethod] = useState<'PIX' | 'CASH' | 'CARD' | 'VOUCHER' | null>(null)
+  const [registerPixResult, setRegisterPixResult] = useState<{
+    qrCodeBase64: string | null
+    pixCopyPaste: string | null
+    amount: number
+    itemId: string
+    playerName: string
+  } | null>(null)
+  const [registerPixPaid, setRegisterPixPaid] = useState(false)
+  const [registerPixCopied, setRegisterPixCopied] = useState(false)
   const [editingBlinds, setEditingBlinds] = useState(false)
   const [editLevels, setEditLevels] = useState<{ level: number; smallBlind: number; bigBlind: number; ante: number }[]>([])
   const [editBreaks, setEditBreaks] = useState<{ id: string; afterLevel: string; durationMinutes: string }[]>([])
@@ -230,6 +239,26 @@ export default function TournamentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament?.status, load])
 
+  // Polling de status PIX na inscrição (a cada 3s enquanto aguardando pagamento)
+  useEffect(() => {
+    if (!registerPixResult || registerPixPaid) return
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const { data } = await api.get(`/comanda/items/${registerPixResult.itemId}/pix-status`)
+        if (cancelled) return
+        if (data.status === 'PAID') {
+          setRegisterPixPaid(true)
+          load()
+        }
+      } catch {
+        // silencioso — tenta novamente no próximo tick
+      }
+    }
+    const id = setInterval(poll, 3000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [registerPixResult, registerPixPaid, load])
+
   const action = async (fn: () => Promise<unknown>, key: string) => {
     setActionLoading(key)
     setError(null)
@@ -254,19 +283,44 @@ export default function TournamentPage() {
     setRegisteringPlayerId(registerSelectedPlayer.id)
     await action(async () => {
       const name = registerSelectedPlayer.name
-      await api.post(`/tournaments/${tournamentId}/players`, {
-        playerId: registerSelectedPlayer.id,
-        buyInType: registerBuyInType ?? 'NORMAL',
-        paymentMethod: registerPaymentMethod,
-      })
-      setRegisterSelectedPlayer(null)
-      setRegisterBuyInType(null)
-      setRegisterPaymentStep(false)
-      setRegisterPaymentMethod(null)
-      setCpfInput('')
-      setCpfSearchResults([])
-      setRegisterSuccess(`${name} inscrito`)
-      setTimeout(() => setRegisterSuccess(null), 3000)
+      const amount = calcRegisterAmount(registerBuyInType ?? 'NORMAL')
+
+      if (registerPaymentMethod === 'PIX') {
+        // PIX: registra sem paymentMethod → gera cobrança PIX → exibe QR
+        const { data: tpData } = await api.post(`/tournaments/${tournamentId}/players`, {
+          playerId: registerSelectedPlayer.id,
+          buyInType: registerBuyInType ?? 'NORMAL',
+        })
+        const comandaId: string = tpData.comandaItem.comandaId
+        const { data: pixData } = await api.post(`/comanda/${comandaId}/pix-charge`, {
+          amount,
+          kind: 'SPOT',
+        })
+        setRegisterPixResult({
+          qrCodeBase64: pixData.qrCodeBase64 ?? null,
+          pixCopyPaste: pixData.pixCopyPaste ?? null,
+          amount,
+          itemId: pixData.item.id,
+          playerName: name,
+        })
+        setRegisterPixPaid(false)
+        setRegisterPixCopied(false)
+        load()
+      } else {
+        await api.post(`/tournaments/${tournamentId}/players`, {
+          playerId: registerSelectedPlayer.id,
+          buyInType: registerBuyInType ?? 'NORMAL',
+          paymentMethod: registerPaymentMethod,
+        })
+        setRegisterSelectedPlayer(null)
+        setRegisterBuyInType(null)
+        setRegisterPaymentStep(false)
+        setRegisterPaymentMethod(null)
+        setCpfInput('')
+        setCpfSearchResults([])
+        setRegisterSuccess(`${name} inscrito`)
+        setTimeout(() => setRegisterSuccess(null), 3000)
+      }
     }, 'register')
     setRegisteringPlayerId(null)
   }
@@ -322,6 +376,9 @@ export default function TournamentPage() {
     setRegisterBuyInType(null)
     setRegisterPaymentStep(false)
     setRegisterPaymentMethod(null)
+    setRegisterPixResult(null)
+    setRegisterPixPaid(false)
+    setRegisterPixCopied(false)
     setReEntrySelectedPlayer(null)
     setReEntryType('NORMAL')
     setReEntryWithAddon(false); setReEntryAddonWithTax(false)
@@ -795,13 +852,16 @@ export default function TournamentPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {(registerSelectedPlayer || reEntrySelectedPlayer) && (
+                {(registerSelectedPlayer || reEntrySelectedPlayer) && !registerPixResult && (
                   <button
                     onClick={() => {
                       setRegisterSelectedPlayer(null)
                       setRegisterBuyInType(null)
                       setRegisterPaymentStep(false)
                       setRegisterPaymentMethod(null)
+                      setRegisterPixResult(null)
+                      setRegisterPixPaid(false)
+                      setRegisterPixCopied(false)
                       setReEntrySelectedPlayer(null)
                       setReEntryType('NORMAL')
                       setReEntryWithAddon(false); setReEntryAddonWithTax(false)
@@ -1167,7 +1227,78 @@ export default function TournamentPage() {
                   </div>
                 )}
 
-                {!registerPaymentStep ? (
+                {registerPixResult ? (
+                  /* Step 4: QR code PIX */
+                  <div className="space-y-3">
+                    {registerPixPaid ? (
+                      <div className="rounded-xl px-4 py-4 text-center space-y-2" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)' }}>
+                        <div className="text-2xl">✓</div>
+                        <p className="text-sm font-semibold text-green-400">{registerPixResult.playerName} inscrito — PIX confirmado!</p>
+                        <button
+                          type="button"
+                          onClick={closeRegisterModal}
+                          className="mt-2 w-full py-2 rounded-xl text-sm font-semibold btn-sx-primary"
+                        >
+                          Fechar
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 text-xs text-sx-muted">
+                          <div className="w-2 h-2 rounded-full bg-sx-cyan animate-pulse" />
+                          Aguardando pagamento PIX — {registerPixResult.playerName}
+                        </div>
+
+                        {registerPixResult.qrCodeBase64 && (
+                          <div className="rounded-lg bg-white p-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={registerPixResult.qrCodeBase64} alt="QR Code PIX" className="w-full h-auto" />
+                          </div>
+                        )}
+
+                        {registerPixResult.pixCopyPaste && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-white/40 uppercase tracking-wide">PIX Copia e Cola</p>
+                            <textarea
+                              readOnly
+                              value={registerPixResult.pixCopyPaste}
+                              className="w-full bg-sx-input border border-sx-border2 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono h-20 resize-none"
+                              onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (registerPixResult.pixCopyPaste) {
+                                  navigator.clipboard.writeText(registerPixResult.pixCopyPaste)
+                                  setRegisterPixCopied(true)
+                                  setTimeout(() => setRegisterPixCopied(false), 1500)
+                                }
+                              }}
+                              className="w-full rounded-lg border border-sx-cyan/40 bg-sx-cyan/10 hover:bg-sx-cyan/20 px-3 py-2 text-sm font-bold text-sx-cyan"
+                            >
+                              {registerPixCopied ? '✓ Copiado!' : 'Copiar PIX'}
+                            </button>
+                          </div>
+                        )}
+
+                        {!registerPixResult.qrCodeBase64 && !registerPixResult.pixCopyPaste && (
+                          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                            Cobrança gerada, mas QR/copia-e-cola não retornou. Verifique o extrato Annapay.
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={closeRegisterModal}
+                          className="w-full py-2 rounded-xl text-sm font-semibold"
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}
+                        >
+                          Fechar (aguardar depois)
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : !registerPaymentStep ? (
                   /* Step 2 → ir para pagamento */
                   <button
                     onClick={() => { setRegisterPaymentStep(true); setRegisterPaymentMethod(null) }}

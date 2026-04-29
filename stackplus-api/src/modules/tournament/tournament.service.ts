@@ -1426,33 +1426,4 @@ export async function createEventTournament(input: {
       minutesPerLevelPreLateReg: input.minutesPerLevelPreLateReg,
       minutesPerLevelPostLateReg: input.minutesPerLevelPostLateReg ?? null,
       blindTemplateName: input.blindTemplateName ?? null,
-      doubleBuyInBonusChips: input.doubleBuyInBonusChips ?? null,
-      doubleRebuyEnabled: input.doubleRebuyEnabled ?? false,
-      doubleRebuyBonusChips: input.doubleRebuyBonusChips ?? null,
-      staffRetentionPct: input.staffRetentionPct ?? null,
-      staffRetentionDest: input.staffRetentionDest ?? null,
-      rankingRetentionPct: input.rankingRetentionPct ?? null,
-      timeChipBonus: input.timeChipBonus ?? null,
-      timeChipUntilLevel: input.timeChipUntilLevel ?? null,
-      blindLevels: levels
-        ? {
-            create: levels.map((l) => ({
-              level: l.level,
-              smallBlind: l.smallBlind,
-              bigBlind: l.bigBlind,
-              ante: l.ante ?? 0,
-            })),
-          }
-        : undefined,
-      breaks: input.breaks ? JSON.stringify(input.breaks) : JSON.stringify([]),
-    },
-  })
-}
-
-export async function listTournamentsByEvent(eventId: string, status?: TournamentStatus) {
-  return db.tournament.findMany({
-    where: { eventId, ...(status ? { status } : {}) },
-    orderBy: { createdAt: 'desc' },
-    include: { _count: { select: { players: true } } },
-  })
-}
+      doubleBuyInBonusChips: input.doubleBuy
