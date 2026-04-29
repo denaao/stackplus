@@ -292,9 +292,11 @@ export default function TournamentPage() {
           buyInType: registerBuyInType ?? 'NORMAL',
         })
         const comandaId: string = tpData.comandaItem.comandaId
+        const tournamentPlayerId: string = tpData.id
         const { data: pixData } = await api.post(`/comanda/${comandaId}/pix-charge`, {
           amount,
           kind: 'SPOT',
+          tournamentPlayerId,
         })
         setRegisterPixResult({
           qrCodeBase64: pixData.qrCodeBase64 ?? null,

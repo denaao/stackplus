@@ -336,4 +336,10 @@ router.post('/players/:tournamentPlayerId/prize', async (req: AuthRequest, res: 
 
   await TournamentService.awardPrize({
     tournamentPlayerId: req.params.tournamentPlayerId,
-  
+    prizeAmount,
+    registeredByUserId: req.user!.userId,
+  })
+  res.json({ ok: true })
+})
+
+export default router

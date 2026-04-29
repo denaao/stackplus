@@ -461,6 +461,8 @@ export async function registerPlayer({
           amount: totalCharge,
           description: paymentDesc,
           paymentStatus: 'PAID',  // sempre PAID — o operador está confirmando recebimento
+          tournamentId,
+          tournamentPlayerId: tp.id,
           createdByUserId: registeredByUserId,
         },
       })
@@ -524,6 +526,16 @@ export async function cancelRegistration({
   const prizeToRevert = baseCharged * (1 - rakeRate)
   const rakeToRevert = baseCharged * rakeRate
 
+  // Busca itens de pagamento vinculados ao tournamentPlayerId
+  // (CASH, CARD, PIX gerados no momento da inscrição ou via pix-charge)
+  const paymentItems = await db.comandaItem.findMany({
+    where: {
+      tournamentPlayerId,
+      type: { in: ['PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM'] },
+    },
+  })
+  const paymentTotal = paymentItems.reduce((sum, i) => sum + Number(i.amount), 0)
+
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Estorna o buy-in na comanda
     if (buyInItem) {
@@ -532,6 +544,17 @@ export async function cancelRegistration({
         data: { balance: { increment: totalCharged } },
       })
       await tx.comandaItem.delete({ where: { id: buyInItem.id } })
+    }
+
+    // Estorna os itens de pagamento (créditos gerados no momento da inscrição)
+    if (paymentItems.length > 0) {
+      await tx.comanda.update({
+        where: { id: tp.comandaId },
+        data: { balance: { decrement: paymentTotal } },
+      })
+      await tx.comandaItem.deleteMany({
+        where: { id: { in: paymentItems.map((i) => i.id) } },
+      })
     }
 
     // Reverte prize pool, rake, taxa e fichas em jogo
@@ -1426,4 +1449,33 @@ export async function createEventTournament(input: {
       minutesPerLevelPreLateReg: input.minutesPerLevelPreLateReg,
       minutesPerLevelPostLateReg: input.minutesPerLevelPostLateReg ?? null,
       blindTemplateName: input.blindTemplateName ?? null,
-      doubleBuyInBonusChips: input.doubleBuy
+      doubleBuyInBonusChips: input.doubleBuyInBonusChips ?? null,
+      doubleRebuyEnabled: input.doubleRebuyEnabled ?? false,
+      doubleRebuyBonusChips: input.doubleRebuyBonusChips ?? null,
+      staffRetentionPct: input.staffRetentionPct ?? null,
+      staffRetentionDest: input.staffRetentionDest ?? null,
+      rankingRetentionPct: input.rankingRetentionPct ?? null,
+      timeChipBonus: input.timeChipBonus ?? null,
+      timeChipUntilLevel: input.timeChipUntilLevel ?? null,
+      blindLevels: levels
+        ? {
+            create: levels.map((l) => ({
+              level: l.level,
+              smallBlind: l.smallBlind,
+              bigBlind: l.bigBlind,
+              ante: l.ante ?? 0,
+            })),
+          }
+        : undefined,
+      breaks: input.breaks ? JSON.stringify(input.breaks) : JSON.stringify([]),
+    },
+  })
+}
+
+export async function listTournamentsByEvent(eventId: string, status?: TournamentStatus) {
+  return db.tournament.findMany({
+    where: { eventId, ...(status ? { status } : {}) },
+    orderBy: { createdAt: 'desc' },
+    include: { _count: { select: { players: true } } },
+  })
+}

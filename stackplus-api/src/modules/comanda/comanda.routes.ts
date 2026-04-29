@@ -187,12 +187,14 @@ router.post('/:comandaId/pix-charge', async (req: AuthRequest, res: Response) =>
   const data = z.object({
     amount: z.number().positive(),
     kind: z.enum(['SPOT', 'TERM']),
+    tournamentPlayerId: z.string().uuid().optional(),
   }).parse(req.body)
 
   const result = await ComandaService.generateComandaPixCharge({
     comandaId: req.params.comandaId,
     amount: data.amount,
     kind: data.kind,
+    tournamentPlayerId: data.tournamentPlayerId,
     createdByUserId: req.user!.userId,
   })
   res.status(201).json(result)

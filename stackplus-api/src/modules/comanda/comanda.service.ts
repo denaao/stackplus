@@ -455,11 +455,13 @@ export async function generateComandaPixCharge({
   comandaId,
   amount,
   kind,
+  tournamentPlayerId,
   createdByUserId,
 }: {
   comandaId: string
   amount: number
   kind: 'SPOT' | 'TERM'
+  tournamentPlayerId?: string
   createdByUserId: string
 }) {
   if (amount <= 0) throw new Error('Valor deve ser maior que zero')
@@ -504,6 +506,7 @@ export async function generateComandaPixCharge({
         paymentStatus: 'PENDING',
         paymentReference: cob.id ?? null,
         paymentVirtualAccount: cob.virtualAccount ?? null,
+        tournamentPlayerId: tournamentPlayerId ?? null,
         createdByUserId,
       },
     })
