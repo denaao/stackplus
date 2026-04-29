@@ -188,6 +188,13 @@ export default function SangeurTournamentPage() {
     return () => clearInterval(interval)
   }, [eventId, loadHome])
 
+  // ── Auto-limpa mensagens após 4s ───────────────────────────────────────────
+  useEffect(() => {
+    if (!success && !error) return
+    const t = setTimeout(() => { setSuccess(''); setError('') }, 4000)
+    return () => clearTimeout(t)
+  }, [success, error])
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   function clearMsg() { setError(''); setSuccess('') }
 
