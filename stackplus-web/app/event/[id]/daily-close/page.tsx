@@ -572,7 +572,7 @@ function ActiveClosePanel({
             <TotalCard label="Saídas" value={close.totalOut ? Number(close.totalOut).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'} negative />
           </div>
           {close.notes && (
-            <p className="text-xs text-sx-muted italic">"{close.notes}"</p>
+            <p className="text-xs text-sx-muted italic">&quot;{close.notes}&quot;</p>
           )}
           {close.closedBy && (
             <p className="text-xs text-sx-muted">
