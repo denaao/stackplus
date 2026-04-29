@@ -53,12 +53,12 @@ export default function AppHeader({
           </span>
           <div className="hidden sm:flex items-center gap-1.5">
             {moduleName && (
-              <span className="text-[10px] font-semibold text-white/50 uppercase tracking-widest leading-none">
-                {moduleName}
-              </span>
-            )}
-            {moduleName && (
-              <span className="text-white/20 text-[10px] leading-none">·</span>
+              <>
+                <span className="text-[10px] font-semibold text-white/50 uppercase tracking-widest leading-none">
+                  {moduleName}
+                </span>
+                <span className="text-white/20 text-[10px] leading-none">·</span>
+              </>
             )}
             <Image
               src="/sx-poker-logo.png"
@@ -70,17 +70,6 @@ export default function AppHeader({
               priority
             />
           </div>
-          {!moduleName && (
-            <Image
-              src="/sx-poker-logo.png"
-              alt="SX Poker"
-              width={54}
-              height={12}
-              className="object-contain hidden sm:block"
-              style={{ opacity: 0.75 }}
-              priority
-            />
-          )}
         </div>
 
         {/* Separator + Title */}
