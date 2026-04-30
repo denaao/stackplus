@@ -528,9 +528,8 @@ export async function cancelRegistration({
 
   // Busca itens de pagamento vinculados a esta inscrição.
   // Estratégia dupla:
-  //   1. Pelo tournamentPlayerId (registros novos, onde o vínculo foi salvo)
-  //   2. Fallback: mesma comanda + mesmo valor + sem tournamentPlayerId
-  //      (registros antigos criados antes do vínculo existir)
+  //   1. Pelo tournamentPlayerId (registros novos)
+  //   2. Fallback: mesma comanda + mesmo valor + sem tournamentPlayerId (registros antigos)
   const paymentItemsByLink = await db.comandaItem.findMany({
     where: {
       tournamentPlayerId,
@@ -548,10 +547,14 @@ export async function cancelRegistration({
       })
     : []
   const paymentItems = [...paymentItemsByLink, ...paymentItemsByFallback]
-  const paymentTotal = paymentItems.reduce((sum, i) => sum + Number(i.amount), 0)
+
+  // Itens PAID: dinheiro já recebido → mantém na comanda como crédito positivo (refund devido)
+  // Itens PENDING: ainda não pagos → deleta (nenhum dinheiro circulou)
+  const pendingPaymentItems = paymentItems.filter((i) => i.paymentStatus !== 'PAID')
+  const pendingTotal = pendingPaymentItems.reduce((sum, i) => sum + Number(i.amount), 0)
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    // Estorna o buy-in na comanda
+    // Remove o buy-in (debit) da comanda e reverte o saldo
     if (buyInItem) {
       await tx.comanda.update({
         where: { id: tp.comandaId },
@@ -560,14 +563,15 @@ export async function cancelRegistration({
       await tx.comandaItem.delete({ where: { id: buyInItem.id } })
     }
 
-    // Estorna os itens de pagamento (créditos gerados no momento da inscrição)
-    if (paymentItems.length > 0) {
+    // Remove apenas itens de pagamento PENDING (PIX não pago, etc.)
+    // Itens PAID ficam na comanda como crédito positivo — sinalizam que o host deve devolver o valor
+    if (pendingPaymentItems.length > 0) {
       await tx.comanda.update({
         where: { id: tp.comandaId },
-        data: { balance: { decrement: paymentTotal } },
+        data: { balance: { decrement: pendingTotal } },
       })
       await tx.comandaItem.deleteMany({
-        where: { id: { in: paymentItems.map((i) => i.id) } },
+        where: { id: { in: pendingPaymentItems.map((i) => i.id) } },
       })
     }
 
