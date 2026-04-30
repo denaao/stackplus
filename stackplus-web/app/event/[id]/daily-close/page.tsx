@@ -83,6 +83,7 @@ const TYPE_LABEL: Record<string, string> = {
   PAYMENT_PIX_SPOT: 'Pagamento PIX à vista',
   PAYMENT_PIX_TERM: 'Pagamento PIX a prazo',
   PAYMENT_CASH: 'Pagamento dinheiro',
+  PAYMENT_VOUCHER: 'Pagamento vale',
 }
 
 const IN_TYPES = new Set([

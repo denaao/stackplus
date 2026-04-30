@@ -325,6 +325,7 @@ export async function registerPlayer({
   registeredByUserId,
   buyInType = 'NORMAL',
   paymentMethod,
+  signatureData,
 }: {
   tournamentId: string
   playerId: string
@@ -333,6 +334,7 @@ export async function registerPlayer({
   registeredByUserId: string
   buyInType?: 'NORMAL' | 'NORMAL_WITH_TAX' | 'DOUBLE'
   paymentMethod?: 'CASH' | 'CARD' | 'PIX' | 'VOUCHER'
+  signatureData?: string
 }) {
   if (!homeGameId && !eventId) throw new Error('homeGameId ou eventId e obrigatorio')
   const tournament = await db.tournament.findUniqueOrThrow({
@@ -448,11 +450,9 @@ export async function registerPlayer({
       const paymentItemType =
         paymentMethod === 'PIX' ? 'PAYMENT_PIX_SPOT'
         : paymentMethod === 'CARD' ? 'PAYMENT_CARD'
-        : 'PAYMENT_CASH'  // CASH e VOUCHER usam PAYMENT_CASH
-      const paymentDesc =
-        paymentMethod === 'VOUCHER' ? 'Vale'
-        : paymentMethod === 'PIX' ? null
-        : null
+        : paymentMethod === 'VOUCHER' ? 'PAYMENT_VOUCHER'
+        : 'PAYMENT_CASH'
+      const paymentDesc: string | null = null
 
       await tx.comandaItem.create({
         data: {
@@ -463,6 +463,7 @@ export async function registerPlayer({
           paymentStatus: 'PAID',  // sempre PAID — o operador está confirmando recebimento
           tournamentId,
           tournamentPlayerId: tp.id,
+          ...(signatureData ? { signatureData } : {}),
           createdByUserId: registeredByUserId,
         },
       })
@@ -533,7 +534,7 @@ export async function cancelRegistration({
   const paymentItemsByLink = await db.comandaItem.findMany({
     where: {
       tournamentPlayerId,
-      type: { in: ['PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM'] },
+      type: { in: ['PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_VOUCHER', 'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM'] },
     },
   })
   const paymentItemsByFallback = paymentItemsByLink.length === 0
@@ -541,7 +542,7 @@ export async function cancelRegistration({
         where: {
           comandaId: tp.comandaId,
           tournamentPlayerId: null,
-          type: { in: ['PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM'] },
+          type: { in: ['PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_VOUCHER', 'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM'] },
           amount: totalCharged,
         },
       })

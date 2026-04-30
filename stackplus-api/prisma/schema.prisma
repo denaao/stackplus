@@ -80,6 +80,7 @@ enum ComandaItemType {
   PAYMENT_PIX_TERM
   PAYMENT_CASH
   PAYMENT_CARD
+  PAYMENT_VOUCHER
   TRANSFER_IN
   TRANSFER_OUT
   CARRY_IN
@@ -1105,5 +1106,6 @@ model EventSangeurAccess {
   @@unique([eventId, userId])
   @@unique([eventId, username])
   @@index([eventId])
+
   @@index([userId])
 }

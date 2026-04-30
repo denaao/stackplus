@@ -54,6 +54,7 @@ const typeLabel: Record<string, string> = {
   PAYMENT_PIX_TERM: 'PIX 24h',
   PAYMENT_CASH: 'Pagamento dinheiro',
   PAYMENT_CARD: 'Pagamento cartão',
+  PAYMENT_VOUCHER: 'Pagamento vale',
   TRANSFER_IN: 'Transferência recebida',
   TRANSFER_OUT: 'Transferência enviada',
   CARRY_IN: 'Saldo transportado (crédito)',
@@ -66,7 +67,7 @@ const typeLabel: Record<string, string> = {
 
 const typeIsCredit = (t: string) => [
   'CASH_CASHOUT', 'TOURNAMENT_BOUNTY_RECEIVED', 'TOURNAMENT_PRIZE',
-  'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'PAYMENT_CASH', 'PAYMENT_CARD',
+  'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_VOUCHER',
   'TRANSFER_IN', 'CARRY_IN',
   'STAFF_CAIXINHA', 'STAFF_RAKEBACK',
   'MANUAL_CREDIT',

@@ -136,7 +136,7 @@ router.post('/:comandaId/items', async (req: AuthRequest, res: Response) => {
       'CASH_BUYIN', 'CASH_REBUY', 'CASH_ADDON', 'CASH_CASHOUT',
       'TOURNAMENT_BUYIN', 'TOURNAMENT_REBUY', 'TOURNAMENT_ADDON',
       'TOURNAMENT_BOUNTY_RECEIVED', 'TOURNAMENT_PRIZE',
-      'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'PAYMENT_CASH', 'PAYMENT_CARD',
+      'PAYMENT_PIX_SPOT', 'PAYMENT_PIX_TERM', 'PAYMENT_CASH', 'PAYMENT_CARD', 'PAYMENT_VOUCHER',
       'TRANSFER_IN', 'TRANSFER_OUT',
     ]),
     amount: z.number().positive(),

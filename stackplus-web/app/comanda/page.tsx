@@ -65,6 +65,7 @@ interface CashboxReport {
 const PAYMENT_TYPE_LABEL: Record<string, string> = {
   PAYMENT_CASH: 'Dinheiro',
   PAYMENT_CARD: 'Cartão',
+  PAYMENT_VOUCHER: 'Vale',
   PAYMENT_PIX_SPOT: 'PIX (QR)',
   PAYMENT_PIX_TERM: 'PIX 24h',
 }
