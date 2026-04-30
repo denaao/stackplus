@@ -1459,7 +1459,7 @@ export default function TournamentPage() {
                         ← Voltar
                       </button>
                       <button
-                        onClick={registerPaymentMethod === 'VOUCHER' ? () => setRegisterSignatureStep(true) : registerPlayer}
+                        onClick={registerPaymentMethod === 'VOUCHER' ? () => setRegisterSignatureStep(true) : () => registerPlayer()}
                         disabled={!registerPaymentMethod || !!actionLoading}
                         className="flex-2 flex-1 py-3 rounded-xl font-semibold text-sm disabled:opacity-40 btn-sx-primary"
                       >
