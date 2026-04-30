@@ -193,6 +193,11 @@ export default function TournamentPage() {
   } | null>(null)
   const [registerPixPaid, setRegisterPixPaid] = useState(false)
   const [registerPixCopied, setRegisterPixCopied] = useState(false)
+  const [registerSignatureStep, setRegisterSignatureStep] = useState(false)
+  const [registerHasSignature, setRegisterHasSignature] = useState(false)
+  const registerSignatureCanvasRef = useRef<HTMLCanvasElement>(null)
+  const registerSignatureIsDrawingRef = useRef(false)
+  const registerSignatureLastPosRef = useRef<{ x: number; y: number } | null>(null)
   const [editingBlinds, setEditingBlinds] = useState(false)
   const [editLevels, setEditLevels] = useState<{ level: number; smallBlind: number; bigBlind: number; ante: number }[]>([])
   const [editBreaks, setEditBreaks] = useState<{ id: string; afterLevel: string; durationMinutes: string }[]>([])
@@ -278,7 +283,7 @@ export default function TournamentPage() {
     setShowPayout(true)
   }
 
-  const registerPlayer = async () => {
+  const registerPlayer = async (signatureData?: string) => {
     if (!registerSelectedPlayer || !registerPaymentMethod) return
     setRegisteringPlayerId(registerSelectedPlayer.id)
     await action(async () => {
@@ -313,11 +318,14 @@ export default function TournamentPage() {
           playerId: registerSelectedPlayer.id,
           buyInType: registerBuyInType ?? 'NORMAL',
           paymentMethod: registerPaymentMethod,
+          ...(signatureData ? { signatureData } : {}),
         })
         setRegisterSelectedPlayer(null)
         setRegisterBuyInType(null)
         setRegisterPaymentStep(false)
         setRegisterPaymentMethod(null)
+        setRegisterSignatureStep(false)
+        setRegisterHasSignature(false)
         setCpfInput('')
         setCpfSearchResults([])
         setRegisterSuccess(`${name} inscrito`)
@@ -381,6 +389,8 @@ export default function TournamentPage() {
     setRegisterPixResult(null)
     setRegisterPixPaid(false)
     setRegisterPixCopied(false)
+    setRegisterSignatureStep(false)
+    setRegisterHasSignature(false)
     setReEntrySelectedPlayer(null)
     setReEntryType('NORMAL')
     setReEntryWithAddon(false); setReEntryAddonWithTax(false)
@@ -1300,6 +1310,111 @@ export default function TournamentPage() {
                       </>
                     )}
                   </div>
+                ) : registerSignatureStep ? (
+                  /* Step 4: Assinatura VOUCHER */
+                  <div className="space-y-3">
+                    <p className="text-xs text-sx-muted uppercase tracking-widest">Assinatura do jogador</p>
+                    <div
+                      className="relative w-full rounded-xl overflow-hidden"
+                      style={{ height: 200, border: '2px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.03)' }}
+                    >
+                      <canvas
+                        ref={registerSignatureCanvasRef}
+                        width={800}
+                        height={400}
+                        style={{ width: '100%', height: '100%', touchAction: 'none', cursor: 'crosshair' }}
+                        onPointerDown={(e) => {
+                          const canvas = registerSignatureCanvasRef.current
+                          if (!canvas) return
+                          registerSignatureIsDrawingRef.current = true
+                          const rect = canvas.getBoundingClientRect()
+                          const scaleX = canvas.width / rect.width
+                          const scaleY = canvas.height / rect.height
+                          registerSignatureLastPosRef.current = {
+                            x: (e.clientX - rect.left) * scaleX,
+                            y: (e.clientY - rect.top) * scaleY,
+                          }
+                          canvas.setPointerCapture(e.pointerId)
+                        }}
+                        onPointerMove={(e) => {
+                          if (!registerSignatureIsDrawingRef.current) return
+                          const canvas = registerSignatureCanvasRef.current
+                          if (!canvas || !registerSignatureLastPosRef.current) return
+                          const ctx = canvas.getContext('2d')
+                          if (!ctx) return
+                          const rect = canvas.getBoundingClientRect()
+                          const scaleX = canvas.width / rect.width
+                          const scaleY = canvas.height / rect.height
+                          const x = (e.clientX - rect.left) * scaleX
+                          const y = (e.clientY - rect.top) * scaleY
+                          ctx.beginPath()
+                          ctx.moveTo(registerSignatureLastPosRef.current.x, registerSignatureLastPosRef.current.y)
+                          ctx.lineTo(x, y)
+                          ctx.strokeStyle = '#00C8E0'
+                          ctx.lineWidth = 3
+                          ctx.lineCap = 'round'
+                          ctx.lineJoin = 'round'
+                          ctx.stroke()
+                          registerSignatureLastPosRef.current = { x, y }
+                          setRegisterHasSignature(true)
+                        }}
+                        onPointerUp={() => {
+                          registerSignatureIsDrawingRef.current = false
+                          registerSignatureLastPosRef.current = null
+                        }}
+                      />
+                      {!registerHasSignature && (
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                          <p className="text-sm select-none" style={{ color: 'rgba(255,255,255,0.25)' }}>Assine aqui</p>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const canvas = registerSignatureCanvasRef.current
+                        if (canvas) {
+                          const ctx = canvas.getContext('2d')
+                          ctx?.clearRect(0, 0, canvas.width, canvas.height)
+                          setRegisterHasSignature(false)
+                        }
+                      }}
+                      className="text-xs text-sx-muted hover:text-zinc-300 underline"
+                    >
+                      Limpar assinatura
+                    </button>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setRegisterSignatureStep(false)}
+                        className="flex-1 py-3 rounded-xl text-sm font-semibold"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}
+                      >
+                        ← Voltar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!registerHasSignature || !!actionLoading}
+                        onClick={() => {
+                          const canvas = registerSignatureCanvasRef.current
+                          if (!canvas) return
+                          const signatureData = canvas.toDataURL('image/png')
+                          registerPlayer(signatureData)
+                        }}
+                        className="flex-1 py-3 rounded-xl font-semibold text-sm disabled:opacity-40 btn-sx-primary"
+                      >
+                        {actionLoading === 'register' ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                            </svg>
+                            Inscrevendo...
+                          </span>
+                        ) : 'Confirmar Inscrição'}
+                      </button>
+                    </div>
+                  </div>
                 ) : !registerPaymentStep ? (
                   /* Step 2 → ir para pagamento */
                   <button
@@ -1344,7 +1459,7 @@ export default function TournamentPage() {
                         ← Voltar
                       </button>
                       <button
-                        onClick={registerPlayer}
+                        onClick={registerPaymentMethod === 'VOUCHER' ? () => setRegisterSignatureStep(true) : registerPlayer}
                         disabled={!registerPaymentMethod || !!actionLoading}
                         className="flex-2 flex-1 py-3 rounded-xl font-semibold text-sm disabled:opacity-40 btn-sx-primary"
                       >
@@ -1356,7 +1471,7 @@ export default function TournamentPage() {
                             </svg>
                             Inscrevendo...
                           </span>
-                        ) : 'Confirmar Inscrição'}
+                        ) : registerPaymentMethod === 'VOUCHER' ? 'Assinar →' : 'Confirmar Inscrição'}
                       </button>
                     </div>
                   </div>
